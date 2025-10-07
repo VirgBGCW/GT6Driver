@@ -1,0 +1,929 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@android:color/black">
+
+    <!-- 75% width guides -->
+    <androidx.constraintlayout.widget.Guideline
+        android:id="@+id/leftGuide"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        app:layout_constraintGuide_percent="0.125" />
+
+    <androidx.constraintlayout.widget.Guideline
+        android:id="@+id/rightGuide"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        app:layout_constraintGuide_percent="0.875" />
+
+    <!-- Vehicle panel -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/vehiclePanel"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="@id/leftGuide"
+        app:layout_constraintEnd_toEndOf="@id/rightGuide"
+        android:layout_marginTop="24dp"
+        app:cardCornerRadius="16dp"
+        app:cardElevation="2dp"
+        app:cardBackgroundColor="@android:color/white">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:padding="16dp">
+
+            <ImageView
+                android:id="@+id/ivCheckOutThumb"
+                android:layout_width="120dp"
+                android:layout_height="90dp"
+                android:scaleType="centerCrop"
+                android:contentDescription="@string/vehicle_thumbnail"
+                android:background="#EEEEEE" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="12dp"
+                android:orientation="vertical"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:id="@+id/panelLot"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="LOT #"
+                    android:textStyle="bold"
+                    android:textSize="18sp"
+                    android:textColor="@android:color/black" />
+
+                <TextView
+                    android:id="@+id/panelDesc"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Description"
+                    android:textSize="16sp"
+                    android:textColor="@android:color/black"
+                    android:layout_marginTop="4dp" />
+
+                <TextView
+                    android:id="@+id/panelVin"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="VIN: "
+                    android:textSize="16sp"
+                    android:textColor="@android:color/black"
+                    android:layout_marginTop="2dp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+    <!-- RELEASE label -->
+    <TextView
+        android:id="@+id/checkOutLabel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="RELEASE"
+        android:textStyle="bold"
+        android:textSize="20sp"
+        android:textColor="@android:color/white"
+        app:layout_constraintStart_toStartOf="@id/leftGuide"
+        app:layout_constraintTop_toBottomOf="@id/vehiclePanel"
+        android:layout_marginTop="16dp" />
+
+    <!-- SCROLLABLE CONTENT (everything above the sticky button) -->
+    <androidx.core.widget.NestedScrollView
+        android:id="@+id/scroll"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        app:layout_constraintStart_toStartOf="@id/leftGuide"
+        app:layout_constraintEnd_toEndOf="@id/rightGuide"
+        app:layout_constraintTop_toBottomOf="@id/checkOutLabel"
+        app:layout_constraintBottom_toTopOf="@id/btnConfirmRelease"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:id="@+id/scrollContent"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingBottom="12dp">
+
+            <!-- VERIFY VIN PANEL (compact) -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/verifyVinPanel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:clickable="true"
+                android:focusable="true"
+                android:layout_marginTop="12dp"
+                app:cardBackgroundColor="@android:color/white"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="1dp">
+
+                <androidx.constraintlayout.widget.ConstraintLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingHorizontal="16dp"
+                    android:paddingTop="12dp"
+                    android:paddingBottom="12dp">
+
+                    <!-- Tight header row -->
+                    <ImageView
+                        android:id="@+id/verifyIcon"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:src="@drawable/ic_close_24"
+                        android:tint="#D32F2F"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toTopOf="parent" />
+
+                    <TextView
+                        android:id="@+id/verifyTitle"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:text="VERIFY VIN"
+                        android:textStyle="bold"
+                        android:textSize="16sp"
+                        android:textColor="@android:color/black"
+                        android:includeFontPadding="false"
+                        android:gravity="center"
+                        android:textAlignment="center"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintTop_toTopOf="@id/verifyIcon"
+                        app:layout_constraintBottom_toBottomOf="@id/verifyIcon"
+                        android:layout_marginStart="8dp" />
+
+
+                    <!-- Expanded content (shown only when expanded & NOT in no-match mode) -->
+                    <TextView
+                        android:id="@+id/verifyVinValue"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:text=""
+                        android:textStyle="bold"
+                        android:textSize="28sp"
+                        android:fontFamily="monospace"
+                        android:textColor="@android:color/black"
+                        android:textAlignment="center"
+                        android:gravity="center"
+                        android:maxLines="1"
+                        android:ellipsize="end"
+                        android:visibility="gone"
+                        android:layout_marginTop="6dp"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintTop_toBottomOf="@id/verifyTitle" />
+
+
+                    <LinearLayout
+                        android:id="@+id/verifyActions"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:visibility="gone"
+                        android:layout_marginTop="8dp"
+                        app:layout_constraintTop_toBottomOf="@id/verifyVinValue"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnVinMatch"
+                            android:layout_width="0dp"
+                            android:layout_height="48dp"
+                            android:layout_weight="1"
+                            android:text="MATCH"
+                            android:backgroundTint="#E8F5E9"
+                            android:textColor="#1B5E20"
+                            android:textStyle="bold"
+                            app:cornerRadius="12dp" />
+
+                        <Space
+                            android:layout_width="12dp"
+                            android:layout_height="wrap_content" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnVinNoMatch"
+                            android:layout_width="0dp"
+                            android:layout_height="48dp"
+                            android:layout_weight="1"
+                            android:text="DOES NOT MATCH"
+                            android:backgroundTint="#FFEBEE"
+                            android:textColor="#B71C1C"
+                            android:textStyle="bold"
+                            app:cornerRadius="12dp" />
+                    </LinearLayout>
+
+                    <!-- No-match warning only (no inputs) -->
+                    <LinearLayout
+                        android:id="@+id/noMatchGroup"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:visibility="gone"
+                        android:layout_marginTop="8dp"
+                        app:layout_constraintTop_toBottomOf="@id/verifyActions"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent">
+
+                        <TextView
+                            android:id="@+id/vinWarningMessage"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Contact Manager Immediately - DO NOT Release Vehicle"
+                            android:textColor="#B71C1C"
+                            android:textStyle="bold"
+                            android:textSize="16sp"
+                            android:includeFontPadding="false"
+                            android:gravity="center"
+                            android:padding="12dp" />
+                    </LinearLayout>
+
+                </androidx.constraintlayout.widget.ConstraintLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+
+            <!-- CHECK OUT MILEAGE PANEL -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/mileagePanel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:clickable="true"
+                android:focusable="true"
+                android:layout_marginTop="12dp"
+                app:cardBackgroundColor="@android:color/white"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="1dp">
+
+                <androidx.constraintlayout.widget.ConstraintLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingHorizontal="16dp"
+                    android:paddingTop="14dp"
+                    android:paddingBottom="14dp">
+
+                    <ImageView
+                        android:id="@+id/mileageIcon"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:src="@drawable/ic_close_24"
+                        android:tint="#D32F2F"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toTopOf="parent" />
+
+                    <TextView
+                        android:id="@+id/mileageTitle"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:text="CHECK OUT MILEAGE"
+                        android:textStyle="bold"
+                        android:textSize="16sp"
+                        android:textColor="@android:color/black"
+                        android:gravity="center"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintTop_toTopOf="@id/mileageIcon"
+                        app:layout_constraintBottom_toBottomOf="@id/mileageIcon" />
+
+                    <LinearLayout
+                        android:id="@+id/mileageGroup"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:visibility="gone"
+                        android:layout_marginTop="12dp"
+                        app:layout_constraintTop_toBottomOf="@id/mileageIcon"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical">
+
+                            <com.google.android.material.textfield.TextInputLayout
+                                android:id="@+id/enterMileageLayout"
+                                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:hint="ENTER MILEAGE"
+                                app:boxBackgroundMode="outline">
+
+                                <com.google.android.material.textfield.TextInputEditText
+                                    android:id="@+id/enterMileageInput"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:inputType="number"
+                                    android:hint="ENTER MILEAGE"
+                                    android:textColor="@android:color/black" />
+                            </com.google.android.material.textfield.TextInputLayout>
+
+                            <ImageButton
+                                android:id="@+id/btnMileageCamera"
+                                android:layout_width="48dp"
+                                android:layout_height="48dp"
+                                android:layout_marginStart="8dp"
+                                android:background="?attr/selectableItemBackgroundBorderless"
+                                android:contentDescription="Open camera"
+                                android:scaleType="centerInside"
+                                android:padding="8dp"
+                                android:tint="@android:color/black"
+                                android:src="@android:drawable/ic_menu_camera" />
+                        </LinearLayout>
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnMileageUpdate"
+                            android:layout_width="match_parent"
+                            android:layout_height="48dp"
+                            android:text="UPDATE"
+                            android:textStyle="bold"
+                            android:textColor="@android:color/white"
+                            android:backgroundTint="#D32F2F"
+                            app:cornerRadius="12dp"
+                            android:layout_marginTop="10dp" />
+                    </LinearLayout>
+                </androidx.constraintlayout.widget.ConstraintLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- KEY CHECK PANEL -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/keyPanel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:clickable="true"
+                android:focusable="true"
+                android:layout_marginTop="12dp"
+                app:cardBackgroundColor="@android:color/white"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="1dp">
+
+                <androidx.constraintlayout.widget.ConstraintLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingHorizontal="16dp"
+                    android:paddingTop="14dp"
+                    android:paddingBottom="14dp">
+
+                    <ImageView
+                        android:id="@+id/keyIcon"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:src="@drawable/ic_close_24"
+                        android:tint="#D32F2F"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toTopOf="parent" />
+
+                    <TextView
+                        android:id="@+id/keyTitle"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:text="KEY CHECK"
+                        android:textStyle="bold"
+                        android:textSize="16sp"
+                        android:textColor="@android:color/black"
+                        android:gravity="center"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintTop_toTopOf="@id/keyIcon"
+                        app:layout_constraintBottom_toBottomOf="@id/keyIcon" />
+
+                    <LinearLayout
+                        android:id="@+id/keyGroup"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:visibility="gone"
+                        android:layout_marginTop="12dp"
+                        app:layout_constraintTop_toBottomOf="@id/keyIcon"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent">
+
+                        <androidx.constraintlayout.widget.ConstraintLayout
+                            android:id="@+id/keyRow"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content">
+
+                            <com.google.android.material.checkbox.MaterialCheckBox
+                                android:id="@+id/cbFobs"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="FOB(s)"
+                                android:textColor="@android:color/black"
+                                app:layout_constraintStart_toStartOf="parent"
+                                app:layout_constraintTop_toTopOf="parent" />
+
+                            <com.google.android.material.checkbox.MaterialCheckBox
+                                android:id="@+id/cbNoKey"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="NO KEY"
+                                android:textColor="@android:color/black"
+                                android:layout_marginStart="16dp"
+                                app:layout_constraintStart_toEndOf="@id/cbFobs"
+                                app:layout_constraintTop_toTopOf="@id/cbFobs"
+                                app:layout_constraintBottom_toBottomOf="@id/cbFobs"
+                                app:layout_constraintEnd_toStartOf="@id/btnKeyCamera" />
+
+                            <ImageButton
+                                android:id="@+id/btnKeyCamera"
+                                android:layout_width="48dp"
+                                android:layout_height="48dp"
+                                android:layout_marginStart="12dp"
+                                android:background="?attr/selectableItemBackgroundBorderless"
+                                android:contentDescription="Open camera"
+                                android:scaleType="centerInside"
+                                android:padding="8dp"
+                                android:tint="@android:color/black"
+                                android:src="@android:drawable/ic_menu_camera"
+                                app:layout_constraintEnd_toEndOf="parent"
+                                app:layout_constraintTop_toTopOf="@id/cbFobs"
+                                app:layout_constraintBottom_toBottomOf="@id/cbFobs" />
+                        </androidx.constraintlayout.widget.ConstraintLayout>
+
+                        <com.google.android.material.textfield.TextInputLayout
+                            android:id="@+id/enterKeyCountLayout"
+                            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:enabled="false"
+                            android:alpha="0.6"
+                            android:hint="NUMBER OF KEYS"
+                            app:boxBackgroundMode="outline">
+
+                            <com.google.android.material.textfield.TextInputEditText
+                                android:id="@+id/enterKeyCountInput"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:inputType="number"
+                                android:enabled="false"
+                                android:hint="NUMBER OF KEYS"
+                                android:textColor="@android:color/black" />
+                        </com.google.android.material.textfield.TextInputLayout>
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnKeyUpdate"
+                            android:layout_width="match_parent"
+                            android:layout_height="48dp"
+                            android:text="UPDATE"
+                            android:textStyle="bold"
+                            android:textColor="@android:color/white"
+                            android:backgroundTint="#D32F2F"
+                            app:cornerRadius="12dp"
+                            android:layout_marginTop="10dp" />
+                    </LinearLayout>
+                </androidx.constraintlayout.widget.ConstraintLayout>
+            </com.google.android.material.card.MaterialCardView>
+            <!-- OWNER VERIFICATION PANEL -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/ownerPanel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:clickable="true"
+                android:focusable="true"
+                app:cardBackgroundColor="@android:color/white"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="1dp">
+
+                <androidx.constraintlayout.widget.ConstraintLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingHorizontal="16dp"
+                    android:paddingTop="14dp"
+                    android:paddingBottom="14dp">
+
+                    <!-- header -->
+                    <ImageView
+                        android:id="@+id/ownerIcon"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:src="@drawable/ic_close_24"
+                        android:tint="#D32F2F"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toTopOf="parent" />
+
+                    <!-- ownerTitle: ALIGN to the icon instead of the parent -->
+                    <TextView
+                        android:id="@+id/ownerTitle"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:text="OWNER VERIFICATION"
+                        android:textStyle="bold"
+                        android:textSize="16sp"
+                        android:textColor="@android:color/black"
+                        android:gravity="center"
+                        android:includeFontPadding="false"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintTop_toTopOf="@id/ownerIcon"
+                        app:layout_constraintBottom_toBottomOf="@id/ownerIcon" />
+
+
+                    <!-- expand group -->
+                    <LinearLayout
+                        android:id="@+id/ownerGroup"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:visibility="gone"
+                        android:layout_marginTop="12dp"
+                        app:layout_constraintTop_toBottomOf="@id/ownerTitle"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent">
+
+                        <TextView
+                            android:id="@+id/ownerPrompt"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Who is picking up the vehicle"
+                            android:textStyle="bold"
+                            android:textSize="24sp"
+                            android:textColor="@android:color/black"
+                            android:layout_marginBottom="8dp" />
+
+                        <!-- photo + choices -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical">
+
+                            <ImageView
+                                android:id="@+id/ownerPhoto"
+                                android:layout_width="72dp"
+                                android:layout_height="72dp"
+                                android:src="@mipmap/ic_launcher"
+                                android:background="#EEEEEE"
+                                android:scaleType="centerCrop" />
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:layout_marginStart="12dp"
+                                android:orientation="vertical">
+
+                                <com.google.android.material.checkbox.MaterialCheckBox
+                                    android:id="@+id/cbOwner"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Owner"
+                                    android:textColor="@android:color/black" />
+
+                                <com.google.android.material.checkbox.MaterialCheckBox
+                                    android:id="@+id/cbReliable"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Reliable"
+                                    android:textColor="@android:color/black" />
+
+                                <com.google.android.material.checkbox.MaterialCheckBox
+                                    android:id="@+id/cbTFX"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="TFX"
+                                    android:textColor="@android:color/black" />
+
+                                <LinearLayout
+                                    android:id="@+id/otherRow"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:orientation="horizontal"
+                                    android:gravity="center_vertical"
+                                    android:layout_marginTop="4dp">
+
+                                    <com.google.android.material.checkbox.MaterialCheckBox
+                                        android:id="@+id/cbOther"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="Other"
+                                        android:textColor="@android:color/black" />
+
+                                    <com.google.android.material.textfield.TextInputLayout
+                                        android:id="@+id/enterTowLayout"
+                                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                                        android:layout_width="0dp"
+                                        android:layout_height="wrap_content"
+                                        android:layout_weight="1"
+                                        android:layout_marginStart="8dp"
+                                        android:enabled="false"
+                                        android:alpha="0.6"
+                                        android:hint="ENTER TOW COMPANY NAME"
+                                        app:boxBackgroundMode="outline">
+
+                                        <com.google.android.material.textfield.TextInputEditText
+                                            android:id="@+id/enterTowInput"
+                                            android:layout_width="match_parent"
+                                            android:layout_height="wrap_content"
+                                            android:enabled="false"
+                                            android:hint="ENTER TOW COMPANY NAME"
+                                            android:textColor="@android:color/black" />
+                                    </com.google.android.material.textfield.TextInputLayout>
+                                </LinearLayout>
+
+                            </LinearLayout>
+                        </LinearLayout>
+
+                        <!-- license photo prompt -->
+                        <androidx.constraintlayout.widget.ConstraintLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp">
+
+                            <TextView
+                                android:id="@+id/licensePrompt"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:text="Take Photo of License"
+                                android:textStyle="bold"
+                                android:textSize="24sp"
+                                android:textColor="@android:color/black"
+                                android:gravity="center"
+                                app:layout_constraintStart_toStartOf="parent"
+                                app:layout_constraintEnd_toStartOf="@id/ownerLicenseCamera"
+                                app:layout_constraintTop_toTopOf="parent"
+                                app:layout_constraintBottom_toBottomOf="parent" />
+
+                            <ImageView
+                                android:id="@+id/ownerLicenseCamera"
+                                android:layout_width="28dp"
+                                android:layout_height="28dp"
+                                android:contentDescription="Take license photo"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:src="@android:drawable/ic_menu_camera"
+                                android:tint="@android:color/black"
+                                app:layout_constraintEnd_toEndOf="parent"
+                                app:layout_constraintTop_toTopOf="parent"
+                                app:layout_constraintBottom_toBottomOf="parent" />
+                        </androidx.constraintlayout.widget.ConstraintLayout>
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnOwnerUpdate"
+                            android:layout_width="match_parent"
+                            android:layout_height="48dp"
+                            android:text="UPDATE"
+                            android:textStyle="bold"
+                            android:textColor="@android:color/white"
+                            android:backgroundTint="#D32F2F"
+                            app:cornerRadius="12dp"
+                            android:layout_marginTop="10dp" />
+
+                    </LinearLayout>
+                </androidx.constraintlayout.widget.ConstraintLayout>
+            </com.google.android.material.card.MaterialCardView>
+            <!-- GATE RELEASE PANEL -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/gatePanel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:clickable="true"
+                android:focusable="true"
+                app:cardBackgroundColor="@android:color/white"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="1dp">
+
+                <androidx.constraintlayout.widget.ConstraintLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingHorizontal="16dp"
+                    android:paddingTop="12dp"
+                    android:paddingBottom="12dp">
+
+                    <!-- header -->
+                    <ImageView
+                        android:id="@+id/gateIcon"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:src="@drawable/ic_close_24"
+                        android:tint="#D32F2F"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toTopOf="parent" />
+
+                    <TextView
+                        android:id="@+id/gateTitle"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:text="GATE RELEASE"
+                        android:textStyle="bold"
+                        android:textSize="16sp"
+                        android:textColor="@android:color/black"
+                        android:includeFontPadding="false"
+                        android:gravity="center"
+                        android:textAlignment="center"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintTop_toTopOf="@id/gateIcon"
+                        app:layout_constraintBottom_toBottomOf="@id/gateIcon" />
+
+                    <!-- expand group -->
+                    <LinearLayout
+                        android:id="@+id/gateGroup"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:visibility="gone"
+                        android:layout_marginTop="10dp"
+                        app:layout_constraintTop_toBottomOf="@id/gateTitle"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent">
+
+                        <TextView
+                            android:id="@+id/gateQuestion"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Do you have a stamped GATE RELEASE TICKET ?"
+                            android:textStyle="bold"
+                            android:textSize="24sp"
+                            android:textColor="@android:color/black"
+                            android:includeFontPadding="false"
+                            android:gravity="center" />
+
+                        <!-- buttons row -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:layout_marginTop="10dp">
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnGateYes"
+                                android:layout_width="0dp"
+                                android:layout_height="48dp"
+                                android:layout_weight="1"
+                                android:text="YES"
+                                android:textStyle="bold"
+                                android:textColor="#1B5E20"
+                                android:backgroundTint="#E8F5E9"
+                                app:cornerRadius="12dp" />
+
+                            <Space
+                                android:layout_width="12dp"
+                                android:layout_height="wrap_content" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnGateNo"
+                                android:layout_width="0dp"
+                                android:layout_height="48dp"
+                                android:layout_weight="1"
+                                android:text="NO"
+                                android:textStyle="bold"
+                                android:textColor="#B71C1C"
+                                android:backgroundTint="#FFEBEE"
+                                app:cornerRadius="12dp" />
+                        </LinearLayout>
+
+                        <!-- warning when NO -->
+                        <TextView
+                            android:id="@+id/gateWarning"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Contact Manager Immediately - DO NOT Release Vehicle"
+                            android:textColor="#B71C1C"
+                            android:textStyle="bold"
+                            android:textSize="16sp"
+                            android:includeFontPadding="false"
+                            android:gravity="center"
+                            android:visibility="gone"
+                            android:layout_marginTop="10dp" />
+                    </LinearLayout>
+                </androidx.constraintlayout.widget.ConstraintLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- RELEASE VIDEO PANEL -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/videoPanel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                app:cardBackgroundColor="@android:color/white"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:padding="16dp"
+                    android:orientation="vertical">
+
+                    <androidx.constraintlayout.widget.ConstraintLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content">
+
+                        <ImageView
+                            android:id="@+id/videoIcon"
+                            android:layout_width="24dp"
+                            android:layout_height="24dp"
+                            android:src="@drawable/ic_close_24"
+                            android:tint="#D32F2F"
+                            app:layout_constraintStart_toStartOf="parent"
+                            app:layout_constraintTop_toTopOf="parent"
+                            app:layout_constraintBottom_toBottomOf="parent" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="RELEASE VIDEO"
+                            android:textStyle="bold"
+                            android:textSize="16sp"
+                            android:textColor="@android:color/black"
+                            android:gravity="center"
+                            app:layout_constraintTop_toTopOf="parent"
+                            app:layout_constraintBottom_toBottomOf="parent"
+                            app:layout_constraintStart_toStartOf="parent"
+                            app:layout_constraintEnd_toEndOf="parent" />
+                    </androidx.constraintlayout.widget.ConstraintLayout>
+
+                    <LinearLayout
+                        android:id="@+id/videoGroup"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:paddingTop="12dp"
+                        android:visibility="gone">
+
+                        <androidx.constraintlayout.widget.ConstraintLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content">
+
+                            <TextView
+                                android:id="@+id/videoPrompt"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:text="Record Video"
+                                android:textColor="@android:color/black"
+                                android:textStyle="bold"
+                                android:textSize="20sp"
+                                app:layout_constraintStart_toStartOf="parent"
+                                app:layout_constraintEnd_toStartOf="@id/videoPromptIcon"
+                                app:layout_constraintTop_toTopOf="parent"
+                                app:layout_constraintBottom_toBottomOf="parent" />
+
+                            <ImageView
+                                android:id="@+id/videoPromptIcon"
+                                android:layout_width="28dp"
+                                android:layout_height="28dp"
+                                android:contentDescription="Record video"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:src="@drawable/ic_videocam_24"
+                                android:tint="@android:color/black"
+                                app:layout_constraintEnd_toEndOf="parent"
+                                app:layout_constraintTop_toTopOf="parent"
+                                app:layout_constraintBottom_toBottomOf="parent" />
+                        </androidx.constraintlayout.widget.ConstraintLayout>
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnVideoAccept"
+                            android:layout_width="match_parent"
+                            android:layout_height="48dp"
+                            android:text="ACCEPT"
+                            android:textStyle="bold"
+                            android:textColor="@android:color/white"
+                            android:backgroundTint="#D32F2F"
+                            app:cornerRadius="12dp"
+                            android:layout_marginTop="10dp" />
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+
+    <!-- Sticky confirm button -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnConfirmRelease"
+        android:layout_width="0dp"
+        android:layout_height="56dp"
+        android:text="CONFIRM RELEASE"
+        android:backgroundTint="#007bff"
+        android:textColor="@android:color/white"
+        android:textStyle="bold"
+        app:cornerRadius="12dp"
+        app:layout_constraintStart_toStartOf="@id/leftGuide"
+        app:layout_constraintEnd_toEndOf="@id/rightGuide"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/scroll"
+        android:layout_marginTop="18dp"
+        android:layout_marginBottom="24dp" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>
+
+
+
+
+

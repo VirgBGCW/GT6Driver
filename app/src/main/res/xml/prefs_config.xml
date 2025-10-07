@@ -1,0 +1,38 @@
+<!-- app/src/main/res/xml/prefs_config.xml -->
+<preferences xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <EditTextPreference
+        android:key="dir_prefix"
+        android:title="Base folder (Pictures/Movies)"
+        android:defaultValue="GT6"
+        android:singleLine="true"/>
+
+    <EditTextPreference
+        android:key="video_name"
+        android:title="Video file name (no extension)"
+        android:defaultValue="intake"
+        android:singleLine="true"/>
+
+    <EditTextPreference
+        android:key="vin_name"
+        android:title="VIN photo file name (no extension)"
+        android:defaultValue="vin"
+        android:singleLine="true"/>
+
+    <EditTextPreference
+        android:key="keycheck_name"
+        android:title="Key check photo file name (no extension)"
+        android:defaultValue="keycheck_intake"
+        android:singleLine="true"/>
+
+    <EditTextPreference
+        android:key="mileage_name"
+        android:title="Mileage photo file name (no extension)"
+        android:defaultValue="mileage_intake"
+        android:singleLine="true"/>
+
+    <SwitchPreferenceCompat
+        android:key="append_timestamp"
+        android:title="Append timestamp to filenames"
+        android:defaultValue="false" />
+</preferences>

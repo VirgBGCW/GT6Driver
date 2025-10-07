@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="20dp"
+    android:background="@android:color/black">
+
+    <!-- Outlined box like your Lookup screen -->
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/tilDriver"
+        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="@string/driver_number_hint"
+        app:boxBackgroundMode="outline"
+        app:boxStrokeColor="@android:color/white"
+        app:hintTextColor="@android:color/white">
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/etDriver"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="@android:color/white"
+            android:inputType="number"
+            android:digits="0123456789"
+            android:maxLength="6"
+            android:singleLine="true"
+            android:imeOptions="actionDone"
+            android:hint="@string/driver_number_hint" />
+    </com.google.android.material.textfield.TextInputLayout>
+
+    <!-- Buttons aligned to the end -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="end"
+        android:layout_marginTop="16dp">
+
+        <!-- Cancel: outlined, 12dp corners -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnDriverCancel"
+            style="?attr/materialButtonOutlinedStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:text="@string/cancel"
+            android:textColor="@android:color/white"
+            app:strokeColor="@android:color/white"
+            app:strokeWidth="1dp"
+            app:cornerRadius="12dp" />
+
+        <!-- NFC: filled red, 12dp corners -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnDriverNfc"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:text="@string/nfc"
+            android:layout_marginStart="12dp"
+            android:textColor="@android:color/white"
+            android:backgroundTint="#D32F2F"
+            app:cornerRadius="12dp" />
+
+
+    </LinearLayout>
+</LinearLayout>
+

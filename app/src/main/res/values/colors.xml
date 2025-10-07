@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#0B1220</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="redButton">#DC3545</color> <!-- BJ red -->
+</resources>
+

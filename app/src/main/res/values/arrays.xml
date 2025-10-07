@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Placeholder data. Replace later with API data for EVENT if desired -->
+    <string-array name="event_array">
+        <item>Select Event…</item>
+        <item>Practice Day</item>
+        <item>Qualifying</item>
+        <item>Race 1</item>
+        <item>Race 2</item>
+    </string-array>
+
+</resources>

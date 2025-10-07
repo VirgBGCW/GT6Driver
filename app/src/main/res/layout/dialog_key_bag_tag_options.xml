@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:orientation="vertical"
+    android:padding="20dp"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content">
+
+    <!-- Row: PRINT | NFC TAG -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnDialogPrint"
+            android:layout_width="0dp"
+            android:layout_height="56dp"
+            android:layout_weight="1"
+            android:text="PRINT"
+            android:textStyle="bold"
+            android:textAllCaps="true"
+            android:textColor="#1B5E20"
+            android:backgroundTint="#E8F5E9"
+            app:cornerRadius="12dp" />
+
+        <Space
+            android:layout_width="12dp"
+            android:layout_height="match_parent" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnDialogNfc"
+            android:layout_width="0dp"
+            android:layout_height="56dp"
+            android:layout_weight="1"
+            android:text="NFC TAG"
+            android:textStyle="bold"
+            android:textAllCaps="true"
+            android:textColor="#0D47A1"
+            android:backgroundTint="#E3F2FD"
+            app:cornerRadius="12dp" />
+    </LinearLayout>
+
+    <Space
+        android:layout_width="match_parent"
+        android:layout_height="12dp" />
+
+    <!-- Close -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnDialogClose"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:text="CLOSE"
+        android:textStyle="bold"
+        android:textAllCaps="true"
+        android:textColor="@color/redButton"
+        android:backgroundTint="@android:color/white"
+        app:cornerRadius="12dp" />
+
+</LinearLayout>

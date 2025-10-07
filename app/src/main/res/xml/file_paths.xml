@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Pictures -->
+    <external-path
+        name="gt6_intake_pictures"
+        path="Pictures/gt6/intake/" />
+    <external-path
+        name="gt6_release_pictures"
+        path="Pictures/gt6/release/" />
+
+    <!-- Movies -->
+    <external-path
+        name="gt6_intake_movies"
+        path="Movies/gt6/intake/" />
+    <external-path
+        name="gt6_release_movies"
+        path="Movies/gt6/release/" />
+
+</paths>
+
+
+

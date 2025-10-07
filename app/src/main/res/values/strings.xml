@@ -1,0 +1,48 @@
+<resources>
+    <string name="app_name">GT6 Driver</string>
+    <string name="logo_desc">GT6 Driver Logo</string>
+    <string name="event">Event</string>
+    <string name="driver">Driver</string>
+    <string name="submit">Continue</string>
+    <string name="vehicle_thumbnail">Vehicle thumbnail</string>
+
+    <!-- JSON-style driver array -->
+    <string-array name="driver_array">
+        <item>{"number":2,"name":"Dave Kirk"}</item>
+        <item>{"number":3,"name":"Michael Cooper"}</item>
+        <item>{"number":4,"name":"Greg Schupfer"}</item>
+        <item>{"number":5,"name":"Jeff Hammond"}</item>
+        <item>{"number":6,"name":"Scott Thomas"}</item>
+        <item>{"number":7,"name":"Collin Flatt"}</item>
+        <item>{"number":8,"name":"Jack Conroy"}</item>
+        <item>{"number":9,"name":"Bob Hoffman"}</item>
+        <item>{"number":10,"name":"Dave Lightburne"}</item>
+        <item>{"number":11,"name":"Robert Owens"}</item>
+        <item>{"number":12,"name":"John Kindell"}</item>
+        <item>{"number":13,"name":"Jan Kindell"}</item>
+        <item>{"number":14,"name":"Theo Lander"}</item>
+        <item>{"number":15,"name":"Mike Berry"}</item>
+        <item>{"number":16,"name":"Mike Padilla"}</item>
+        <item>{"number":17,"name":"Gary Dallmer"}</item>
+        <item>{"number":18,"name":"Brooke Barr"}</item>
+        <item>{"number":19,"name":"Dan Sundstrum"}</item>
+        <item>{"number":20,"name":"Jennifer Ringle"}</item>
+        <item>{"number":21,"name":"Curt Warner"}</item>
+    </string-array>
+
+    <string name="key_bag_tags">KEY BAG TAG</string>
+    <string name="car_tag">CAR TAG</string>
+    <string name="intake">INTAKE</string>
+    <string name="release">RELEASE</string>
+    <string name="vehicle_image">Selected vehicle image</string>
+    <string name="user">User</string>
+    <string name="driver_number_hint">Driver #</string>
+    <string name="cancel">Cancel</string>
+    <string name="nfc">NFC</string>
+    <string name="driver_number_error">Enter driver number</string>
+    <string name="driver_number_digits">Numbers only</string>
+    <string name="cd_key_bag">Print key bag tag</string>
+    <string name="cd_car_tag">Print car tag</string>
+    <string name="cd_driver">Assign driver (NFC)</string>
+</resources>
+

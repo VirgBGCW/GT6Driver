@@ -1,0 +1,231 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@android:color/black"
+    android:importantForAccessibility="yes">
+
+    <!-- 12.5% / 87.5% guidelines = 75% content width -->
+    <androidx.constraintlayout.widget.Guideline
+        android:id="@+id/leftGuide"
+        android:orientation="vertical"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        app:layout_constraintGuide_percent="0.125" />
+
+    <androidx.constraintlayout.widget.Guideline
+        android:id="@+id/rightGuide"
+        android:orientation="vertical"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        app:layout_constraintGuide_percent="0.875" />
+
+    <!-- Logo -->
+    <ImageView
+        android:id="@+id/logo"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:src="@drawable/logo"
+        android:contentDescription="@string/logo_desc"
+        android:adjustViewBounds="true"
+        android:layout_marginTop="32dp"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="@id/leftGuide"
+        app:layout_constraintEnd_toEndOf="@id/rightGuide"
+        tools:ignore="ContentDescription" />
+
+    <!-- Selected Vehicle panel (white card, rounded corners) -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/vehiclePanel"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
+        app:layout_constraintTop_toBottomOf="@id/logo"
+        app:layout_constraintStart_toStartOf="@id/leftGuide"
+        app:layout_constraintEnd_toEndOf="@id/rightGuide"
+        app:cardUseCompatPadding="false"
+        app:cardElevation="2dp"
+        app:cardBackgroundColor="@android:color/white"
+        app:strokeColor="@android:color/darker_gray"
+        app:strokeWidth="1dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:padding="16dp">
+
+            <!-- Left image area -->
+            <ImageView
+                android:id="@+id/panelImage"
+                android:layout_width="140dp"
+                android:layout_height="84dp"
+                android:scaleType="centerCrop"
+                android:contentDescription="@string/vehicle_image"
+                tools:src="@drawable/ic_menu_gallery" />
+
+            <!-- Texts on the right -->
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:layout_marginStart="12dp"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:id="@+id/panelLot"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textStyle="bold"
+                    android:textSize="18sp"
+                    android:textColor="@android:color/black"
+                    tools:text="LOT # 1234" />
+
+                <TextView
+                    android:id="@+id/panelDesc"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textSize="16sp"
+                    android:textColor="@android:color/black"
+                    android:layout_marginTop="4dp"
+                    tools:text="1969 Ford Mustang Fastback" />
+
+                <TextView
+                    android:id="@+id/panelVin"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textSize="16sp"
+                    android:textColor="@android:color/black"
+                    android:layout_marginTop="2dp"
+                    android:textStyle="bold"
+                    tools:text="VIN: 1FAxxxxxxx1234567" />
+            </LinearLayout>
+
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+    <!-- KEY BAG TAG (Key icon) -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnKeyBagTags"
+        style="?attr/materialButtonOutlinedStyle"
+        android:layout_width="0dp"
+        android:layout_height="96dp"
+        android:text=""
+        android:gravity="center"
+        android:contentDescription="@string/cd_key_bag"
+        android:backgroundTint="@android:color/white"
+        android:layout_marginTop="16dp"
+        android:layout_marginEnd="8dp"
+        app:cornerRadius="16dp"
+        app:rippleColor="@color/m3_ref_palette_neutral_variant40"
+        app:icon="@drawable/ic_key_24"
+        app:iconTint="@color/redButton"
+        app:iconSize="36dp"
+        app:iconGravity="textStart"
+        app:layout_constraintTop_toBottomOf="@id/vehiclePanel"
+        app:layout_constraintStart_toStartOf="@id/leftGuide"
+        app:layout_constraintEnd_toStartOf="@id/btnCarTag"
+        app:layout_constraintHorizontal_chainStyle="spread" />
+
+    <!-- CAR TAG (Car icon) -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnCarTag"
+        style="?attr/materialButtonOutlinedStyle"
+        android:layout_width="0dp"
+        android:layout_height="96dp"
+        android:text=""
+        android:gravity="center"
+        android:contentDescription="@string/cd_car_tag"
+        android:backgroundTint="@android:color/white"
+        android:layout_marginTop="16dp"
+        android:layout_marginStart="8dp"
+        android:layout_marginEnd="8dp"
+        app:cornerRadius="16dp"
+        app:rippleColor="@color/m3_ref_palette_neutral_variant40"
+        app:icon="@drawable/ic_car_24"
+        app:iconTint="@color/redButton"
+        app:iconSize="36dp"
+        app:iconGravity="textStart"
+        app:layout_constraintTop_toBottomOf="@id/vehiclePanel"
+        app:layout_constraintStart_toEndOf="@id/btnKeyBagTags"
+        app:layout_constraintEnd_toStartOf="@id/btnAssignDriver" />
+
+    <!-- DRIVER (Steering wheel or Person icon) -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnAssignDriver"
+        style="?attr/materialButtonOutlinedStyle"
+        android:layout_width="0dp"
+        android:layout_height="96dp"
+        android:text=""
+        android:gravity="center"
+        android:contentDescription="@string/cd_driver"
+        android:backgroundTint="@android:color/white"
+        android:layout_marginTop="16dp"
+        android:layout_marginStart="8dp"
+        app:cornerRadius="16dp"
+        app:rippleColor="@color/m3_ref_palette_neutral_variant40"
+        app:icon="@drawable/ic_steering_24"
+        app:iconTint="@color/redButton"
+        app:iconSize="36dp"
+        app:iconGravity="textStart"
+        app:layout_constraintTop_toBottomOf="@id/vehiclePanel"
+        app:layout_constraintStart_toEndOf="@id/btnCarTag"
+        app:layout_constraintEnd_toEndOf="@id/rightGuide" />
+
+
+    <!-- Barrier below the three side-by-side buttons -->
+    <androidx.constraintlayout.widget.Barrier
+        android:id="@+id/tagsRowBottom"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        app:barrierDirection="bottom"
+        app:constraint_referenced_ids="btnKeyBagTags,btnCarTag,btnAssignDriver" />
+
+    <!-- INTAKE -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnCheckIn"
+        android:layout_width="0dp"
+        android:layout_height="96dp"
+        android:text="@string/intake"
+        android:textAllCaps="true"
+        android:textStyle="bold"
+        android:textSize="20sp"
+        android:textColor="@color/redButton"
+        android:backgroundTint="@android:color/white"
+        android:layout_marginTop="16dp"
+        app:cornerRadius="16dp"
+        app:rippleColor="@color/m3_ref_palette_neutral_variant40"
+        app:layout_constraintTop_toBottomOf="@id/tagsRowBottom"
+        app:layout_constraintStart_toStartOf="@id/leftGuide"
+        app:layout_constraintEnd_toEndOf="@id/rightGuide" />
+
+    <!-- RELEASE -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnCheckOut"
+        android:layout_width="0dp"
+        android:layout_height="96dp"
+        android:text="@string/release"
+        android:textAllCaps="true"
+        android:textStyle="bold"
+        android:textSize="20sp"
+        android:textColor="@color/redButton"
+        android:backgroundTint="@android:color/white"
+        android:layout_marginTop="16dp"
+        app:cornerRadius="16dp"
+        app:rippleColor="@color/m3_ref_palette_neutral_variant40"
+        app:layout_constraintTop_toBottomOf="@id/btnCheckIn"
+        app:layout_constraintStart_toStartOf="@id/leftGuide"
+        app:layout_constraintEnd_toEndOf="@id/rightGuide" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>
+
+
+
+
+
+
