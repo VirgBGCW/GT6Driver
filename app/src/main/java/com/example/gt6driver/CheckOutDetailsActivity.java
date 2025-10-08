@@ -255,7 +255,13 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
         description = in.getStringExtra(Nav.EXTRA_DESC);
         eventName   = in.getStringExtra(Nav.EXTRA_EVENT_NAME);
         eventId     = in.getIntExtra(Nav.EXTRA_EVENT_ID, -1);
-        driver      = in.getStringExtra(Nav.EXTRA_DRIVER);
+        if (driver == null || driver.trim().isEmpty()) {
+            try {
+                String fromSession = com.example.gt6driver.session.CurrentSelection.get().getDriverName();
+                if (fromSession != null && !fromSession.trim().isEmpty()) driver = fromSession;
+            } catch (Throwable ignored) {}
+        }
+
         mode        = in.getStringExtra("mode"); // "check_out"
         vin         = in.getStringExtra(Nav.EXTRA_VIN);
         thumbUrl    = in.getStringExtra(Nav.EXTRA_THUMB);
@@ -686,7 +692,7 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
         ReleasePayload p = (releaseModel != null ? releaseModel : new ReleasePayload());
 
         p.opportunityId = opportunityId;
-        p.releasedBy    = (driver == null ? "" : driver);
+        p.releasedBy = resolveDriverName();
 
         // ---- Gate ----
         if (p.gateRelease == null) p.gateRelease = new ReleasePayload.GateRelease();
@@ -992,6 +998,15 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
             }
         }
     }
+//
+    private String resolveDriverName() {
+        if (driver != null && !driver.trim().isEmpty()) return driver.trim();
+        try {
+            String fromSession = com.example.gt6driver.session.CurrentSelection.get().getDriverName();
+            if (fromSession != null && !fromSession.trim().isEmpty()) return fromSession.trim();
+        } catch (Throwable ignored) {}
+        return "";
+    }
 
     private void openVideoCamera() {
         pendingVideoUri = createVideoUriForRelease();
@@ -1002,6 +1017,9 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
 
         Intent intent = new Intent(MediaStore.ACTION_VIDEO_CAPTURE);
         intent.putExtra(MediaStore.EXTRA_VIDEO_QUALITY, 1);
+// optional limits (if you want control)
+        intent.putExtra(MediaStore.EXTRA_DURATION_LIMIT, 120); // seconds
+        intent.putExtra(MediaStore.EXTRA_SIZE_LIMIT, 200 * 1024 * 1024L); // 200MB
         intent.putExtra(MediaStore.EXTRA_OUTPUT, pendingVideoUri);
 
         intent.setClipData(ClipData.newRawUri("output", pendingVideoUri));
@@ -1263,8 +1281,6 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
             Toast.makeText(this, "Error calling Consignment Key API", Toast.LENGTH_SHORT).show();
         }
     }
-
-
 }
 
 

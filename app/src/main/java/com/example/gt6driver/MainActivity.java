@@ -315,6 +315,9 @@ public class MainActivity extends AppCompatActivity {
             intent.putExtra("eventId", selectedEvent.id);
             intent.putExtra("driver", selectedDriver.name);
             intent.putExtra("driverNumber", selectedDriver.number);
+            // Save Driver Name for later - did that last minute so this is a hack instead of passing through all layers
+            com.example.gt6driver.session.CurrentSelection.get().setDriver(selectedDriver.number, selectedDriver.name);
+
             startActivity(intent);
 
             com.example.gt6driver.sync.GT6MediaSync.enqueueImmediate(this);

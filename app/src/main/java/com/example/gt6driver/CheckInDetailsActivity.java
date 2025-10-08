@@ -254,9 +254,9 @@ public class CheckInDetailsActivity extends AppCompatActivity {
 
         // Confirm button
         btnConfirm = findViewById(R.id.btnConfirmIntake);
-        btnConfirm.setEnabled(false);
-        btnConfirm.setAlpha(0.5f);
-        refreshConfirmEnabled();
+        btnConfirm.setEnabled(true);
+        btnConfirm.setAlpha(1f);
+
 
 // ===== Intent extras =====
         Intent in = getIntent();
@@ -270,7 +270,13 @@ public class CheckInDetailsActivity extends AppCompatActivity {
         shortDescription = in.getStringExtra("shortdesc"); // short desc
         eventName   = in.getStringExtra(Nav.EXTRA_EVENT_NAME);
         eventId     = in.getIntExtra(Nav.EXTRA_EVENT_ID, -1);
-        driver      = in.getStringExtra(Nav.EXTRA_DRIVER);
+       // driver      = in.getStringExtra(Nav.EXTRA_DRIVER);
+        if (driver == null || driver.trim().isEmpty()) {
+            try {
+                String fromSession = com.example.gt6driver.session.CurrentSelection.get().getDriverName();
+                if (fromSession != null && !fromSession.trim().isEmpty()) driver = fromSession;
+            } catch (Throwable ignored) {}
+        }
         mode        = in.getStringExtra("mode"); // "check_in"
         vin         = in.getStringExtra(Nav.EXTRA_VIN);
         thumbUrl    = in.getStringExtra(Nav.EXTRA_THUMB);
@@ -689,13 +695,21 @@ public class CheckInDetailsActivity extends AppCompatActivity {
 
         if (btnDescCorrect != null) {
             btnDescCorrect.setOnClickListener(v -> {
+                VehicleTaskIntake.Description d = descModel();
+                d.isCorrect = true;
+                d.isIncorrectMileage  = false;
+                d.isInCorrectVin      = false;
+                d.isIncorrectSpelling = false;
+                d.isIncorrectDetails  = false;
+
                 setStatusIcon(descIcon, true);
-                descDone = true;
+                descDone = true; // section completed
                 setDescExpanded(false);
                 Toast.makeText(this, "Description confirmed correct.", Toast.LENGTH_SHORT).show();
                 refreshConfirmEnabled();
             });
         }
+
 
         if (btnDescIncorrect != null) {
             btnDescIncorrect.setOnClickListener(v -> {
@@ -709,20 +723,30 @@ public class CheckInDetailsActivity extends AppCompatActivity {
 
         if (btnDescUpdate != null) {
             btnDescUpdate.setOnClickListener(v -> {
-                boolean m  = cbIncorrectMileage != null && cbIncorrectMileage.isChecked();
-                boolean vi = cbIncorrectVin != null && cbIncorrectVin.isChecked();
-                boolean d  = cbIncorrectDetails != null && cbIncorrectDetails.isChecked();
-                boolean s  = cbSpellingErrors != null && cbSpellingErrors.isChecked();
+                boolean incMileage = cbIncorrectMileage != null && cbIncorrectMileage.isChecked();
+                boolean incVin     = cbIncorrectVin     != null && cbIncorrectVin.isChecked();
+                boolean incDetails = cbIncorrectDetails != null && cbIncorrectDetails.isChecked();
+                boolean incSpell   = cbSpellingErrors   != null && cbSpellingErrors.isChecked();
 
-                setStatusIcon(descIcon, true);
+                // Persist into the working model FIRST (source of truth for API)
+                VehicleTaskIntake.Description d = descModel();
+                d.isCorrect = false;
+                d.isIncorrectMileage  = incMileage;
+                d.isInCorrectVin      = incVin;
+                d.isIncorrectDetails  = incDetails;
+                d.isIncorrectSpelling = incSpell;
+
+                // UX wrap-up
+                setStatusIcon(descIcon, true); // green = "section complete", not "correct"
                 descDone = true;
                 if (descIncorrectGroup != null) descIncorrectGroup.setVisibility(View.GONE);
-                clearDescIncorrectChecks();
+                clearDescIncorrectChecks(); // safe to clear; we already persisted
                 setDescExpanded(false);
                 Toast.makeText(this, "Description update submitted.", Toast.LENGTH_SHORT).show();
                 refreshConfirmEnabled();
             });
         }
+
 
         // QUALITY
         if (qualityPanel != null) {
@@ -872,6 +896,13 @@ public class CheckInDetailsActivity extends AppCompatActivity {
                 intakeModel.keyCheck != null &&
                 !TextUtils.isEmpty(intakeModel.keyCheck.photoUrl);
     }
+//
+    // Keep the persisted Description state in your working model
+    private VehicleTaskIntake.Description descModel() {
+        if (intakeModel == null) intakeModel = new VehicleTaskIntake();
+        if (intakeModel.description == null) intakeModel.description = new VehicleTaskIntake.Description();
+        return intakeModel.description;
+    }
 
     private void bindIntakeToUi(VehicleTaskIntake it) {
         // VIN verify
@@ -947,26 +978,42 @@ public class CheckInDetailsActivity extends AppCompatActivity {
         }
 
         // Description
+// Description
         if (it.description != null) {
+            boolean anyReasons = anyTrue(
+                    it.description.isIncorrectMileage,
+                    it.description.isInCorrectVin,
+                    it.description.isIncorrectSpelling,
+                    it.description.isIncorrectDetails
+            );
+
             if (Boolean.TRUE.equals(it.description.isCorrect)) {
                 setStatusIcon(descIcon, true);
                 descDone = true;
                 setDescExpanded(false);
-            } else if (anyTrue(
-                    it.description.isIncorrectMileage,
-                    it.description.isInCorrectVin,
-                    it.description.isIncorrectSpelling,
-                    it.description.isIncorrectDetails)) {
+                if (descIncorrectGroup != null) descIncorrectGroup.setVisibility(View.GONE);
+                clearDescIncorrectChecks();
+            } else if (anyReasons) {
+                // Reasons already exist → consider the section complete
+                setStatusIcon(descIcon, true);   // green = done
+                descDone = true;
+                setDescExpanded(false);
+                if (descIncorrectGroup != null) descIncorrectGroup.setVisibility(View.GONE);
+
+                // Optionally reflect server state in the checkboxes (even though hidden)
+                if (cbIncorrectMileage != null) cbIncorrectMileage.setChecked(Boolean.TRUE.equals(it.description.isIncorrectMileage));
+                if (cbIncorrectVin != null)     cbIncorrectVin.setChecked(Boolean.TRUE.equals(it.description.isInCorrectVin));
+                if (cbSpellingErrors != null)   cbSpellingErrors.setChecked(Boolean.TRUE.equals(it.description.isIncorrectSpelling));
+                if (cbIncorrectDetails != null) cbIncorrectDetails.setChecked(Boolean.TRUE.equals(it.description.isIncorrectDetails));
+            } else {
+                // No decision yet
                 setStatusIcon(descIcon, false);
                 descDone = false;
-                setDescExpanded(true);
                 if (descIncorrectGroup != null) descIncorrectGroup.setVisibility(View.VISIBLE);
-                if (cbIncorrectMileage != null) cbIncorrectMileage.setChecked(Boolean.TRUE.equals(it.description.isIncorrectMileage));
-                if (cbIncorrectVin != null) cbIncorrectVin.setChecked(Boolean.TRUE.equals(it.description.isInCorrectVin));
-                if (cbSpellingErrors != null) cbSpellingErrors.setChecked(Boolean.TRUE.equals(it.description.isIncorrectSpelling));
-                if (cbIncorrectDetails != null) cbIncorrectDetails.setChecked(Boolean.TRUE.equals(it.description.isIncorrectDetails));
+                setDescExpanded(true);
             }
         }
+
 
 // Quality
         if (it.quality != null) {
@@ -1082,20 +1129,25 @@ public class CheckInDetailsActivity extends AppCompatActivity {
         }
 
         // ---------------- DESCRIPTION ----------------
+// ---------------- DESCRIPTION ----------------
         if (body.description == null) body.description = new VehicleTaskIntake.Description();
-        if (descDone) {
-            body.description.isCorrect = true;
-            body.description.isIncorrectMileage = false;
-            body.description.isInCorrectVin     = false;
-            body.description.isIncorrectSpelling= false;
-            body.description.isIncorrectDetails = false;
+
+        if (intakeModel != null && intakeModel.description != null) {
+            VehicleTaskIntake.Description src = intakeModel.description;
+            body.description.isCorrect           = Boolean.TRUE.equals(src.isCorrect);
+            body.description.isIncorrectMileage  = Boolean.TRUE.equals(src.isIncorrectMileage);
+            body.description.isInCorrectVin      = Boolean.TRUE.equals(src.isInCorrectVin);
+            body.description.isIncorrectSpelling = Boolean.TRUE.equals(src.isIncorrectSpelling);
+            body.description.isIncorrectDetails  = Boolean.TRUE.equals(src.isIncorrectDetails);
         } else {
-            body.description.isCorrect          = false;
-            body.description.isIncorrectMileage = cbIncorrectMileage != null && cbIncorrectMileage.isChecked();
-            body.description.isInCorrectVin     = cbIncorrectVin != null && cbIncorrectVin.isChecked();
-            body.description.isIncorrectSpelling= cbSpellingErrors != null && cbSpellingErrors.isChecked();
-            body.description.isIncorrectDetails = cbIncorrectDetails != null && cbIncorrectDetails.isChecked();
+            // Default if user never interacted
+            body.description.isCorrect           = true;
+            body.description.isIncorrectMileage  = false;
+            body.description.isInCorrectVin      = false;
+            body.description.isIncorrectSpelling = false;
+            body.description.isIncorrectDetails  = false;
         }
+
 
         // ---------------- QUALITY ----------------
         if (body.quality == null) body.quality = new VehicleTaskIntake.Quality();
@@ -1125,7 +1177,9 @@ public class CheckInDetailsActivity extends AppCompatActivity {
         }
 
         // ---------------- OPTIONAL ----------------
-        if (body.checkInBy == null) body.checkInBy = "";
+        // ---------------- CHECK-IN BY (required for API) ----------------
+        String checkInBy = resolveDriverName();
+        body.checkInBy = (checkInBy == null) ? "" : checkInBy;
 
         return body;
     }
@@ -1284,6 +1338,9 @@ public class CheckInDetailsActivity extends AppCompatActivity {
 
         Intent intent = new Intent(MediaStore.ACTION_VIDEO_CAPTURE);
         intent.putExtra(MediaStore.EXTRA_VIDEO_QUALITY, 1);
+// optional limits (if you want control)
+        intent.putExtra(MediaStore.EXTRA_DURATION_LIMIT, 120); // seconds
+        intent.putExtra(MediaStore.EXTRA_SIZE_LIMIT, 200 * 1024 * 1024L); // 200MB
         intent.putExtra(MediaStore.EXTRA_OUTPUT, pendingVideoUri);
 
         intent.setClipData(ClipData.newRawUri("output", pendingVideoUri));
@@ -1333,12 +1390,12 @@ public class CheckInDetailsActivity extends AppCompatActivity {
     }
 
     private void refreshConfirmEnabled() {
-        boolean allDone = vinDone && mileageDone && keyDone && videoDone && descDone && qualityDone;
-        if (btnConfirm != null) {
-            btnConfirm.setEnabled(allDone);
-            btnConfirm.setAlpha(allDone ? 1f : 0.5f);
-        }
+        if (btnConfirm == null) return;
+        // Always allow confirm; individual sections are optional
+        btnConfirm.setEnabled(true);
+        btnConfirm.setAlpha(1f);
     }
+
 
     private void setPanelsEnabled(boolean enabled) {
         float alpha = enabled ? 1f : 0.6f;
@@ -1483,6 +1540,20 @@ public class CheckInDetailsActivity extends AppCompatActivity {
             if (c != null) c.close();
         }
         return false;
+    }
+// resolve Driver Name for API
+    private String resolveDriverName() {
+        // Prefer what Lookup/Main passed via Intent
+        String fromIntent = driver;
+        if (fromIntent != null && !fromIntent.trim().isEmpty()) return fromIntent.trim();
+
+        // Fallback to process-scoped selection (if you added the session helper)
+        try {
+            String fromSession = com.example.gt6driver.session.CurrentSelection.get().getDriverName();
+            if (fromSession != null && !fromSession.trim().isEmpty()) return fromSession.trim();
+        } catch (Throwable ignored) {}
+
+        return "";
     }
 
     // Small utils
