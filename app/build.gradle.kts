@@ -16,13 +16,16 @@ android {
     }
 
     buildTypes {
-        release {
+        getByName("release") {
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // ✅ TEMP: use the debug signing config so the APK is installable
+            signingConfig = signingConfigs.getByName("debug")
         }
+        // (debug is created automatically; nothing to add)
     }
 
     compileOptions {

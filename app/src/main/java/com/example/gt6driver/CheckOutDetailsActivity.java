@@ -362,53 +362,39 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
                 result -> {
                     try {
                         if (result.getResultCode() == RESULT_OK) {
-                            Uri savedUri = (pendingVideoUri != null)
-                                    ? pendingVideoUri
-                                    : (result.getData() != null ? result.getData().getData() : null);
-
-                            if (savedUri != null) {
-                                if (!hasNonZeroSize(savedUri)) {
-                                    try { getContentResolver().delete(savedUri, null, null); } catch (Exception ignored) {}
-                                    Toast.makeText(this, "Camera failed to save the video. Please try again.", Toast.LENGTH_SHORT).show();
-                                    return;
-                                }
-
-                                lastCapturedVideoUri = savedUri;
-
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                                    try {
-                                        ContentValues done = new ContentValues();
-                                        done.put(MediaStore.MediaColumns.IS_PENDING, 0);
-                                        getContentResolver().update(savedUri, done, null, null);
-                                    } catch (Exception ignored) {}
-                                }
-
-                                try { getContentResolver().notifyChange(savedUri, null); } catch (Exception ignored) {}
-
-                                // Revoke temp perms
-                                try {
-                                    revokeUriPermission(
-                                            savedUri,
-                                            Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION
-                                    );
-                                } catch (Exception ignored) {}
-
-                                setStatusIcon(videoIcon, false);
-                                videoDone = false;
-                                setVideoExpanded(true);
-
-                                // Kick the uploader now
-                                com.example.gt6driver.sync.GT6MediaSync.enqueueImmediate(this);
-
-                                Toast.makeText(this, "Video captured. Tap Accept to confirm.", Toast.LENGTH_SHORT).show();
-                                refreshConfirmEnabled();
-                            } else {
-                                Toast.makeText(this, "Video captured but URI missing.", Toast.LENGTH_SHORT).show();
+                            Uri source = (result.getData() != null) ? result.getData().getData() : null;
+                            if (source == null) {
+                                Toast.makeText(this, "Video saved but no Uri returned.", Toast.LENGTH_SHORT).show();
+                                return;
                             }
+
+                            // Copy into our deterministic location: .../Movies/GT6/{consignmentId}/release.mp4
+                            Uri target = createVideoUriForRelease();
+                            if (target == null) {
+                                Toast.makeText(this, "Unable to prepare storage for video.", Toast.LENGTH_SHORT).show();
+                                return;
+                            }
+
+                            if (!copyUri(source, target)) {
+                                try { getContentResolver().delete(target, null, null); } catch (Exception ignored) {}
+                                Toast.makeText(this, "Failed to save the video.", Toast.LENGTH_SHORT).show();
+                                return;
+                            }
+
+                            lastCapturedVideoUri = target;
+                            try { getContentResolver().notifyChange(lastCapturedVideoUri, null); } catch (Exception ignored) {}
+
+                            setStatusIcon(videoIcon, false);
+                            videoDone = false;
+                            setVideoExpanded(true);
+
+                            // If you want to kick your uploader immediately:
+                            com.example.gt6driver.sync.GT6MediaSync.enqueueImmediate(this);
+
+                            Toast.makeText(this, "Video captured. Tap Accept to confirm.", Toast.LENGTH_SHORT).show();
+                            refreshConfirmEnabled();
                         } else {
-                            if (pendingVideoUri != null) {
-                                try { getContentResolver().delete(pendingVideoUri, null, null); } catch (Exception ignored) {}
-                            }
+                            // user cancelled; nothing to do
                         }
                     } finally {
                         pendingVideoUri = null;
@@ -416,6 +402,8 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
                     }
                 }
         );
+
+//
 
         // CAMERA permission
         requestCameraPermissionLauncher = registerForActivityResult(
@@ -685,7 +673,35 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
         refreshConfirmEnabled();
     }
 
-    // ===== Build payload (mirror of CheckIn’s builder) =====
+    private boolean copyUri(Uri from, Uri to) {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                ContentValues cv = new ContentValues();
+                cv.put(MediaStore.MediaColumns.IS_PENDING, 1);
+                getContentResolver().update(to, cv, null, null);
+            }
+
+            try (java.io.InputStream in = getContentResolver().openInputStream(from);
+                 java.io.OutputStream out = getContentResolver().openOutputStream(to, "w")) {
+                if (in == null || out == null) return false;
+                byte[] buf = new byte[8192];
+                int n;
+                while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+                out.flush();
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                ContentValues done = new ContentValues();
+                done.put(MediaStore.MediaColumns.IS_PENDING, 0);
+                getContentResolver().update(to, done, null, null);
+            }
+
+            return hasNonZeroSize(to);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
 // ===== Build payload (no auto-filling of photo URLs) =====
     private ReleasePayload buildReleaseFromUi() {
         // Start from the working model so any captured URLs already set are preserved
@@ -1009,35 +1025,18 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
     }
 
     private void openVideoCamera() {
-        pendingVideoUri = createVideoUriForRelease();
-        if (pendingVideoUri == null) {
-            Toast.makeText(this, "Unable to prepare storage for video.", Toast.LENGTH_SHORT).show();
-            return;
-        }
-
+        // No EXTRA_OUTPUT → OEM camera shows OK/CANCEL review UI
         Intent intent = new Intent(MediaStore.ACTION_VIDEO_CAPTURE);
         intent.putExtra(MediaStore.EXTRA_VIDEO_QUALITY, 1);
-// optional limits (if you want control)
-        intent.putExtra(MediaStore.EXTRA_DURATION_LIMIT, 120); // seconds
-        intent.putExtra(MediaStore.EXTRA_SIZE_LIMIT, 200 * 1024 * 1024L); // 200MB
-        intent.putExtra(MediaStore.EXTRA_OUTPUT, pendingVideoUri);
 
-        intent.setClipData(ClipData.newRawUri("output", pendingVideoUri));
-        intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        for (ResolveInfo ri : getPackageManager().queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)) {
-            grantUriPermission(
-                    ri.activityInfo.packageName,
-                    pendingVideoUri,
-                    Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION
-            );
-        }
+        // These can suppress review UI on some devices—omit for reliability:
+        // intent.putExtra(MediaStore.EXTRA_DURATION_LIMIT, 120);
+        // intent.putExtra(MediaStore.EXTRA_SIZE_LIMIT, 200 * 1024 * 1024L);
 
         if (intent.resolveActivity(getPackageManager()) != null) {
             recordVideoLauncher.launch(intent);
         } else {
             Toast.makeText(this, "No video recorder available.", Toast.LENGTH_SHORT).show();
-            try { getContentResolver().delete(pendingVideoUri, null, null); } catch (Exception ignored) {}
-            pendingVideoUri = null;
         }
     }
 
