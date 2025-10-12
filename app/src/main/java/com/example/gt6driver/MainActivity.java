@@ -1,3 +1,4 @@
+// app/src/main/java/com/example/gt6driver/MainActivity.java
 package com.example.gt6driver;
 
 import android.Manifest;
@@ -5,6 +6,7 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
@@ -21,15 +23,20 @@ import androidx.core.content.ContextCompat;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
+import androidx.work.Configuration;
+import androidx.work.WorkInfo;
+import androidx.work.WorkManager;
 
 import com.example.gt6driver.net.ApiClient;
 import com.example.gt6driver.net.LookupService;
 import com.google.android.material.button.MaterialButton;
+import com.google.common.util.concurrent.ListenableFuture;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Executors;
 
 import retrofit2.Call;
 import retrofit2.Callback;
@@ -37,25 +44,32 @@ import retrofit2.Response;
 
 public class MainActivity extends AppCompatActivity {
 
+    private static final String TAG = "GT6-Worker"; // filter this in Logcat
+
     private Spinner spinnerEvent;
     private Spinner spinnerDriver;
     private MaterialButton btnSubmit;
     private ProgressBar progress;
 
     private ArrayAdapter<EventItem> eventAdapter;
-    private ArrayAdapter<String> driverNamesAdapter; // render names only
+    private ArrayAdapter<String> driverNamesAdapter;
 
     private final List<EventItem> events = new ArrayList<>();
-    private final List<DriverItem> drivers = new ArrayList<>(); // keep number+name for lookups
+    private final List<DriverItem> drivers = new ArrayList<>();
 
     private static final String STATE_EVENT_POS = "state_event_pos";
     private static final String STATE_DRIVER_POS = "state_driver_pos";
 
     private ActivityResultLauncher<String[]> permissionLauncher;
 
+    // WorkManager init guard
+    private static volatile boolean sWMInited = false;
+    // one-time kickoff guard for sync
+    private static volatile boolean sSyncStarted = false;
+
     // ----- Static hardcoded driver list -----
     private static final DriverItem[] STATIC_DRIVERS = new DriverItem[] {
-            new DriverItem(-1, "Select Driver…"), // placeholder at index 0
+            new DriverItem(-1, "Select Driver…"),
             new DriverItem(2,  "Dave Kirk"),
             new DriverItem(3,  "Michael Cooper"),
             new DriverItem(4,  "Greg Schupfer"),
@@ -76,7 +90,6 @@ public class MainActivity extends AppCompatActivity {
             new DriverItem(19, "Dan Sundstrum"),
             new DriverItem(20, "Jennifer Ringle"),
             new DriverItem(21, "Curt Warner"),
-            // 22–30 were OPEN → omitted
             new DriverItem(31, "Deane Chenoweth"),
             new DriverItem(32, "Julie Lander"),
             new DriverItem(33, "Mike Hannam"),
@@ -244,11 +257,22 @@ public class MainActivity extends AppCompatActivity {
             new DriverItem(195, "Jake Houk"),
     };
 
-
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        // ---------- Initialize WorkManager logging (no Application class needed) ----------
+        initWorkManagerVerboseOnce();
+
+        // ---------- Force-correct upload config at app start ----------
+        // Container URL MUST include /driver. SAS must be query ONLY (no leading '?').
+        com.example.gt6driver.sync.GT6MediaSync.setContainerUrl(
+                this, "https://stgt6driverappprod.blob.core.windows.net/driver");
+        // TODO: replace with your real SAS (no leading '?')
+        com.example.gt6driver.sync.GT6MediaSync.setSas(
+                this, "si=driver&spr=https&sv=2024-11-04&sr=c&sig=bkDZ74H2Fwmznej2B86lmh3eJXfQ9nI0csLwS8ixyN8%3D");
+        Log.i(TAG, "Main: configured container=/driver and SAS (redacted).");
 
         spinnerEvent = findViewById(R.id.spinnerEvent);
         spinnerDriver = findViewById(R.id.spinnerDriver);
@@ -281,11 +305,7 @@ public class MainActivity extends AppCompatActivity {
         ArrayList<String> driverNames = new ArrayList<>(drivers.size());
         for (DriverItem d : drivers) driverNames.add(d.name);
 
-        driverNamesAdapter = new ArrayAdapter<>(
-                this,
-                android.R.layout.simple_spinner_item,
-                driverNames
-        );
+        driverNamesAdapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, driverNames);
         driverNamesAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         spinnerDriver.setAdapter(driverNamesAdapter);
 
@@ -315,12 +335,12 @@ public class MainActivity extends AppCompatActivity {
             intent.putExtra("eventId", selectedEvent.id);
             intent.putExtra("driver", selectedDriver.name);
             intent.putExtra("driverNumber", selectedDriver.number);
-            // Save Driver Name for later - did that last minute so this is a hack instead of passing through all layers
-            com.example.gt6driver.session.CurrentSelection.get().setDriver(selectedDriver.number, selectedDriver.name);
+
+            // Persist current driver selection for later screens
+            com.example.gt6driver.session.CurrentSelection.get()
+                    .setDriver(selectedDriver.number, selectedDriver.name);
 
             startActivity(intent);
-
-            com.example.gt6driver.sync.GT6MediaSync.enqueueImmediate(this);
         });
 
         if (savedInstanceState != null) {
@@ -333,7 +353,7 @@ public class MainActivity extends AppCompatActivity {
             spinnerDriver.setSelection(0);
         }
 
-        // Permissions → start service → kick first scan
+        // Permissions → start service → kick first scan (once) AFTER permissions granted
         permissionLauncher = registerForActivityResult(
                 new ActivityResultContracts.RequestMultiplePermissions(),
                 result -> ensurePermissionsAndStartSync()
@@ -341,6 +361,58 @@ public class MainActivity extends AppCompatActivity {
         ensurePermissionsAndStartSync();
 
         loadEventsFromApi();
+    }
+
+    // ===== WorkManager verbose init =====
+    private void initWorkManagerVerboseOnce() {
+        if (sWMInited) return;
+        sWMInited = true;
+        try {
+            Configuration cfg = new Configuration.Builder()
+                    .setMinimumLoggingLevel(Log.VERBOSE)
+                    .build();
+            WorkManager.initialize(getApplicationContext(), cfg);
+            Log.i(TAG, "Main: WorkManager initialized (VERBOSE).");
+        } catch (IllegalStateException already) {
+            Log.i(TAG, "Main: WorkManager already initialized.");
+        }
+    }
+
+    // ===== one-time kickoff guard =====
+    private static void maybeStartInitialSync(android.content.Context appCtx) {
+        if (sSyncStarted) return;
+        sSyncStarted = true;
+
+        // Clean up any old chains that can leave new work BLOCKED
+        WorkManager wm = WorkManager.getInstance(appCtx);
+        wm.cancelUniqueWork("gt6_scan_serial");
+        wm.cancelUniqueWork("gt6_content_watch");
+        wm.cancelAllWorkByTag("gt6_scan_now");
+        wm.cancelAllWorkByTag("gt6_content_triggered");
+        wm.pruneWork();
+
+        // Enqueue fresh
+        com.example.gt6driver.sync.GT6MediaSync.enqueueImmediate(appCtx);
+        com.example.gt6driver.sync.GT6MediaSync.enqueueContentTriggers(appCtx);
+        Log.i(TAG, "Main: enqueued initial scan + content triggers.");
+
+        // Optional: quick debug dump to Logcat (tag: GT6-Worker)
+        new Thread(() -> {
+            try {
+                for (WorkInfo wi : WorkManager.getInstance(appCtx)
+                        .getWorkInfosForUniqueWork("gt6_scan_serial").get()) {
+                    Log.i(TAG, "POST-ENQUEUE WM gt6_scan_serial → " + wi.getId()
+                            + " state=" + wi.getState() + " tags=" + wi.getTags());
+                }
+                for (WorkInfo wi : WorkManager.getInstance(appCtx)
+                        .getWorkInfosForUniqueWork("gt6_content_watch").get()) {
+                    Log.i(TAG, "POST-ENQUEUE WM gt6_content_watch → " + wi.getId()
+                            + " state=" + wi.getState() + " tags=" + wi.getTags());
+                }
+            } catch (Exception e) {
+                Log.w(TAG, "WM debug fetch failed", e);
+            }
+        }).start();
     }
 
     @Override
@@ -498,20 +570,81 @@ public class MainActivity extends AppCompatActivity {
                 needed.add(Manifest.permission.READ_EXTERNAL_STORAGE);
             }
         }
+
         if (!needed.isEmpty()) {
             permissionLauncher.launch(needed.toArray(new String[0]));
             return;
         }
+
+        // Permissions ready → start the foreground watcher and kick one scan (once per process)
         startGT6SyncService();
-        com.example.gt6driver.sync.GT6MediaSync.enqueueImmediate(this);
+
+        // Clean up old work that can cause BLOCKED
+        WorkManager wm = WorkManager.getInstance(getApplicationContext());
+        wm.cancelUniqueWork("gt6_scan_serial");
+        wm.cancelUniqueWork("gt6_content_watch");
+        wm.cancelAllWorkByTag("gt6_scan_now");
+        wm.cancelAllWorkByTag("gt6_content_triggered");
+        wm.pruneWork();
+
+        maybeStartInitialSync(getApplicationContext());
+
+        // Optional: dump WorkManager state after enqueues
+        dumpWM("POST-ENQUEUE");
     }
 
     private void startGT6SyncService() {
         Intent svc = new Intent(this, com.example.gt6driver.sync.GT6MediaSyncService.class);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(svc);
         else startService(svc);
+        Log.i(TAG, "Main: started GT6MediaSyncService.");
+    }
+
+    // ----- Debug helper: dump your WorkManager jobs to Logcat -----
+    private void dumpWM(String label) {
+        try {
+            ListenableFuture<List<WorkInfo>> f1 =
+                    WorkManager.getInstance(getApplicationContext())
+                            .getWorkInfosForUniqueWork("gt6_scan_serial");
+
+            ListenableFuture<List<WorkInfo>> f2 =
+                    WorkManager.getInstance(getApplicationContext())
+                            .getWorkInfosForUniqueWork("gt6_scan_periodic");
+
+            ListenableFuture<List<WorkInfo>> f3 =
+                    WorkManager.getInstance(getApplicationContext())
+                            .getWorkInfosByTag("gt6_content_triggered");
+
+            Executors.newSingleThreadExecutor().submit(() -> {
+                try {
+                    for (WorkInfo wi : f1.get()) {
+                        Log.i(TAG, label + " WM gt6_scan_serial → " +
+                                wi.getId() + " state=" + wi.getState() + " tags=" + wi.getTags());
+                    }
+                } catch (Exception ignored) {}
+
+                try {
+                    for (WorkInfo wi : f2.get()) {
+                        Log.i(TAG, label + " WM gt6_scan_periodic → " +
+                                wi.getId() + " state=" + wi.getState() + " tags=" + wi.getTags());
+                    }
+                } catch (Exception ignored) {}
+
+                try {
+                    for (WorkInfo wi : f3.get()) {
+                        Log.i(TAG, label + " WM tag:gt6_content_triggered → " +
+                                wi.getId() + " state=" + wi.getState() + " tags=" + wi.getTags());
+                    }
+                } catch (Exception ignored) {}
+            });
+        } catch (Exception e) {
+            Log.e(TAG, "WM dump failed", e);
+        }
     }
 }
+
+
+
 
 
 

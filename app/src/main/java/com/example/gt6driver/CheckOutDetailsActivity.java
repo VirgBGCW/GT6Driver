@@ -64,7 +64,7 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
     // ===== Consistent with CheckIn =====
     //
     private static final String TAG = "GT6Release";
-    private static final String BLOB_BASE = "https://stgt6driverappprod.blob.core.windows.net/driver/";
+    private static final String BLOB_BASE = "https://stgt6driverappprod.blob.core.windows.net/";
     private static final String EXTRA_VEHICLE        = "vehicle";
     private static final String EXTRA_OPPORTUNITY_ID = "opportunityId";
 

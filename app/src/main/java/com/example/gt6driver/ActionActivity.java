@@ -67,9 +67,10 @@ import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel;
 
 public class ActionActivity extends AppCompatActivity {
     // Printer/device constants
-    private static final String PRINTER_NAME = "SPP-R310"; // fallback printer name
-    private static final int RECEIPT_WIDTH_DOTS = 576;     // 80mm; 384 for 58mm
-
+    private static final String[] PRINTER_CANDIDATES = new String[] {
+            "SPP-R310", "SPP-310", "SPP-R300", "SPP-300"
+    };
+    private static final int RECEIPT_WIDTH_DOTS = 576; // 80mm; 384 for 58mm
     // ESC/POS bytes
     private static final byte ESC = 0x1B;   // ESC
     private static final byte GS  = 0x1D;   // GS
@@ -458,12 +459,21 @@ public class ActionActivity extends AppCompatActivity {
             String model  = (vehicle != null) ? safe(vehicle.model) : "";
             String color  = (vehicle != null) ? safe(vehicle.exteriorcolor) : "";
             String vin    = currentVin();
+
             String tent   = (vehicle != null) ? safe(vehicle.tentid) : "";
+            String col    = (vehicle != null) ? safe(vehicle.col) : "";
+            String row    = (vehicle != null) ? safe(vehicle.row) : "";
+
+            // LOCATION = TENTID + " " + COL + "-" + ROW
+            String location = (tent + " / " + col + " - " +
+                    "" +
+                    "" + row).trim();
 
             String descriptionForPrint = (vehicle != null)
                     ? coalesce(vehicle.marketingdescription, "")
                     : (panelDesc.getText() != null ? panelDesc.getText().toString() : "");
 
+            // Pass LOCATION in the existing "tent" parameter (no signature change)
             printVehicleInfoEscPos(
                     defaulted(lot, "—"),
                     defaulted(year, "—"),
@@ -471,10 +481,11 @@ public class ActionActivity extends AppCompatActivity {
                     defaulted(model, "—"),
                     defaulted(color, "—"),
                     defaulted(vin, "—"),
-                    defaulted(tent, "—"),
-                    descriptionForPrint /* ignored inside */
+                    defaulted(location, "—"),
+                    descriptionForPrint /* ignored */
             );
         });
+
 
         btnCarTag.setOnClickListener(v -> {
             String lot   = currentLot();
@@ -486,7 +497,36 @@ public class ActionActivity extends AppCompatActivity {
             printCarTag(lot, tent, col, row, time);
         });
     }
-
+//
+    /**
+     * Pick the best available printer name. Prefers a bonded device whose name contains one
+     * of our candidates (case-insensitive). Falls back to the first candidate if none found.
+     */
+    private String resolvePrinterName() {
+        try {
+            android.bluetooth.BluetoothManager bm =
+                    (android.bluetooth.BluetoothManager) getSystemService(BLUETOOTH_SERVICE);
+            android.bluetooth.BluetoothAdapter adapter = (bm != null) ? bm.getAdapter() : null;
+            if (adapter != null && adapter.isEnabled()) {
+                java.util.Set<android.bluetooth.BluetoothDevice> bonded = adapter.getBondedDevices();
+                if (bonded != null) {
+                    for (String cand : PRINTER_CANDIDATES) {
+                        for (android.bluetooth.BluetoothDevice d : bonded) {
+                            String n = (d.getName() == null) ? "" : d.getName();
+                            if (n.toLowerCase(java.util.Locale.US).contains(cand.toLowerCase(java.util.Locale.US))) {
+                                Log.d(LOG_TAG, "Resolved bonded printer match: " + n + " (cand=" + cand + ")");
+                                return n; // return the real bonded device name
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Throwable t) {
+            Log.w(LOG_TAG, "resolvePrinterName() failed; using default", t);
+        }
+        // Fallback to the first candidate if no bonded match found
+        return PRINTER_CANDIDATES[0];
+    }
     // Put common extras, including the dynamic opportunity id (if available)
     private void putCommonExtras(Intent i) {
         if (vehicle != null) {
@@ -587,7 +627,7 @@ public class ActionActivity extends AppCompatActivity {
         printExec.execute(() -> {
             BluetoothEscPosPrinter esc = new BluetoothEscPosPrinter();
             try {
-                esc.connectByName(PRINTER_NAME);
+                esc.connectByName(resolvePrinterName());
                 esc.printBitmap(bmpToPrint, RECEIPT_WIDTH_DOTS, /*feedAndCut*/ true);
                 runOnUiThread(() -> Toast.makeText(this, "Printed Key Bag Tag", Toast.LENGTH_SHORT).show());
             } catch (Exception e) {
@@ -758,9 +798,7 @@ public class ActionActivity extends AppCompatActivity {
         esc.printText(escSeq(cmdAlign(0)));
         esc.printBitmap(canvas, RECEIPT_WIDTH_DOTS, /*feedAndCut*/ false);
     }
-
 // Print Car Tag
-// Pure ESC/POS: Row1 big ("LOT" left, TENT right), Row2 big (LOT# left, COL-ROW right), Row3 big (TIME left), big QR right
 private void printCarTag(String lotNum, String tentId, String col, String row, String targetTimeText) {
     if (!ensureBtPermissions()) {
         Toast.makeText(this, "Grant Bluetooth permission to print.", Toast.LENGTH_SHORT).show();
@@ -776,57 +814,59 @@ private void printCarTag(String lotNum, String tentId, String col, String row, S
     printExec.execute(() -> {
         BluetoothEscPosPrinter esc = new BluetoothEscPosPrinter();
         try {
-            esc.connectByName(PRINTER_NAME);
+            esc.connectByName(resolvePrinterName());
+
 
             StringBuilder job = new StringBuilder(512);
             job.append(escSeq(cmdInit()))
                     .append(escSeq(cmdFontA()))
                     .append(escSeq(cmdAlign(0)))
                     .append(escSeq(cmdCharSize(0,0)))
-                    // Big text: Double-Width + Double-Height + emphasized + double-strike
-                    .append(escSeq(cmdPrintMode(0x30)))   // 0x20 (DW) + 0x10 (DH)
+                    .append(escSeq(cmdPrintMode(0x30)))   // double width + height
                     .append(escSeq(cmdEmphasized(true)))
                     .append(escSeq(cmdDoubleStrike(true)));
 
-            // ROW 1: "LOT" (left) | TENT value (right)
-            String r1 = fixedWidthLine(fitForCols("LOT", COLS_W2),
-                    fitForCols(tent,  COLS_W2),
-                    COLS_W2);
+            // ROW 1: LOT | TENT
+            String r1 = fixedWidthLine(
+                    fitForCols(lot,  COLS_W2),
+                    fitForCols(tent, COLS_W2),
+                    COLS_W2
+            );
             job.append(r1).append("\n");
 
-            // ROW 2: LOT NUMBER (left) | col-row (right)
-            String r2 = fixedWidthLine(fitForCols(lot,    COLS_W2),
+            // ROW 2: (FRIDAY) | COL-ROW
+            String r2 = fixedWidthLine(
+                    fitForCols(day,   COLS_W2),
                     fitForCols(colRow, COLS_W2),
-                    COLS_W2);
-            job.append(r2).append("\n");
-
-            // ROW 3: (FRIDAY)
-            job.append(fitForCols(day, COLS_W2)).append("\n");
+                    COLS_W2
+            );
+            job.append(r2);
 
             // Push text block
             esc.printText(job.toString());
-            // --- Native ESC/POS QR on the RIGHT (large) ---
-            // --- Native ESC/POS QR on the RIGHT (max size) ---
-            // Some firmware prefers normal print mode before QR; reset just in case.
-            if (!qrData.isEmpty()) {
-                esc.printText(escSeq(cmdEmphasized(false)) + escSeq(cmdDoubleStrike(false)) + escSeq(cmdPrintMode(0x00)));
-                // moduleSize=16 (max), EC='H' (51), align=2 (right)
-                String qrSeq = escposQr(qrData, 16, 51, 2);
-                esc.printText(qrSeq + "\n");
-            }
 
-
-            // Reset modes and feed a touch
+            // Reset before QR
             esc.printText(
                     escSeq(cmdEmphasized(false)) +
                             escSeq(cmdDoubleStrike(false)) +
                             escSeq(cmdPrintMode(0x00)) +
-                            escSeq(cmdCharSize(0,0)) +
-                            escSeq(cmdFeed(2))
+                            escSeq(cmdCharSize(0,0))
             );
 
+            // === Add two blank lines above the QR ===
+            esc.printText("\n\n");
+
+            // Print QR (right-aligned)
+            if (!qrData.isEmpty()) {
+                String qrSeq = escposQr(qrData, 16, 51, 2);
+                esc.printText(qrSeq);
+            }
+
+            // === Add two blank lines after QR ===
+            esc.printText("\n\n");
+
             runOnUiThread(() ->
-                    Toast.makeText(this, "Car tag printed (pure ESC/POS + large QR)", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "Car tag printed (balanced spacing)", Toast.LENGTH_SHORT).show()
             );
         } catch (Exception e) {
             runOnUiThread(() ->
@@ -837,7 +877,6 @@ private void printCarTag(String lotNum, String tentId, String col, String row, S
         }
     });
 }
-
 
 
     /** Returns like "Friday 3:30 PM" even if input is "Fri 3:30 PM". */
@@ -1101,35 +1140,26 @@ private void printCarTag(String lotNum, String tentId, String col, String row, S
         printExec.execute(() -> {
             BluetoothEscPosPrinter esc = new BluetoothEscPosPrinter();
             try {
-                esc.connectByName(PRINTER_NAME);
+                esc.connectByName(resolvePrinterName());
 
-                // === HEADER (double width only, no spacing before or after) ===
-                esc.printText(
-                        escSeq(cmdInit()) +
-                                escSeq(cmdFontA()) +
-                                escSeq(cmdAlign(1)) +
-                                escSeq(cmdCharSize(1, 0)) +       // double width only
-                                escSeq(cmdBold(true)) +
-                                "*** KEY TAG BAG ***" +            // no trailing feed
-                                escSeq(cmdBold(false)) +
-                                escSeq(cmdAlign(0)) +              // back to left align
-                                "\n"                               // single line break only
-                );
 
                 // === BODY (same width, left aligned, tight lines) ===
-                esc.printText( escSeq(cmdFontA()) + escSeq(cmdCharSize(1,0)) + "LOT   : " + escSeq(cmdBold(true)) + defaulted(lot, "—")   + escSeq(cmdBold(false)) + "\n");
-                esc.printText( escSeq(cmdFontA()) + escSeq(cmdCharSize(1,0)) + "YEAR  : " + escSeq(cmdBold(true)) + defaulted(year, "—")  + escSeq(cmdBold(false)) + "\n");
-                esc.printText( escSeq(cmdFontA()) + escSeq(cmdCharSize(1,0)) + "MAKE  : " + escSeq(cmdBold(true)) + defaulted(make, "—")  + escSeq(cmdBold(false)) + "\n");
-                esc.printText( escSeq(cmdFontA()) + escSeq(cmdCharSize(1,0)) + "MODEL : " + escSeq(cmdBold(true)) + defaulted(model, "—") + escSeq(cmdBold(false)) + "\n");
-                esc.printText( escSeq(cmdFontA()) + escSeq(cmdCharSize(1,0)) + "COLOR : " + escSeq(cmdBold(true)) + defaulted(color, "—") + escSeq(cmdBold(false)) + "\n");
-                esc.printText( escSeq(cmdFontA()) + escSeq(cmdCharSize(1,0)) + "VIN   : " + escSeq(cmdBold(true)) + defaulted(vin, "—")   + escSeq(cmdBold(false)) + "\n");
-                esc.printText( escSeq(cmdFontA()) + escSeq(cmdCharSize(1,0)) + "TENT  : " + escSeq(cmdBold(true)) + defaulted(tent, "—")  + escSeq(cmdBold(false)) );
+                esc.printText( escSeq(cmdFontA()) + escSeq(cmdCharSize(1,0)) + "LOT      : " + escSeq(cmdBold(true)) + defaulted(lot, "—")   + escSeq(cmdBold(false)) + "\n");
+                esc.printText( escSeq(cmdFontA()) + escSeq(cmdCharSize(1,0)) + "YEAR     : " + escSeq(cmdBold(true)) + defaulted(year, "—")  + escSeq(cmdBold(false)) + "\n");
+                esc.printText( escSeq(cmdFontA()) + escSeq(cmdCharSize(1,0)) + "MAKE     : " + escSeq(cmdBold(true)) + defaulted(make, "—")  + escSeq(cmdBold(false)) + "\n");
+                esc.printText( escSeq(cmdFontA()) + escSeq(cmdCharSize(1,0)) + "MODEL    : " + escSeq(cmdBold(true)) + defaulted(model, "—") + escSeq(cmdBold(false)) + "\n");
+                esc.printText( escSeq(cmdFontA()) + escSeq(cmdCharSize(1,0)) + "COLOR    : " + escSeq(cmdBold(true)) + defaulted(color, "—") + escSeq(cmdBold(false)) + "\n");
+                esc.printText( escSeq(cmdFontA()) + escSeq(cmdCharSize(1,0)) + "VIN      : " + escSeq(cmdBold(true)) + defaulted(vin, "—")   + escSeq(cmdBold(false)) + "\n");
+                esc.printText( escSeq(cmdFontA()) + escSeq(cmdCharSize(1,0)) + "LOCATION : " + escSeq(cmdBold(true)) + defaulted(tent, "—")  + escSeq(cmdBold(false)) );
 
-                // No extra feed
+                // Reset char size to normal
                 esc.printText(escSeq(cmdCharSize(0, 0)));
 
+                // === FEED 2 EXTRA LINES to advance label ===
+                esc.printText("\n\n");
+
                 runOnUiThread(() ->
-                        Toast.makeText(this, "Key Bag Tag printed (tight top & bottom)", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, "Vehicle Info printed (feeds 2 lines)", Toast.LENGTH_SHORT).show()
                 );
             } catch (Exception e) {
                 runOnUiThread(() ->
@@ -1140,6 +1170,8 @@ private void printCarTag(String lotNum, String tentId, String col, String row, S
             }
         });
     }
+
+
 
     // ===================== NFC =====================
     private String buildNfcPayload(String lotNumber, String crmId, String driverNumber) {

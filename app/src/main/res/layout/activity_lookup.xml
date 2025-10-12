@@ -55,8 +55,11 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:textColor="@android:color/white"
-            android:inputType="number"
-            android:hint="LOT NUMBER" />
+            android:hint="LOT NUMBER"
+            android:inputType="numberDecimal"
+            android:digits="0123456789."
+            android:imeOptions="actionSearch" />
+
     </com.google.android.material.textfield.TextInputLayout>
 
     <!-- LAST 4 OF VIN -->

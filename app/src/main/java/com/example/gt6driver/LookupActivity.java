@@ -177,11 +177,14 @@ public class LookupActivity extends AppCompatActivity {
             adapter.setItems(new ArrayList<>());
             return;
         }
-        if (!lotStr.matches("\\d+")) {
-            showError("Lot must be digits only.");
+
+// Allow integer or decimal (e.g., 300 or 300.1)
+        if (!lotStr.matches("\\d+(?:\\.\\d+)?")) {
+            showError("Lot must be a number (e.g., 300 or 300.1).");
             adapter.setItems(new ArrayList<>());
             return;
         }
+
         cancelAll();
         setLoading(true);
 

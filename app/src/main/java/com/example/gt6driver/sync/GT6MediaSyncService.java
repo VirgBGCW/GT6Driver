@@ -8,7 +8,9 @@ import android.content.Intent;
 import android.os.Build;
 import android.os.Environment;
 import android.os.FileObserver;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
@@ -19,15 +21,22 @@ public class GT6MediaSyncService extends Service {
     public static final String CHANNEL_ID = "gt6_sync";
     private FileObserver picObserver, movObserver;
 
+    // Simple debounce for FileObserver -> Work enqueue
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    private final Runnable debouncedEnqueue = () -> GT6MediaSync.enqueueImmediate(getApplicationContext());
+
     @Override public void onCreate() {
         super.onCreate();
         createChannel();
         startForeground(2001, buildNotification("Watching GT6 media..."));
 
-        // Start WorkManager content triggers (best for scoped storage)
+        // Kick off a one-time immediate scan at startup
+        GT6MediaSync.enqueueImmediate(getApplicationContext());
+
+        // Start WorkManager content triggers (scoped-storage friendly)
         GT6MediaSync.enqueueContentTriggers(getApplicationContext());
 
-        // Fallback: FileObserver on physical paths (pre-scoped or vendor devices)
+        // Fallback: raw FileObserver (best-effort on pre-scoped/vendor devices)
         File pics = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "GT6");
         File movs = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES), "GT6");
         picObserver = observerFor(pics);
@@ -41,14 +50,14 @@ public class GT6MediaSyncService extends Service {
 
     private FileObserver observerFor(File dir) {
         if (dir == null) return null;
-        // If the folder doesn't exist yet, create it (safe no-op if it already exists)
         if (!dir.exists()) dir.mkdirs();
 
         final int mask = FileObserver.CREATE | FileObserver.MOVED_TO | FileObserver.CLOSE_WRITE;
         return new FileObserver(dir.getAbsolutePath(), mask) {
             @Override public void onEvent(int event, @Nullable String path) {
-                // Any new/finished file -> prompt a scan now
-                GT6MediaSync.enqueueImmediate(getApplicationContext());
+                // Debounce bursts of events into a single enqueue
+                handler.removeCallbacks(debouncedEnqueue);
+                handler.postDelayed(debouncedEnqueue, 1500);
             }
         };
     }
@@ -62,6 +71,7 @@ public class GT6MediaSyncService extends Service {
     @Override public void onDestroy() {
         if (picObserver != null) picObserver.stopWatching();
         if (movObserver != null) movObserver.stopWatching();
+        handler.removeCallbacksAndMessages(null);
         super.onDestroy();
     }
 
@@ -83,3 +93,4 @@ public class GT6MediaSyncService extends Service {
                 .build();
     }
 }
+

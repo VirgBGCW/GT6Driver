@@ -1,11 +1,10 @@
-// app/src/main/java/com/example/gt6driver/CheckInDetailsActivity.java
 package com.example.gt6driver;
 
 import android.Manifest;
-import android.content.ClipData;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentSender;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.database.Cursor;
@@ -24,10 +23,11 @@ import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.content.ClipData;
+
 import com.example.gt6driver.model.VehicleDetail;
 
 import java.io.File;
-import java.util.List;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
@@ -42,8 +42,6 @@ import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.checkbox.MaterialCheckBox;
 import com.google.android.material.textfield.TextInputEditText;
 import com.google.android.material.textfield.TextInputLayout;
-//
-import com.example.gt6driver.Nav;
 
 
 public class CheckInDetailsActivity extends AppCompatActivity {
@@ -133,6 +131,12 @@ public class CheckInDetailsActivity extends AppCompatActivity {
     private ActivityResultLauncher<String> requestCameraPermissionLauncher;
     private ActivityResultLauncher<Intent> recordVideoLauncher;
     private ActivityResultLauncher<String> requestWritePermissionLauncher;
+    // NEW: Android 13+ read images permission
+    private ActivityResultLauncher<String> requestReadImagesPermissionLauncher;
+
+    // NEW: Android 13+ read video permission
+    private ActivityResultLauncher<String> requestReadVideoPermissionLauncher;
+
     private boolean pendingVideoCapture = false;
 
     private Uri pendingVideoUri;
@@ -174,114 +178,114 @@ public class CheckInDetailsActivity extends AppCompatActivity {
         // Vehicle panel
         panelLot = findViewById(R.id.panelLot);
         panelDesc = findViewById(R.id.panelDesc);
-        panelVin  = findViewById(R.id.panelVin);
+        panelVin = findViewById(R.id.panelVin);
         ivVehicleThumb = findViewById(R.id.ivCheckInThumb);
 
         // VERIFY VIN
         verifyVinPanel = findViewById(R.id.verifyVinPanel);
-        verifyVinHeader= findViewById(R.id.verifyVinHeader);
-        verifyActions  = findViewById(R.id.verifyActions);
-        verifyIcon     = findViewById(R.id.verifyIcon);
-        btnVinMatch    = findViewById(R.id.btnVinMatch);
-        btnVinNoMatch  = findViewById(R.id.btnVinNoMatch);
+        verifyVinHeader = findViewById(R.id.verifyVinHeader);
+        verifyActions = findViewById(R.id.verifyActions);
+        verifyIcon = findViewById(R.id.verifyIcon);
+        btnVinMatch = findViewById(R.id.btnVinMatch);
+        btnVinNoMatch = findViewById(R.id.btnVinNoMatch);
         verifyVinValue = findViewById(R.id.verifyVinValue);
-        noMatchGroup   = findViewById(R.id.noMatchGroup);
+        noMatchGroup = findViewById(R.id.noMatchGroup);
         enterVinLayout = findViewById(R.id.enterVinLayout);
-        enterVinInput  = findViewById(R.id.enterVinInput);
-        cbVinNotified  = findViewById(R.id.cbVinNotified);
-        btnVinUpdate   = findViewById(R.id.btnVinUpdate);
-        btnCamera      = findViewById(R.id.btnCamera);
+        enterVinInput = findViewById(R.id.enterVinInput);
+        cbVinNotified = findViewById(R.id.cbVinNotified);
+        btnVinUpdate = findViewById(R.id.btnVinUpdate);
+        btnCamera = findViewById(R.id.btnCamera);
 
         // MILEAGE
-        mileagePanel       = findViewById(R.id.mileagePanel);
-        mileageHeader      = findViewById(R.id.mileageHeader);
-        mileageGroup       = findViewById(R.id.mileageGroup);
-        mileageIcon        = findViewById(R.id.mileageIcon);
+        mileagePanel = findViewById(R.id.mileagePanel);
+        mileageHeader = findViewById(R.id.mileageHeader);
+        mileageGroup = findViewById(R.id.mileageGroup);
+        mileageIcon = findViewById(R.id.mileageIcon);
         enterMileageLayout = findViewById(R.id.enterMileageLayout);
-        enterMileageInput  = findViewById(R.id.enterMileageInput);
-        btnMileageCamera   = findViewById(R.id.btnMileageCamera);
-        btnMileageUpdate   = findViewById(R.id.btnMileageUpdate);
+        enterMileageInput = findViewById(R.id.enterMileageInput);
+        btnMileageCamera = findViewById(R.id.btnMileageCamera);
+        btnMileageUpdate = findViewById(R.id.btnMileageUpdate);
 
         // KEY CHECK
-        keyPanel            = findViewById(R.id.keyPanel);
-        keyHeader           = findViewById(R.id.keyHeader);
-        keyGroup            = findViewById(R.id.keyGroup);
-        keyIcon             = findViewById(R.id.keyIcon);
-        cbFobs              = findViewById(R.id.cbFobs);
-        cbNoKey             = findViewById(R.id.cbNoKey);
+        keyPanel = findViewById(R.id.keyPanel);
+        keyHeader = findViewById(R.id.keyHeader);
+        keyGroup = findViewById(R.id.keyGroup);
+        keyIcon = findViewById(R.id.keyIcon);
+        cbFobs = findViewById(R.id.cbFobs);
+        cbNoKey = findViewById(R.id.cbNoKey);
         enterKeyCountLayout = findViewById(R.id.enterKeyCountLayout);
-        enterKeyCountInput  = findViewById(R.id.enterKeyCountInput);
-        btnKeyCamera        = findViewById(R.id.btnKeyCamera);
-        btnKeyUpdate        = findViewById(R.id.btnKeyUpdate);
+        enterKeyCountInput = findViewById(R.id.enterKeyCountInput);
+        btnKeyCamera = findViewById(R.id.btnKeyCamera);
+        btnKeyUpdate = findViewById(R.id.btnKeyUpdate);
 
         // INTAKE VIDEO
-        videoPanel      = findViewById(R.id.videoPanel);
-        videoHeader     = findViewById(R.id.videoHeader);
-        videoGroup      = findViewById(R.id.videoGroup);
-        videoIcon       = findViewById(R.id.videoIcon);
+        videoPanel = findViewById(R.id.videoPanel);
+        videoHeader = findViewById(R.id.videoHeader);
+        videoGroup = findViewById(R.id.videoGroup);
+        videoIcon = findViewById(R.id.videoIcon);
         videoPromptIcon = findViewById(R.id.videoPromptIcon);
-        btnVideoAccept  = findViewById(R.id.btnVideoAccept);
+        btnVideoAccept = findViewById(R.id.btnVideoAccept);
 
         // DESCRIPTION
-        descPanel        = findViewById(R.id.descPanel);
-        descHeader       = findViewById(R.id.descHeader);
-        descGroup        = findViewById(R.id.descGroup);
-        descIcon         = findViewById(R.id.descIcon);
-        descValue        = findViewById(R.id.descValue);
-        btnDescCorrect   = findViewById(R.id.btnDescCorrect);
+        descPanel = findViewById(R.id.descPanel);
+        descHeader = findViewById(R.id.descHeader);
+        descGroup = findViewById(R.id.descGroup);
+        descIcon = findViewById(R.id.descIcon);
+        descValue = findViewById(R.id.descValue);
+        btnDescCorrect = findViewById(R.id.btnDescCorrect);
         btnDescIncorrect = findViewById(R.id.btnDescIncorrect);
         descIncorrectGroup = findViewById(R.id.descIncorrectGroup);
         cbIncorrectMileage = findViewById(R.id.cbIncorrectMileage);
-        cbIncorrectVin     = findViewById(R.id.cbIncorrectVin);
+        cbIncorrectVin = findViewById(R.id.cbIncorrectVin);
         cbIncorrectDetails = findViewById(R.id.cbIncorrectDetails);
-        cbSpellingErrors   = findViewById(R.id.cbSpellingErrors);
-        btnDescUpdate      = findViewById(R.id.btnDescUpdate);
+        cbSpellingErrors = findViewById(R.id.cbSpellingErrors);
+        btnDescUpdate = findViewById(R.id.btnDescUpdate);
 
         // QUALITY
-        qualityPanel        = findViewById(R.id.qualityPanel);
-        qualityGroup        = findViewById(R.id.qualityGroup);
+        qualityPanel = findViewById(R.id.qualityPanel);
+        qualityGroup = findViewById(R.id.qualityGroup);
         qualityDetailsGroup = findViewById(R.id.qualityDetailsGroup);
-        qualityIcon         = findViewById(R.id.qualityIcon);
-        qualityMessage      = findViewById(R.id.qualityMessage);
-        btnQualityNoConcerns= findViewById(R.id.btnQualityNoConcerns);
-        btnQualityConcerns  = findViewById(R.id.btnQualityConcerns);
-        btnQualityUpdate    = findViewById(R.id.btnQualityUpdate);
-        cbExteriorDamage    = findViewById(R.id.cbExteriorDamage);
-        cbInteriorDamage    = findViewById(R.id.cbInteriorDamage);
-        cbTiresWheels       = findViewById(R.id.cbTiresWheels);
-        cbMechanical        = findViewById(R.id.cbMechanical);
-        cbServiceLights     = findViewById(R.id.cbServiceLights);
+        qualityIcon = findViewById(R.id.qualityIcon);
+        qualityMessage = findViewById(R.id.qualityMessage);
+        btnQualityNoConcerns = findViewById(R.id.btnQualityNoConcerns);
+        btnQualityConcerns = findViewById(R.id.btnQualityConcerns);
+        btnQualityUpdate = findViewById(R.id.btnQualityUpdate);
+        cbExteriorDamage = findViewById(R.id.cbExteriorDamage);
+        cbInteriorDamage = findViewById(R.id.cbInteriorDamage);
+        cbTiresWheels = findViewById(R.id.cbTiresWheels);
+        cbMechanical = findViewById(R.id.cbMechanical);
+        cbServiceLights = findViewById(R.id.cbServiceLights);
 
         // Confirm button
         btnConfirm = findViewById(R.id.btnConfirmIntake);
         btnConfirm.setEnabled(true);
         btnConfirm.setAlpha(1f);
 
-
-// ===== Intent extras =====
+        // ===== Intent extras =====
         Intent in = getIntent();
 
-// Preferred path: full vehicle model
+        // Preferred path: full vehicle model
         vehicle = in.getParcelableExtra(EXTRA_VEHICLE);
 
-// Legacy fields (fallbacks if vehicle is null)
-        lot         = in.getStringExtra(Nav.EXTRA_LOT);
+        // Legacy fields (fallbacks if vehicle is null)
+        lot = in.getStringExtra(Nav.EXTRA_LOT);
         description = in.getStringExtra(Nav.EXTRA_DESC);
         shortDescription = in.getStringExtra("shortdesc"); // short desc
-        eventName   = in.getStringExtra(Nav.EXTRA_EVENT_NAME);
-        eventId     = in.getIntExtra(Nav.EXTRA_EVENT_ID, -1);
-       // driver      = in.getStringExtra(Nav.EXTRA_DRIVER);
+        eventName = in.getStringExtra(Nav.EXTRA_EVENT_NAME);
+        eventId = in.getIntExtra(Nav.EXTRA_EVENT_ID, -1);
+        // driver      = in.getStringExtra(Nav.EXTRA_DRIVER);
         if (driver == null || driver.trim().isEmpty()) {
             try {
                 String fromSession = com.example.gt6driver.session.CurrentSelection.get().getDriverName();
                 if (fromSession != null && !fromSession.trim().isEmpty()) driver = fromSession;
-            } catch (Throwable ignored) {}
+            } catch (Throwable ignored) {
+            }
         }
-        mode        = in.getStringExtra("mode"); // "check_in"
-        vin         = in.getStringExtra(Nav.EXTRA_VIN);
-        thumbUrl    = in.getStringExtra(Nav.EXTRA_THUMB);
+        mode = in.getStringExtra("mode"); // "check_in"
+        vin = in.getStringExtra(Nav.EXTRA_VIN);
+        thumbUrl = in.getStringExtra(Nav.EXTRA_THUMB);
 
-// Opportunity Id (first from intent, else from vehicle)
+        // Opportunity Id (first from intent, else from vehicle)
         opportunityId = in.getStringExtra(EXTRA_OPPORTUNITY_ID);
         if ((opportunityId == null || opportunityId.trim().isEmpty()) && vehicle != null) {
             // Support both names on the model
@@ -292,35 +296,21 @@ public class CheckInDetailsActivity extends AppCompatActivity {
             }
         }
 
-// If we have a vehicle, prefer its values for header UI
+        // If we have a vehicle, prefer its values for header UI
         if (vehicle != null) {
             // lotnumber is String in your models
-            String vLot     = vehicle.lotnumber != null ? vehicle.lotnumber : "";
-            String vDesc  = safeStr(vehicle.marketingdescription);
-            description   = vDesc;  // don't fallback to title/anything else
-            String vVin     = vehicle.vin != null ? vehicle.vin : "";
-            String vThumb   = !isEmpty(vehicle.thumbUrl) ? vehicle.thumbUrl
+            String vLot = vehicle.lotnumber != null ? vehicle.lotnumber : "";
+            String vDesc = safeStr(vehicle.marketingdescription);
+            description = vDesc;  // don't fallback to title/anything else
+            String vVin = vehicle.vin != null ? vehicle.vin : "";
+            String vThumb = !isEmpty(vehicle.thumbUrl) ? vehicle.thumbUrl
                     : (vehicle.tbuncpath != null ? vehicle.tbuncpath : "");
 
             // Use these as the working values the rest of the activity expects
-            lot       = firstNonEmpty(vLot, lot);
+            lot = firstNonEmpty(vLot, lot);
             description = firstNonEmpty(vDesc, description);
-            vin       = firstNonEmpty(vVin, vin);
-            thumbUrl  = firstNonEmpty(vThumb, thumbUrl);
-        }
-
-// Vehicle header
-        panelLot.setText("LOT # " + (lot != null ? lot : ""));
-        panelDesc.setText(description != null ? description : "");
-        if (panelVin != null) panelVin.setText("VIN: " + (vin != null ? vin : ""));
-
-// Load vehicle thumbnail
-        loadThumbIntoHeader();
-
-        if (descValue != null) {
-            descValue.setText(!TextUtils.isEmpty(shortDescription)
-                    ? shortDescription
-                    : "No description available.");
+            vin = firstNonEmpty(vVin, vin);
+            thumbUrl = firstNonEmpty(vThumb, thumbUrl);
         }
 
         // Vehicle header
@@ -336,107 +326,192 @@ public class CheckInDetailsActivity extends AppCompatActivity {
                     ? description
                     : "No description available.");
         }
+
         // ===== PHOTO launcher =====
         takePictureLauncher = registerForActivityResult(
                 new ActivityResultContracts.StartActivityForResult(),
                 result -> {
-                    if (result.getResultCode() == RESULT_OK) {
-                        if (pendingPhotoUri != null && pendingPhotoLabel != null) {
-                            if (hasNonZeroSize(pendingPhotoUri)) {
-                                try { getContentResolver().notifyChange(pendingPhotoUri, null); } catch (Exception ignored) {}
-
-                                // ✅ NEW: map label -> blob URL and store on model
-                                if (intakeModel == null) intakeModel = new VehicleTaskIntake();
-                                String fileName;
-                                switch (pendingPhotoLabel.toLowerCase()) {
-                                    case "keycheck":
-                                        fileName = "keycheck_intake.jpg";
-                                        if (intakeModel.keyCheck == null) intakeModel.keyCheck = new VehicleTaskIntake.KeyCheck();
-                                        intakeModel.keyCheck.photoUrl = mediaUrl(fileName);
-                                        break;
-                                    case "mileage":
-                                        fileName = "mileage_intake.jpg";
-                                        if (intakeModel.mileage == null) intakeModel.mileage = new VehicleTaskIntake.Mileage();
-                                        intakeModel.mileage.photoUrl = mediaUrl(fileName);
-                                        break;
-                                    case "vin":
-                                    default:
-                                        fileName = "vin.jpg";
-                                        if (intakeModel.vinVerify == null) intakeModel.vinVerify = new VehicleTaskIntake.VinVerify();
-                                        intakeModel.vinVerify.photoUrl = mediaUrl(fileName);
-                                        break;
-                                }
-
-                                Toast.makeText(
-                                        this,
-                                        (pendingPhotoLabel.toUpperCase() + " photo saved:\n" + pendingPhotoUri),
-                                        Toast.LENGTH_SHORT
-                                ).show();
-
-                            } else {
-                                try { getContentResolver().delete(pendingPhotoUri, null, null); } catch (Exception ignored) {}
-                                Toast.makeText(this, "Camera failed to save the photo. Please try again.", Toast.LENGTH_SHORT).show();
+                    try {
+                        // Cancel or failure: clean up empty precreated row
+                        if (result.getResultCode() != RESULT_OK) {
+                            if (pendingPhotoUri != null && !awaitNonZeroSize(pendingPhotoUri)) {
+                                try { getContentResolver().delete(pendingPhotoUri, null, null); } catch (Exception ignore) {}
                             }
-                        } else {
-                            Toast.makeText(this, "Photo captured.", Toast.LENGTH_SHORT).show();
+                            pendingPhotoLabel = null;
+                            pendingPhotoUri = null;
+                            return;
                         }
-                    } else {
-                        if (pendingPhotoUri != null) {
-                            try { getContentResolver().delete(pendingPhotoUri, null, null); } catch (Exception ignored) {}
-                        }
-                    }
-                    pendingPhotoLabel = null;
-                    pendingPhotoUri = null;
 
+                        final long now = System.currentTimeMillis();
+
+                        Uri requested = pendingPhotoUri;                      // our Pictures/GT6/{id} uri
+                        Uri returned  = preferResultUri(result.getData(), null);  // camera's own uri (may be null)
+
+                        // Some cameras only return a thumbnail Bitmap in extras
+                        android.graphics.Bitmap bmpFromExtras = null;
+                        if (result.getData() != null && result.getData().getExtras() != null) {
+                            Object extra = result.getData().getExtras().get("data");
+                            if (extra instanceof android.graphics.Bitmap) bmpFromExtras = (android.graphics.Bitmap) extra;
+                        }
+
+                        // ---- Case A: camera wrote to our requested row ----
+                        if (requested != null && awaitNonZeroSize(requested)) {
+                            try { getContentResolver().notifyChange(requested, null); } catch (Exception ignore) {}
+                            finalizePhotoAndBind(requested, pendingPhotoLabel);
+                            return;
+                        }
+
+                        // ---- Case B: need to write data ourselves to requested row ----
+                        // Ensure we have a destination row (reuse requested if present, else make one)
+                        Uri dest = (requested != null) ? requested : createIntakePhotoUri(pendingPhotoLabel);
+                        if (dest == null) {
+                            Toast.makeText(this, "Failed to create GT6 photo row.", Toast.LENGTH_SHORT).show();
+                            pendingPhotoLabel = null;
+                            pendingPhotoUri = null;
+                            return;
+                        }
+
+                        boolean ok;
+                        if (bmpFromExtras != null) {
+                            // Thumbnail only – save it so we at least have something
+                            ok = saveBitmapToUriAsJpeg(bmpFromExtras, dest, 92);
+                        } else {
+                            // If camera returned a content Uri, copy it; else fall back to latest in last 5 minutes
+                            if (returned == null) {
+                                returned = findLatestCapturedImage(now - 5 * 60_000L); // widen window
+                            }
+                            ok = (returned != null) && copyUri(returned, dest);
+                        }
+
+                        if (!ok || !awaitNonZeroSize(dest)) {
+                            try { getContentResolver().delete(dest, null, null); } catch (Exception ignore) {}
+                            Toast.makeText(this, "Photo save/copy failed.", Toast.LENGTH_SHORT).show();
+                            pendingPhotoLabel = null;
+                            pendingPhotoUri = null;
+                            return;
+                        }
+
+                        try { getContentResolver().notifyChange(dest, null); } catch (Exception ignore) {}
+                        finalizePhotoAndBind(dest, pendingPhotoLabel);
+
+                    } finally {
+                        pendingPhotoLabel = null;
+                        pendingPhotoUri = null;
+                    }
                 }
         );
 
-        // ==== VIDEO launcher ====
+
         recordVideoLauncher = registerForActivityResult(
                 new ActivityResultContracts.StartActivityForResult(),
                 result -> {
                     try {
-                        if (result.getResultCode() == RESULT_OK) {
-                            Uri source = (result.getData() != null) ? result.getData().getData() : null;
-                            if (source == null) {
-                                Toast.makeText(this, "Video saved but no Uri returned.", Toast.LENGTH_SHORT).show();
-                                return;
+                        // ---- User canceled or failed ----
+                        if (result.getResultCode() != RESULT_OK) {
+                            if (pendingVideoUri != null) {
+                                // finalize pending and remove empty phantom rows
+                                setPending(pendingVideoUri, false);
+                                if (!awaitNonZeroSize(pendingVideoUri)) {
+                                    try { getContentResolver().delete(pendingVideoUri, null, null); } catch (Exception ignore) {}
+                                }
                             }
+                            pendingVideoUri = null;
+                            pendingVideoCapture = false;
+                            return;
+                        }
 
-                            // Copy the returned Uri into our deterministic MediaStore location
-                            Uri target = createVideoUriForIntake(); // .../GT6/{consignmentId}/intake.mp4
-                            if (target == null) {
-                                Toast.makeText(this, "Unable to prepare storage for video.", Toast.LENGTH_SHORT).show();
-                                return;
-                            }
+                        final long now = System.currentTimeMillis();
 
-                            if (!copyUri(source, target)) {
-                                // Best-effort cleanup if copy failed
-                                try { getContentResolver().delete(target, null, null); } catch (Exception ignored) {}
-                                Toast.makeText(this, "Failed to save the video.", Toast.LENGTH_SHORT).show();
-                                return;
-                            }
+                        // Our requested Movies/GT6/{id} destination (set in openVideoCamera)
+                        Uri requested = pendingVideoUri;
 
-                            lastCapturedVideoUri = target;
+                        // What the camera says it wrote (often DCIM/Camera), sometimes null
+                        Uri returned  = preferResultUri(result.getData(), null);
 
-                            try { getContentResolver().notifyChange(lastCapturedVideoUri, null); } catch (Exception ignored) {}
+                        // ---- Case A: Camera honored our EXTRA_OUTPUT and wrote to requested ----
+                        if (requested != null && awaitNonZeroSize(requested)) {
+                            setPending(requested, false);
+                            try { getContentResolver().notifyChange(requested, null); } catch (Exception ignore) {}
 
+                            lastCapturedVideoUri = requested;
+                            verifyDestAndReport(requested, "Video");
+
+                            // Expand the section and let user "Accept"
                             setStatusIcon(videoIcon, false);
                             videoDone = false;
                             setVideoExpanded(true);
-                            Toast.makeText(this, "Video captured. Tap Accept to confirm.", Toast.LENGTH_SHORT).show();
                             refreshConfirmEnabled();
-
-                        } else {
-                            // user canceled from camera UI — nothing to do
+                            return;
                         }
+
+                        // ---- Case B: OEM ignored EXTRA_OUTPUT; figure out the source to copy from ----
+                        if (returned == null) {
+                            // Best-effort: most recent captured video in the last ~2 minutes
+                            returned = findLatestCapturedVideo(now - 120_000L);
+                        }
+                        if (returned == null) {
+                            // Nothing to copy; clean up any pre-created Movies row
+                            if (requested != null) {
+                                setPending(requested, false);
+                                if (!awaitNonZeroSize(requested)) {
+                                    try { getContentResolver().delete(requested, null, null); } catch (Exception ignore) {}
+                                }
+                            }
+                            Toast.makeText(this, "Camera didn't produce a readable video.", Toast.LENGTH_SHORT).show();
+                            return;
+                        }
+
+                        // Reuse pre-created row if we have one, else create a fresh Movies/GT6/{id} row
+                        Uri dest = (requested != null) ? requested : createVideoUriForIntake();
+                        if (dest == null) {
+                            Toast.makeText(this, "Failed to create GT6 video row.", Toast.LENGTH_SHORT).show();
+                            return;
+                        }
+
+                        // Copy from DCIM/Camera (returned) -> Movies/GT6/{id} (dest)
+                        boolean ok = copyUri(returned, dest);
+                        if (!ok || !awaitNonZeroSize(dest)) {
+                            try { getContentResolver().delete(dest, null, null); } catch (Exception ignore) {}
+                            Toast.makeText(this, "Video copy failed.", Toast.LENGTH_SHORT).show();
+                            return;
+                        }
+
+                        // Finalize our Movies row and notify
+                        setPending(dest, false);
+                        try { getContentResolver().notifyChange(dest, null); } catch (Exception ignore) {}
+
+                        lastCapturedVideoUri = dest;
+                        verifyDestAndReport(dest, "Video");
+
+                        // Optional tidy-up: you can prompt to delete the DCIM/Camera original
+                        // promptDeleteSourceIfWanted(returned);
+
+                        setStatusIcon(videoIcon, false);
+                        videoDone = false;          // user still needs to tap "Accept"
+                        setVideoExpanded(true);
+                        refreshConfirmEnabled();
+
                     } finally {
-                        pendingVideoUri = null;      // not used in this flow, but keep state clean
+                        // Always clear pending state flags
+                        pendingVideoUri = null;
                         pendingVideoCapture = false;
                     }
                 }
         );
 
+
+
+        // ===== Permission launchers =====
+        requestReadImagesPermissionLauncher = registerForActivityResult(
+                new ActivityResultContracts.RequestPermission(),
+                isGranted -> {
+                    if (isGranted) {
+                        openCameraPhoto(pendingPhotoLabel != null ? pendingPhotoLabel : "vin");
+                    } else {
+                        Toast.makeText(this, "Photos permission is required.", Toast.LENGTH_SHORT).show();
+                    }
+                }
+        );
 
         // CAMERA permission
         requestCameraPermissionLauncher = registerForActivityResult(
@@ -453,6 +528,17 @@ public class CheckInDetailsActivity extends AppCompatActivity {
                 }
         );
 
+        requestReadVideoPermissionLauncher = registerForActivityResult(
+                new ActivityResultContracts.RequestPermission(),
+                isGranted -> {
+                    if (isGranted) {
+                        openVideoCamera();
+                    } else {
+                        Toast.makeText(this, "Video permission is required.", Toast.LENGTH_SHORT).show();
+                    }
+                }
+        );
+
         // WRITE permission (API <= 28)
         requestWritePermissionLauncher = registerForActivityResult(
                 new ActivityResultContracts.RequestPermission(),
@@ -464,6 +550,8 @@ public class CheckInDetailsActivity extends AppCompatActivity {
                     }
                 }
         );
+
+        // ===== Click listeners =====
 
         // VIN: camera button
         if (btnCamera != null) {
@@ -511,6 +599,7 @@ public class CheckInDetailsActivity extends AppCompatActivity {
                 refreshConfirmEnabled();
             });
         }
+
         if (btnVinUpdate != null) {
             btnVinUpdate.setOnClickListener(v -> {
                 String entered = safe(enterVinInput);
@@ -545,9 +634,6 @@ public class CheckInDetailsActivity extends AppCompatActivity {
                 refreshConfirmEnabled();
             });
         }
-
-
-
 
         // MILEAGE
         if (mileageHeader != null) mileageHeader.setOnClickListener(v -> toggleMileagePanel());
@@ -680,7 +766,6 @@ public class CheckInDetailsActivity extends AppCompatActivity {
             });
         }
 
-
         // DESCRIPTION
         if (descHeader != null) descHeader.setOnClickListener(v -> toggleDescPanel());
 
@@ -700,7 +785,6 @@ public class CheckInDetailsActivity extends AppCompatActivity {
                 refreshConfirmEnabled();
             });
         }
-
 
         if (btnDescIncorrect != null) {
             btnDescIncorrect.setOnClickListener(v -> {
@@ -737,7 +821,6 @@ public class CheckInDetailsActivity extends AppCompatActivity {
                 refreshConfirmEnabled();
             });
         }
-
 
         // QUALITY
         if (qualityPanel != null) {
@@ -834,12 +917,12 @@ public class CheckInDetailsActivity extends AppCompatActivity {
     private static boolean isEmpty(String s) { return s == null || s.trim().isEmpty(); }
     private static String firstNonEmpty(String a, String b) { return isEmpty(a) ? (b == null ? "" : b) : a; }
 
-//
-@androidx.annotation.Nullable
-private Uri preferResultUri(@androidx.annotation.Nullable Intent data,
-                            @androidx.annotation.Nullable Uri fallback) {
-    return (data != null && data.getData() != null) ? data.getData() : fallback;
-}
+    //
+    @androidx.annotation.Nullable
+    private Uri preferResultUri(@androidx.annotation.Nullable Intent data,
+                                @androidx.annotation.Nullable Uri fallback) {
+        return (data != null && data.getData() != null) ? data.getData() : fallback;
+    }
 
     private boolean awaitNonZeroSize(Uri uri) {
         for (int i = 0; i < 8; i++) { // ~2 seconds
@@ -913,7 +996,7 @@ private Uri preferResultUri(@androidx.annotation.Nullable Intent data,
         if (!TextUtils.isEmpty(fromModel)) return fromModel;
         return vin != null ? vin : "";
     }
-// Check to Make sure you actually took a photo
+    // Check to Make sure you actually took a photo
 
     private boolean hasVinPhoto() {
         return intakeModel != null &&
@@ -930,7 +1013,7 @@ private Uri preferResultUri(@androidx.annotation.Nullable Intent data,
                 intakeModel.keyCheck != null &&
                 !TextUtils.isEmpty(intakeModel.keyCheck.photoUrl);
     }
-//
+    //
     // Keep the persisted Description state in your working model
     private VehicleTaskIntake.Description descModel() {
         if (intakeModel == null) intakeModel = new VehicleTaskIntake();
@@ -1012,7 +1095,6 @@ private Uri preferResultUri(@androidx.annotation.Nullable Intent data,
         }
 
         // Description
-// Description
         if (it.description != null) {
             boolean anyReasons = anyTrue(
                     it.description.isIncorrectMileage,
@@ -1048,8 +1130,7 @@ private Uri preferResultUri(@androidx.annotation.Nullable Intent data,
             }
         }
 
-
-// Quality
+        // Quality
         if (it.quality != null) {
             qualityHasConcerns = it.quality.isConcerns;
 
@@ -1076,7 +1157,6 @@ private Uri preferResultUri(@androidx.annotation.Nullable Intent data,
                 if (cbServiceLights != null) cbServiceLights.setChecked(Boolean.TRUE.equals(it.quality.isServiceLights));
             }
         }
-
 
         // Video
         if (it.video != null) {
@@ -1163,7 +1243,6 @@ private Uri preferResultUri(@androidx.annotation.Nullable Intent data,
         }
 
         // ---------------- DESCRIPTION ----------------
-// ---------------- DESCRIPTION ----------------
         if (body.description == null) body.description = new VehicleTaskIntake.Description();
 
         if (intakeModel != null && intakeModel.description != null) {
@@ -1181,7 +1260,6 @@ private Uri preferResultUri(@androidx.annotation.Nullable Intent data,
             body.description.isIncorrectSpelling = false;
             body.description.isIncorrectDetails  = false;
         }
-
 
         // ---------------- QUALITY ----------------
         if (body.quality == null) body.quality = new VehicleTaskIntake.Quality();
@@ -1210,7 +1288,6 @@ private Uri preferResultUri(@androidx.annotation.Nullable Intent data,
             body.video.videoUrl = TextUtils.isEmpty(capturedVideoUrl) ? "" : capturedVideoUrl;
         }
 
-        // ---------------- OPTIONAL ----------------
         // ---------------- CHECK-IN BY (required for API) ----------------
         String checkInBy = resolveDriverName();
         body.checkInBy = (checkInBy == null) ? "" : checkInBy;
@@ -1247,7 +1324,6 @@ private Uri preferResultUri(@androidx.annotation.Nullable Intent data,
         if (verifyActions != null) verifyActions.setVisibility(expanded ? View.VISIBLE : View.GONE);
         if (noMatchGroup != null) noMatchGroup.setVisibility(expanded && vinNoMatchMode ? View.VISIBLE : View.GONE);
     }
-
 
     private void toggleMileagePanel() { setMileageExpanded(!mileageExpanded); }
     private void setMileageExpanded(boolean expanded) {
@@ -1330,14 +1406,35 @@ private Uri preferResultUri(@androidx.annotation.Nullable Intent data,
     }
 
     private void ensureCameraForPhoto(String label) {
-        pendingVideoCapture = false;
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
-                == PackageManager.PERMISSION_GRANTED) {
-            openCameraPhoto(label);
-        } else {
-            pendingPhotoLabel = label;
+        pendingVideoUri = null; // make sure photo flow never reuses video state
+
+        pendingVideoCapture = false; // we’re doing a photo
+        pendingPhotoLabel = label;
+
+        boolean cameraOk = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
+                == PackageManager.PERMISSION_GRANTED;
+        if (!cameraOk) {
             requestCameraPermissionLauncher.launch(Manifest.permission.CAMERA);
+            return;
         }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            boolean readImgOk = ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_MEDIA_IMAGES)
+                    == PackageManager.PERMISSION_GRANTED;
+            if (!readImgOk) {
+                requestReadImagesPermissionLauncher.launch(android.Manifest.permission.READ_MEDIA_IMAGES);
+                return;
+            }
+        } else if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
+            boolean writeOk = ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                    == PackageManager.PERMISSION_GRANTED;
+            if (!writeOk) {
+                requestWritePermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE);
+                return;
+            }
+        }
+
+        openCameraPhoto(label);
     }
 
     private void ensureCameraForVideo() {
@@ -1345,13 +1442,21 @@ private Uri preferResultUri(@androidx.annotation.Nullable Intent data,
 
         boolean cameraOk = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
                 == PackageManager.PERMISSION_GRANTED;
-
         if (!cameraOk) {
             requestCameraPermissionLauncher.launch(Manifest.permission.CAMERA);
             return;
         }
 
-        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
+        // Android 13+ needs READ_MEDIA_VIDEO to read the camera’s returned Uri
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            boolean readVidOk = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_VIDEO)
+                    == PackageManager.PERMISSION_GRANTED;
+            if (!readVidOk) {
+                requestReadVideoPermissionLauncher.launch(Manifest.permission.READ_MEDIA_VIDEO);
+                return;
+            }
+        } else if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
+            // Legacy write permission for API 28-
             boolean writeOk = ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
                     == PackageManager.PERMISSION_GRANTED;
             if (!writeOk) {
@@ -1362,188 +1467,140 @@ private Uri preferResultUri(@androidx.annotation.Nullable Intent data,
 
         openVideoCamera();
     }
-    // Open Video Camera
     private void openVideoCamera() {
-        // Do NOT pre-create a Uri and do NOT set EXTRA_OUTPUT.
-        // This lets the OEM camera show the OK/CANCEL review UI.
+        // Pre-create a row in Movies/GT6/{id} WITHOUT IS_PENDING
+        Uri dest = createVideoUriForExternalCapture();
+        if (dest == null) {
+            Toast.makeText(this, "Failed to create video destination.", Toast.LENGTH_SHORT).show();
+            pendingVideoCapture = false;
+            return;
+        }
+        pendingVideoUri = dest;
+
         Intent intent = new Intent(MediaStore.ACTION_VIDEO_CAPTURE);
         intent.putExtra(MediaStore.EXTRA_VIDEO_QUALITY, 1);
 
-        // These extras can also suppress review on some devices—omit them for best chance of OK/CANCEL
-        // intent.putExtra(MediaStore.EXTRA_DURATION_LIMIT, 120);
-        // intent.putExtra(MediaStore.EXTRA_SIZE_LIMIT, 200 * 1024 * 1024L);
+        // Strong hint + robust grants
+        intent.putExtra(MediaStore.EXTRA_OUTPUT, dest);
+        intent.setClipData(android.content.ClipData.newRawUri("video", dest));
+        intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        grantOutputUriToCamera(intent, dest);
 
-        if (intent.resolveActivity(getPackageManager()) != null) {
-            recordVideoLauncher.launch(intent);
-        } else {
-            Toast.makeText(this, "No video recorder available.", Toast.LENGTH_SHORT).show();
-        }
-    }
-// Read VIN from UI
-    /** The VIN we are currently showing to the user (prefers corrected/new VIN if present). */
-    private String currentVinForApi() {
-        String ui = (verifyVinValue != null && verifyVinValue.getText() != null)
-                ? verifyVinValue.getText().toString().trim()
-                : "";
-        if (!TextUtils.isEmpty(ui)) return ui;
-        return (vin != null ? vin.trim() : "");
-    }
-
-    private String safe(TextInputEditText et) {
-        return et == null || et.getText() == null ? "" : et.getText().toString().trim();
-    }
-
-    private void hideKeyboard() {
-        View view = getCurrentFocus();
-        if (view == null) view = new View(this);
-        InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
-        if (imm != null) imm.hideSoftInputFromWindow(view.getWindowToken(), 0);
-    }
-
-    private void showKeyboardFor(View view) {
-        if (view == null) return;
-        view.requestFocus();
-        InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
-        if (imm != null) imm.showSoftInput(view, InputMethodManager.SHOW_IMPLICIT);
-    }
-
-    private void refreshConfirmEnabled() {
-        if (btnConfirm == null) return;
-        // Always allow confirm; individual sections are optional
-        btnConfirm.setEnabled(true);
-        btnConfirm.setAlpha(1f);
-    }
-
-
-    private void setPanelsEnabled(boolean enabled) {
-        float alpha = enabled ? 1f : 0.6f;
-        if (verifyVinPanel != null) verifyVinPanel.setAlpha(alpha);
-        if (mileagePanel  != null)  mileagePanel.setAlpha(alpha);
-        if (keyPanel      != null)  keyPanel.setAlpha(alpha);
-        if (videoPanel    != null)  videoPanel.setAlpha(alpha);
-        if (descPanel     != null)  descPanel.setAlpha(alpha);
-        if (qualityPanel  != null)  qualityPanel.setAlpha(alpha);
-
-        setGroupEnabled(verifyVinPanel, enabled);
-        setGroupEnabled(mileagePanel, enabled);
-        setGroupEnabled(keyPanel, enabled);
-        setGroupEnabled(videoPanel, enabled);
-        setGroupEnabled(descPanel, enabled);
-        setGroupEnabled(qualityPanel, enabled);
-    }
-
-    private void setGroupEnabled(View v, boolean enabled) {
-        if (v == null) return;
-        v.setEnabled(enabled);
-        if (v instanceof ViewGroup) {
-            ViewGroup vg = (ViewGroup) v;
-            for (int i = 0; i < vg.getChildCount(); i++) {
-                setGroupEnabled(vg.getChildAt(i), enabled);
+        try {
+            if (intent.resolveActivity(getPackageManager()) != null) {
+                recordVideoLauncher.launch(intent);
+            } else {
+                Toast.makeText(this, "No video recorder available.", Toast.LENGTH_SHORT).show();
+                pendingVideoCapture = false;
             }
+        } catch (Throwable t) {
+            Toast.makeText(this, "Failed to start camera: " + t.getMessage(), Toast.LENGTH_SHORT).show();
+            pendingVideoCapture = false;
         }
     }
 
-    private Uri createVideoUriForIntake() {
-        String fileName = "intake.mp4";
-        String subdir   = consignmentSubdir(); // "GT6/{consignmentid}"
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            ContentValues cv = new ContentValues();
-            cv.put(MediaStore.MediaColumns.DISPLAY_NAME, fileName);
-            cv.put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4");
-            cv.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/" + subdir);
-            cv.put(MediaStore.MediaColumns.IS_PENDING, 1); // ← important
-            return getContentResolver().insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, cv);
-        } else {
-            File movies = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES);
-            File dir = new File(movies, subdir);
-            if (!dir.exists() && !dir.mkdirs()) return null;
 
-            File file = new File(dir, fileName);
-            try {
-                return FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", file);
-            } catch (IllegalArgumentException e) {
-                e.printStackTrace();
-                return null;
+    private String resolveDisplayPath(Uri uri) {
+        Cursor c = null;
+        try {
+            String[] cols = {
+                    MediaStore.MediaColumns.DISPLAY_NAME,
+                    MediaStore.MediaColumns.RELATIVE_PATH,
+                    MediaStore.MediaColumns.DATA // may be null on Q+
+            };
+            c = getContentResolver().query(uri, cols, null, null, null);
+            if (c != null && c.moveToFirst()) {
+                String name = safeStr(c.getString(0));
+                String rel  = safeStr(c.getString(1)); // like "Movies/GT6/162872/"
+                String data = safeStr(c.getString(2)); // path for legacy devices
+                if (!rel.isEmpty()) return rel + name;
+                if (!data.isEmpty()) return data;
+                return name;
             }
+        } catch (Exception ignored) {
+        } finally {
+            if (c != null) c.close();
         }
+        return uri.toString();
     }
 
-
-
-    // Photos -> Pictures/gt6/{lot}/intake
-
-    // Photos -> Pictures/GT6/{consignmentid}/{label}.jpg   (label = "vin", "mileage", "keycheck")
-// Photos -> Pictures/GT6/{consignmentid}/{name}.jpg
-// where name is: vin.jpg, keycheck_intake.jpg, mileage_intake.jpg
-    private Uri createIntakePhotoUri(String label) {
-        // Map labels to the exact filenames you want
-        String baseName;
-        if ("keycheck".equalsIgnoreCase(label)) {
-            baseName = "keycheck_intake";
-        } else if ("mileage".equalsIgnoreCase(label)) {
-            baseName = "mileage_intake";
-        } else {
-            // default: keep original label, e.g., "vin"
-            baseName = (label == null || label.trim().isEmpty()) ? "photo" : label.trim();
-        }
-
-        String fileName = baseName + ".jpg";
-        String subdir   = consignmentSubdir(); // "GT6/{consignmentid}"
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            ContentValues cv = new ContentValues();
-            cv.put(MediaStore.MediaColumns.DISPLAY_NAME, fileName);
-            cv.put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg");
-            cv.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/" + subdir);
-            return getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, cv);
-        } else {
-            File pictures = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
-            File dir = new File(pictures, subdir);
-            if (!dir.exists() && !dir.mkdirs()) return null;
-
-            File file = new File(dir, fileName);
-            try {
-                return FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", file);
-            } catch (IllegalArgumentException e) {
-                e.printStackTrace();
-                return null;
+    @androidx.annotation.Nullable
+    private Uri findLatestCapturedVideo(long notBeforeMillis) {
+        Cursor c = null;
+        try {
+            String[] cols = { MediaStore.Video.Media._ID, MediaStore.Video.Media.DATE_ADDED };
+            String order = MediaStore.Video.Media.DATE_ADDED + " DESC";
+            c = getContentResolver().query(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, cols, null, null, order);
+            if (c != null && c.moveToFirst()) {
+                long dateAddedSec = c.getLong(1);
+                long whenMs = dateAddedSec * 1000L;
+                if (whenMs >= notBeforeMillis) {
+                    long id = c.getLong(0);
+                    return Uri.withAppendedPath(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, String.valueOf(id));
+                }
             }
+        } catch (Exception ignored) {
+        } finally {
+            if (c != null) c.close();
         }
+        return null;
     }
 
+    private Uri findLatestCapturedImage(long notBeforeMillis) {
+        Cursor c = null;
+        try {
+            String[] cols = {
+                    MediaStore.Images.Media._ID,
+                    MediaStore.Images.Media.DATE_ADDED
+            };
+            String order = MediaStore.Images.Media.DATE_ADDED + " DESC";
+            c = getContentResolver().query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, cols, null, null, order);
+            if (c != null && c.moveToFirst()) {
+                long dateAddedSec = c.getLong(1);
+                long whenMs = dateAddedSec * 1000L;
+                if (whenMs >= notBeforeMillis) {
+                    long id = c.getLong(0);
+                    return Uri.withAppendedPath(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, String.valueOf(id));
+                }
+            }
+        } catch (Exception ignored) {
+        } finally {
+            if (c != null) c.close();
+        }
+        return null;
+    }
 
+    // Single canonical version of openCameraPhoto
     private void openCameraPhoto(String label) {
-        pendingPhotoLabel = label;
-        pendingPhotoUri = createIntakePhotoUri(label);
-        if (pendingPhotoUri == null) {
-            Toast.makeText(this, "Unable to prepare storage for photo.", Toast.LENGTH_SHORT).show();
+        pendingPhotoLabel = (label == null || label.trim().isEmpty()) ? "vin" : label.trim();
+
+        // Pre-create dest in Pictures/GT6/{id} WITHOUT IS_PENDING
+        Uri dest = createPhotoUriForExternalCapture(pendingPhotoLabel);
+        if (dest == null) {
+            Toast.makeText(this, "Failed to create photo destination.", Toast.LENGTH_SHORT).show();
             pendingPhotoLabel = null;
             return;
         }
+        pendingPhotoUri = dest;
 
         Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-        intent.putExtra(MediaStore.EXTRA_OUTPUT, pendingPhotoUri);
 
-        intent.setClipData(ClipData.newRawUri("output", pendingPhotoUri));
+        // Hint output + robust grants
+        intent.putExtra(MediaStore.EXTRA_OUTPUT, dest);
+        intent.setClipData(android.content.ClipData.newRawUri("image", dest));
         intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        for (ResolveInfo ri : getPackageManager().queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)) {
-            grantUriPermission(
-                    ri.activityInfo.packageName,
-                    pendingPhotoUri,
-                    Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION
-            );
-        }
+        grantOutputUriToCamera(intent, dest);
 
         if (intent.resolveActivity(getPackageManager()) != null) {
             takePictureLauncher.launch(intent);
         } else {
             Toast.makeText(this, "No camera app available.", Toast.LENGTH_SHORT).show();
-            try { getContentResolver().delete(pendingPhotoUri, null, null); } catch (Exception ignored) {}
             pendingPhotoLabel = null;
             pendingPhotoUri = null;
         }
     }
+
 
     private boolean hasNonZeroSize(Uri uri) {
         Cursor c = null;
@@ -1558,7 +1615,7 @@ private Uri preferResultUri(@androidx.annotation.Nullable Intent data,
         }
         return false;
     }
-// resolve Driver Name for API
+    // resolve Driver Name for API
     private String resolveDriverName() {
         // Prefer what Lookup/Main passed via Intent
         String fromIntent = driver;
@@ -1571,6 +1628,53 @@ private Uri preferResultUri(@androidx.annotation.Nullable Intent data,
         } catch (Throwable ignored) {}
 
         return "";
+    }
+    /** After we copy to dest, verify it’s in the exact GT6 folder we expect and show a loud Toast+Log. */
+    private void verifyDestAndReport(Uri dest, String mediaKind /* "image" or "video" */) {
+        Cursor c = null;
+        String name = "unknown";
+        String rel = "";
+        try {
+            String[] cols = {
+                    MediaStore.MediaColumns.DISPLAY_NAME,
+                    MediaStore.MediaColumns.RELATIVE_PATH,
+                    MediaStore.MediaColumns.SIZE
+            };
+            c = getContentResolver().query(dest, cols, null, null, null);
+            if (c != null && c.moveToFirst()) {
+                name = safeStr(c.getString(0));
+                rel  = safeStr(c.getString(1)); // e.g., "Pictures/GT6/162872/" or "Movies/GT6/162872/"
+                long sz = c.getLong(2);
+                android.util.Log.i("GT6-COPY", mediaKind + " saved → RELATIVE_PATH=" + rel + " name=" + name + " size=" + sz);
+            } else {
+                android.util.Log.w("GT6-COPY", "Could not query dest row: " + dest);
+            }
+        } catch (Exception e) {
+            android.util.Log.e("GT6-COPY", "Query dest failed: " + dest, e);
+        } finally {
+            if (c != null) c.close();
+        }
+        String where = (rel.isEmpty() ? "(no RELATIVE_PATH)" : (rel + name));
+        Toast.makeText(this, mediaKind + " saved: " + where, Toast.LENGTH_LONG).show();
+    }
+
+    /** Optional: after successful copy, remove the source from DCIM/Camera with user confirmation on Android 11+. */
+    private void promptDeleteSourceIfWanted(@androidx.annotation.Nullable Uri source) {
+        if (source == null) return;
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                // Request user confirmation to delete the source
+                java.util.ArrayList<Uri> uris = new java.util.ArrayList<>();
+                uris.add(source);
+                IntentSender sender = MediaStore.createDeleteRequest(getContentResolver(), uris).getIntentSender();
+                startIntentSender(sender, null, 0, 0, 0);
+            } else {
+                // Pre-Android 11, we can try straight delete (may still fail on some OEMs)
+                getContentResolver().delete(source, null, null);
+            }
+        } catch (Exception e) {
+            android.util.Log.w("GT6-COPY", "Delete source request failed: " + source, e);
+        }
     }
 
     // Small utils
@@ -1586,15 +1690,246 @@ private Uri preferResultUri(@androidx.annotation.Nullable Intent data,
         }
         return "unknown";
     }
+    // === ADD: helpers to toggle IS_PENDING and to grant URI perms ===
+    private void setPending(Uri uri, boolean isPending) {
+        if (uri == null) return;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ContentValues cv = new ContentValues();
+            cv.put(MediaStore.MediaColumns.IS_PENDING, isPending ? 1 : 0);
+            try { getContentResolver().update(uri, cv, null, null); } catch (Exception ignored) {}
+        }
+    }
+
+    private void grantOutputUriToCamera(Intent intent, Uri uri) {
+        if (uri == null) return;
+        intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        // Wide grant to all potential handlers
+        for (ResolveInfo ri : getPackageManager().queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)) {
+            grantUriPermission(ri.activityInfo.packageName, uri,
+                    Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        }
+    }
+    private Uri createIntakePhotoUri(String label) {
+        String baseName;
+        if ("keycheck".equalsIgnoreCase(label)) baseName = "keycheck_intake";
+        else if ("mileage".equalsIgnoreCase(label)) baseName = "mileage_intake";
+        else baseName = (label == null || label.trim().isEmpty()) ? "photo" : label.trim();
+
+        final String fileName = baseName + ".jpg";
+        final String relPath = Environment.DIRECTORY_PICTURES + "/GT6/" + consignmentIdStr();
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ContentValues cv = new ContentValues();
+            cv.put(MediaStore.MediaColumns.DISPLAY_NAME, fileName);
+            cv.put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg");
+            cv.put(MediaStore.MediaColumns.RELATIVE_PATH, relPath);
+            cv.put(MediaStore.MediaColumns.IS_PENDING, 1);
+            return getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, cv);
+        } else {
+            File pictures = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
+            File dir = new File(pictures, "GT6/" + consignmentIdStr());
+            if (!dir.exists() && !dir.mkdirs()) return null;
+            File f = new File(dir, fileName);
+            try {
+                if (!f.exists()) f.createNewFile();
+                return FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", f);
+            } catch (Exception e) {
+                return null;
+            }
+        }
+    }
+    private Uri createVideoUriForIntake() {
+        final String fileName = "intake.mp4";
+        final String relPath = Environment.DIRECTORY_MOVIES + "/GT6/" + consignmentIdStr();
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ContentValues cv = new ContentValues();
+            cv.put(MediaStore.MediaColumns.DISPLAY_NAME, fileName);
+            cv.put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4");
+            cv.put(MediaStore.MediaColumns.RELATIVE_PATH, relPath);
+            cv.put(MediaStore.MediaColumns.IS_PENDING, 1);
+            return getContentResolver().insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, cv);
+        } else {
+            File movies = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES);
+            File dir = new File(movies, "GT6/" + consignmentIdStr());
+            if (!dir.exists() && !dir.mkdirs()) return null;
+            File f = new File(dir, fileName);
+            try {
+                if (!f.exists()) f.createNewFile();
+                return FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", f);
+            } catch (Exception e) {
+                return null;
+            }
+        }
+    }
+    private void refreshConfirmEnabled() {
+        if (btnConfirm == null) return;
+
+        // ✅ Your app logic: Confirm is always enabled once the user begins intake.
+        // If you want to gate by completion flags, you can uncomment below.
+        boolean allDone = vinDone && mileageDone && keyDone && videoDone && descDone && qualityDone;
+
+        btnConfirm.setEnabled(true); // change to 'allDone' if you want strict gating
+        btnConfirm.setAlpha(1f);
+    }
+    private void hideKeyboard() {
+        View view = getCurrentFocus();
+        if (view == null) {
+            view = new View(this);
+        }
+        InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+        if (imm != null) {
+            imm.hideSoftInputFromWindow(view.getWindowToken(), 0);
+        }
+    }
+    private void showKeyboardFor(View view) {
+        if (view == null) return;
+        view.requestFocus();
+        InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+        if (imm != null) {
+            imm.showSoftInput(view, InputMethodManager.SHOW_IMPLICIT);
+        }
+    }
 
     private String mediaUrl(String fileName) {
         // driver/{consignmentId}/{fileName}
         return BLOB_BASE + consignmentIdStr() + "/" + fileName;
     }
     private String safeStr(String s) { return s == null ? "" : s; }
+    private String safe(TextInputEditText et) {
+        return et == null || et.getText() == null ? "" : et.getText().toString().trim();
+    }
+    /** The VIN we are currently showing to the user (prefers corrected/new VIN if present). */
+    private String currentVinForApi() {
+        String ui = (verifyVinValue != null && verifyVinValue.getText() != null)
+                ? verifyVinValue.getText().toString().trim()
+                : "";
+        if (!TextUtils.isEmpty(ui)) return ui;
+        return (vin != null ? vin.trim() : "");
+    }
+    private void setPanelsEnabled(boolean enabled) {
+        float alpha = enabled ? 1f : 0.6f;
+
+        if (verifyVinPanel != null) verifyVinPanel.setAlpha(alpha);
+        if (mileagePanel  != null)  mileagePanel.setAlpha(alpha);
+        if (keyPanel      != null)  keyPanel.setAlpha(alpha);
+        if (videoPanel    != null)  videoPanel.setAlpha(alpha);
+        if (descPanel     != null)  descPanel.setAlpha(alpha);
+        if (qualityPanel  != null)  qualityPanel.setAlpha(alpha);
+
+        setGroupEnabled(verifyVinPanel, enabled);
+        setGroupEnabled(mileagePanel, enabled);
+        setGroupEnabled(keyPanel, enabled);
+        setGroupEnabled(videoPanel, enabled);
+        setGroupEnabled(descPanel, enabled);
+        setGroupEnabled(qualityPanel, enabled);
+    }
+
+    /** Recursively enables or disables all views in a group. */
+    private void setGroupEnabled(View v, boolean enabled) {
+        if (v == null) return;
+        v.setEnabled(enabled);
+        if (v instanceof ViewGroup) {
+            ViewGroup vg = (ViewGroup) v;
+            for (int i = 0; i < vg.getChildCount(); i++) {
+                setGroupEnabled(vg.getChildAt(i), enabled);
+            }
+        }
+    }
+    private @androidx.annotation.Nullable String getMimeTypeOf(Uri uri) {
+        try { return getContentResolver().getType(uri); } catch (Exception ignore) {}
+        return null;
+    }
+    private boolean isImageRow(Uri uri) {
+        String mt = getMimeTypeOf(uri);
+        return mt != null && mt.startsWith("image/");
+    }
+    private boolean saveBitmapToUriAsJpeg(android.graphics.Bitmap bmp, Uri dest, int quality) {
+        try (java.io.OutputStream out = getContentResolver().openOutputStream(dest, "w")) {
+            if (out == null) return false;
+            boolean ok = bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, quality, out);
+            out.flush();
+            return ok;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+    // Use THIS when giving the Uri to an external camera app via EXTRA_OUTPUT.
+    private Uri createVideoUriForExternalCapture() {
+        final String fileName = "intake.mp4";
+        final String relPath = Environment.DIRECTORY_MOVIES + "/GT6/" + consignmentIdStr();
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ContentValues cv = new ContentValues();
+            cv.put(MediaStore.MediaColumns.DISPLAY_NAME, fileName);
+            cv.put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4");
+            cv.put(MediaStore.MediaColumns.RELATIVE_PATH, relPath);
+            // NOTE: NO IS_PENDING here; external camera needs to write to it.
+            return getContentResolver().insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, cv);
+        } else {
+            File movies = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES);
+            File dir = new File(movies, "GT6/" + consignmentIdStr());
+            if (!dir.exists() && !dir.mkdirs()) return null;
+            File f = new File(dir, fileName);
+            try {
+                if (!f.exists()) f.createNewFile();
+                return FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", f);
+            } catch (Exception e) {
+                return null;
+            }
+        }
+    }
+    // Use this when handing a Uri to the external camera app (NO IS_PENDING).
+    private Uri createPhotoUriForExternalCapture(String label) {
+        String baseName;
+        if ("keycheck".equalsIgnoreCase(label)) baseName = "keycheck_intake";
+        else if ("mileage".equalsIgnoreCase(label)) baseName = "mileage_intake";
+        else baseName = (label == null || label.trim().isEmpty()) ? "photo" : label.trim();
+
+        final String fileName = baseName + ".jpg";
+        final String relPath  = Environment.DIRECTORY_PICTURES + "/GT6/" + consignmentIdStr();
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ContentValues cv = new ContentValues();
+            cv.put(MediaStore.MediaColumns.DISPLAY_NAME, fileName);
+            cv.put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg");
+            cv.put(MediaStore.MediaColumns.RELATIVE_PATH, relPath);
+            // NOTE: NO IS_PENDING here – external camera must be able to write.
+            return getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, cv);
+        } else {
+            File pictures = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
+            File dir = new File(pictures, "GT6/" + consignmentIdStr());
+            if (!dir.exists() && !dir.mkdirs()) return null;
+            File f = new File(dir, fileName);
+            try {
+                if (!f.exists()) f.createNewFile();
+                return FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", f);
+            } catch (Exception e) {
+                return null;
+            }
+        }
+    }
+    private void finalizePhotoAndBind(Uri dest, String label) {
+        // Update your model url based on label (same logic you already had)
+        if (intakeModel == null) intakeModel = new VehicleTaskIntake();
+        String fileName;
+        if ("keycheck".equalsIgnoreCase(label)) {
+            fileName = "keycheck_intake.jpg";
+            if (intakeModel.keyCheck == null) intakeModel.keyCheck = new VehicleTaskIntake.KeyCheck();
+            intakeModel.keyCheck.photoUrl = mediaUrl(fileName);
+        } else if ("mileage".equalsIgnoreCase(label)) {
+            fileName = "mileage_intake.jpg";
+            if (intakeModel.mileage == null) intakeModel.mileage = new VehicleTaskIntake.Mileage();
+            intakeModel.mileage.photoUrl = mediaUrl(fileName);
+        } else {
+            fileName = "vin.jpg";
+            if (intakeModel.vinVerify == null) intakeModel.vinVerify = new VehicleTaskIntake.VinVerify();
+            intakeModel.vinVerify.photoUrl = mediaUrl(fileName);
+        }
+        verifyDestAndReport(dest, "Image");
+    }
+
 }
-
-
 
 
 
