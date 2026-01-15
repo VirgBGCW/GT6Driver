@@ -47,6 +47,7 @@ import com.google.android.material.textfield.TextInputLayout;
 public class CheckInDetailsActivity extends AppCompatActivity {
     // for statis AZURE STORATE
     private static final String BLOB_BASE = "https://stgt6driverappprod.blob.core.windows.net/driver/";
+    private static final String COMPRESSED_BASE = "https://stgt6driverappprod.blob.core.windows.net/compressed-files/";
     // Keys to match what ActionActivity sends
     private static final String EXTRA_VEHICLE        = "vehicle";
     private static final String EXTRA_OPPORTUNITY_ID = "opportunityId";
@@ -119,6 +120,7 @@ public class CheckInDetailsActivity extends AppCompatActivity {
 
     // QUALITY CONCERNS
     private MaterialCardView qualityPanel;
+    private View qualityHeader; // ✅ NEW: consistent tap target like other panels
     private View qualityGroup, qualityDetailsGroup;
     private ImageView qualityIcon;
     private TextView qualityMessage;
@@ -133,7 +135,6 @@ public class CheckInDetailsActivity extends AppCompatActivity {
     private ActivityResultLauncher<String> requestWritePermissionLauncher;
     // NEW: Android 13+ read images permission
     private ActivityResultLauncher<String> requestReadImagesPermissionLauncher;
-
     // NEW: Android 13+ read video permission
     private ActivityResultLauncher<String> requestReadVideoPermissionLauncher;
 
@@ -243,6 +244,7 @@ public class CheckInDetailsActivity extends AppCompatActivity {
 
         // QUALITY
         qualityPanel = findViewById(R.id.qualityPanel);
+        qualityHeader = findViewById(R.id.qualityHeader); // ✅ if you add this id in XML, tapping title works perfectly
         qualityGroup = findViewById(R.id.qualityGroup);
         qualityDetailsGroup = findViewById(R.id.qualityDetailsGroup);
         qualityIcon = findViewById(R.id.qualityIcon);
@@ -278,8 +280,7 @@ public class CheckInDetailsActivity extends AppCompatActivity {
             try {
                 String fromSession = com.example.gt6driver.session.CurrentSelection.get().getDriverName();
                 if (fromSession != null && !fromSession.trim().isEmpty()) driver = fromSession;
-            } catch (Throwable ignored) {
-            }
+            } catch (Throwable ignored) {}
         }
         mode = in.getStringExtra("mode"); // "check_in"
         vin = in.getStringExtra(Nav.EXTRA_VIN);
@@ -298,7 +299,6 @@ public class CheckInDetailsActivity extends AppCompatActivity {
 
         // If we have a vehicle, prefer its values for header UI
         if (vehicle != null) {
-            // lotnumber is String in your models
             String vLot = vehicle.lotnumber != null ? vehicle.lotnumber : "";
             String vDesc = safeStr(vehicle.marketingdescription);
             description = vDesc;  // don't fallback to title/anything else
@@ -306,7 +306,6 @@ public class CheckInDetailsActivity extends AppCompatActivity {
             String vThumb = !isEmpty(vehicle.thumbUrl) ? vehicle.thumbUrl
                     : (vehicle.tbuncpath != null ? vehicle.tbuncpath : "");
 
-            // Use these as the working values the rest of the activity expects
             lot = firstNonEmpty(vLot, lot);
             description = firstNonEmpty(vDesc, description);
             vin = firstNonEmpty(vVin, vin);
@@ -332,7 +331,6 @@ public class CheckInDetailsActivity extends AppCompatActivity {
                 new ActivityResultContracts.StartActivityForResult(),
                 result -> {
                     try {
-                        // Cancel or failure: clean up empty precreated row
                         if (result.getResultCode() != RESULT_OK) {
                             if (pendingPhotoUri != null && !awaitNonZeroSize(pendingPhotoUri)) {
                                 try { getContentResolver().delete(pendingPhotoUri, null, null); } catch (Exception ignore) {}
@@ -344,10 +342,9 @@ public class CheckInDetailsActivity extends AppCompatActivity {
 
                         final long now = System.currentTimeMillis();
 
-                        Uri requested = pendingPhotoUri;                      // our Pictures/GT6/{id} uri
-                        Uri returned  = preferResultUri(result.getData(), null);  // camera's own uri (may be null)
+                        Uri requested = pendingPhotoUri;
+                        Uri returned  = preferResultUri(result.getData(), null);
 
-                        // Some cameras only return a thumbnail Bitmap in extras
                         android.graphics.Bitmap bmpFromExtras = null;
                         if (result.getData() != null && result.getData().getExtras() != null) {
                             Object extra = result.getData().getExtras().get("data");
@@ -362,7 +359,6 @@ public class CheckInDetailsActivity extends AppCompatActivity {
                         }
 
                         // ---- Case B: need to write data ourselves to requested row ----
-                        // Ensure we have a destination row (reuse requested if present, else make one)
                         Uri dest = (requested != null) ? requested : createIntakePhotoUri(pendingPhotoLabel);
                         if (dest == null) {
                             Toast.makeText(this, "Failed to create GT6 photo row.", Toast.LENGTH_SHORT).show();
@@ -373,12 +369,10 @@ public class CheckInDetailsActivity extends AppCompatActivity {
 
                         boolean ok;
                         if (bmpFromExtras != null) {
-                            // Thumbnail only – save it so we at least have something
                             ok = saveBitmapToUriAsJpeg(bmpFromExtras, dest, 92);
                         } else {
-                            // If camera returned a content Uri, copy it; else fall back to latest in last 5 minutes
                             if (returned == null) {
-                                returned = findLatestCapturedImage(now - 5 * 60_000L); // widen window
+                                returned = findLatestCapturedImage(now - 5 * 60_000L);
                             }
                             ok = (returned != null) && copyUri(returned, dest);
                         }
@@ -401,7 +395,7 @@ public class CheckInDetailsActivity extends AppCompatActivity {
                 }
         );
 
-
+        // ===== VIDEO launcher =====
         recordVideoLauncher = registerForActivityResult(
                 new ActivityResultContracts.StartActivityForResult(),
                 result -> {
@@ -409,7 +403,6 @@ public class CheckInDetailsActivity extends AppCompatActivity {
                         // ---- User canceled or failed ----
                         if (result.getResultCode() != RESULT_OK) {
                             if (pendingVideoUri != null) {
-                                // finalize pending and remove empty phantom rows
                                 setPending(pendingVideoUri, false);
                                 if (!awaitNonZeroSize(pendingVideoUri)) {
                                     try { getContentResolver().delete(pendingVideoUri, null, null); } catch (Exception ignore) {}
@@ -422,13 +415,10 @@ public class CheckInDetailsActivity extends AppCompatActivity {
 
                         final long now = System.currentTimeMillis();
 
-                        // Our requested Movies/GT6/{id} destination (set in openVideoCamera)
                         Uri requested = pendingVideoUri;
-
-                        // What the camera says it wrote (often DCIM/Camera), sometimes null
                         Uri returned  = preferResultUri(result.getData(), null);
 
-                        // ---- Case A: Camera honored our EXTRA_OUTPUT and wrote to requested ----
+                        // ---- Case A: Camera honored EXTRA_OUTPUT and wrote to requested ----
                         if (requested != null && awaitNonZeroSize(requested)) {
                             setPending(requested, false);
                             try { getContentResolver().notifyChange(requested, null); } catch (Exception ignore) {}
@@ -436,21 +426,16 @@ public class CheckInDetailsActivity extends AppCompatActivity {
                             lastCapturedVideoUri = requested;
                             verifyDestAndReport(requested, "Video");
 
-                            // Expand the section and let user "Accept"
-                            setStatusIcon(videoIcon, false);
-                            videoDone = false;
-                            setVideoExpanded(true);
-                            refreshConfirmEnabled();
+                            // ✅ AUTO-ACCEPT immediately (no chance to forget and “lose” it)
+                            acceptIntakeVideoIfPresent();
                             return;
                         }
 
                         // ---- Case B: OEM ignored EXTRA_OUTPUT; figure out the source to copy from ----
                         if (returned == null) {
-                            // Best-effort: most recent captured video in the last ~2 minutes
                             returned = findLatestCapturedVideo(now - 120_000L);
                         }
                         if (returned == null) {
-                            // Nothing to copy; clean up any pre-created Movies row
                             if (requested != null) {
                                 setPending(requested, false);
                                 if (!awaitNonZeroSize(requested)) {
@@ -461,14 +446,12 @@ public class CheckInDetailsActivity extends AppCompatActivity {
                             return;
                         }
 
-                        // Reuse pre-created row if we have one, else create a fresh Movies/GT6/{id} row
                         Uri dest = (requested != null) ? requested : createVideoUriForIntake();
                         if (dest == null) {
                             Toast.makeText(this, "Failed to create GT6 video row.", Toast.LENGTH_SHORT).show();
                             return;
                         }
 
-                        // Copy from DCIM/Camera (returned) -> Movies/GT6/{id} (dest)
                         boolean ok = copyUri(returned, dest);
                         if (!ok || !awaitNonZeroSize(dest)) {
                             try { getContentResolver().delete(dest, null, null); } catch (Exception ignore) {}
@@ -476,30 +459,21 @@ public class CheckInDetailsActivity extends AppCompatActivity {
                             return;
                         }
 
-                        // Finalize our Movies row and notify
                         setPending(dest, false);
                         try { getContentResolver().notifyChange(dest, null); } catch (Exception ignore) {}
 
                         lastCapturedVideoUri = dest;
                         verifyDestAndReport(dest, "Video");
 
-                        // Optional tidy-up: you can prompt to delete the DCIM/Camera original
-                        // promptDeleteSourceIfWanted(returned);
-
-                        setStatusIcon(videoIcon, false);
-                        videoDone = false;          // user still needs to tap "Accept"
-                        setVideoExpanded(true);
-                        refreshConfirmEnabled();
+                        // ✅ AUTO-ACCEPT immediately
+                        acceptIntakeVideoIfPresent();
 
                     } finally {
-                        // Always clear pending state flags
                         pendingVideoUri = null;
                         pendingVideoCapture = false;
                     }
                 }
         );
-
-
 
         // ===== Permission launchers =====
         requestReadImagesPermissionLauncher = registerForActivityResult(
@@ -570,15 +544,13 @@ public class CheckInDetailsActivity extends AppCompatActivity {
             btnVinMatch.setOnClickListener(v -> {
                 vinMatched = true;
 
-                // Ensure the UI shows the VIN we're about to persist
                 String curVin = currentVinForApi();
                 if (verifyVinValue != null) verifyVinValue.setText(curVin);
 
-                // Persist into the model so the API call definitely gets this value
                 if (intakeModel == null) intakeModel = new VehicleTaskIntake();
                 if (intakeModel.vinVerify == null) intakeModel.vinVerify = new VehicleTaskIntake.VinVerify();
-                intakeModel.vinVerify.newVin = curVin;          // <-- put current VIN into request body
-                intakeModel.vinVerify.isMatched = true;         // explicit
+                intakeModel.vinVerify.newVin = curVin;
+                intakeModel.vinVerify.isMatched = true;
 
                 setStatusIcon(verifyIcon, true);
                 vinNoMatchMode = false;
@@ -593,7 +565,7 @@ public class CheckInDetailsActivity extends AppCompatActivity {
                 vinMatched = false;
                 setStatusIcon(verifyIcon, false);
                 vinNoMatchMode = true;
-                vinDone = false; // not done until UPDATE
+                vinDone = false;
                 setVinExpanded(true);
                 showKeyboardFor(enterVinInput);
                 refreshConfirmEnabled();
@@ -625,11 +597,10 @@ public class CheckInDetailsActivity extends AppCompatActivity {
 
                 if (enterVinInput != null) enterVinInput.setText("");
 
-                // After submitting a corrected VIN, the step is complete but it is still a mismatch.
-                vinMatched = false;  // IMPORTANT: keep this false
-                vinDone = true;      // step completed
+                vinMatched = false;
+                vinDone = true;
                 vinNoMatchMode = false;
-                setStatusIcon(verifyIcon, true); // green = completed, not "matched"
+                setStatusIcon(verifyIcon, true);
                 setVinExpanded(false);
                 refreshConfirmEnabled();
             });
@@ -742,27 +713,27 @@ public class CheckInDetailsActivity extends AppCompatActivity {
             videoPromptIcon.setOnClickListener(v -> {
                 setVideoExpanded(true);
                 hideKeyboard();
+
+                // ✅ reset accept button state for a new recording attempt
+                if (btnVideoAccept != null) {
+                    btnVideoAccept.setEnabled(true);
+                    btnVideoAccept.setAlpha(1f);
+                    btnVideoAccept.setText("ACCEPT");
+                }
+
                 ensureCameraForVideo();
             });
         }
 
+        // Accept is now basically “manual re-accept”, but safe to keep
         if (btnVideoAccept != null) {
             btnVideoAccept.setOnClickListener(v -> {
                 if (lastCapturedVideoUri == null) {
                     Toast.makeText(this, "No video to accept. Please record first.", Toast.LENGTH_SHORT).show();
                     return;
                 }
-
-                // ✅ NEW: persist Azure URL for the intake video
-                if (intakeModel == null) intakeModel = new VehicleTaskIntake();
-                if (intakeModel.video == null) intakeModel.video = new VehicleTaskIntake.VideoInfo();
-                intakeModel.video.videoUrl = mediaUrl("intake.mp4");
-
-                setStatusIcon(videoIcon, true);
-                videoDone = true;
+                acceptIntakeVideoIfPresent();
                 Toast.makeText(this, "Intake video accepted.", Toast.LENGTH_SHORT).show();
-                setVideoExpanded(false);
-                refreshConfirmEnabled();
             });
         }
 
@@ -779,7 +750,7 @@ public class CheckInDetailsActivity extends AppCompatActivity {
                 d.isIncorrectDetails  = false;
 
                 setStatusIcon(descIcon, true);
-                descDone = true; // section completed
+                descDone = true;
                 setDescExpanded(false);
                 Toast.makeText(this, "Description confirmed correct.", Toast.LENGTH_SHORT).show();
                 refreshConfirmEnabled();
@@ -803,7 +774,6 @@ public class CheckInDetailsActivity extends AppCompatActivity {
                 boolean incDetails = cbIncorrectDetails != null && cbIncorrectDetails.isChecked();
                 boolean incSpell   = cbSpellingErrors   != null && cbSpellingErrors.isChecked();
 
-                // Persist into the working model FIRST (source of truth for API)
                 VehicleTaskIntake.Description d = descModel();
                 d.isCorrect = false;
                 d.isIncorrectMileage  = incMileage;
@@ -811,24 +781,27 @@ public class CheckInDetailsActivity extends AppCompatActivity {
                 d.isIncorrectDetails  = incDetails;
                 d.isIncorrectSpelling = incSpell;
 
-                // UX wrap-up
-                setStatusIcon(descIcon, true); // green = "section complete", not "correct"
+                setStatusIcon(descIcon, true);
                 descDone = true;
                 if (descIncorrectGroup != null) descIncorrectGroup.setVisibility(View.GONE);
-                clearDescIncorrectChecks(); // safe to clear; we already persisted
+                clearDescIncorrectChecks();
                 setDescExpanded(false);
                 Toast.makeText(this, "Description update submitted.", Toast.LENGTH_SHORT).show();
                 refreshConfirmEnabled();
             });
         }
 
-        // QUALITY
-        if (qualityPanel != null) {
+        // QUALITY (tap target like other panels)
+        if (qualityHeader != null) {
+            qualityHeader.setOnClickListener(v -> toggleQualityPanel());
+        } else if (qualityPanel != null) {
+            // fallback if you don't have a dedicated header in XML
             qualityPanel.setOnClickListener(v -> toggleQualityPanel());
         }
+
         if (btnQualityNoConcerns != null) {
             btnQualityNoConcerns.setOnClickListener(v -> {
-                qualityHasConcerns = false;           // <-- explicit
+                qualityHasConcerns = false;
                 setStatusIcon(qualityIcon, true);
                 qualityDone = true;
                 setQualityExpanded(false);
@@ -838,7 +811,7 @@ public class CheckInDetailsActivity extends AppCompatActivity {
 
         if (btnQualityConcerns != null) {
             btnQualityConcerns.setOnClickListener(v -> {
-                qualityHasConcerns = true;            // <-- explicit
+                qualityHasConcerns = true;
                 setStatusIcon(qualityIcon, false);
                 qualityDone = false;
                 setQualityExpanded(true);
@@ -858,9 +831,9 @@ public class CheckInDetailsActivity extends AppCompatActivity {
                                 (cbMechanical   != null && cbMechanical.isChecked()) ||
                                 (cbServiceLights!= null && cbServiceLights.isChecked());
 
-                qualityHasConcerns = true;            // still “concerns”
-                setStatusIcon(qualityIcon, true);     // mark section ok
-                qualityDone = true;                   // section complete
+                qualityHasConcerns = true;
+                setStatusIcon(qualityIcon, true);
+                qualityDone = true;
                 setQualityExpanded(false);
                 if (qualityDetailsGroup != null) qualityDetailsGroup.setVisibility(View.GONE);
 
@@ -917,7 +890,14 @@ public class CheckInDetailsActivity extends AppCompatActivity {
     private static boolean isEmpty(String s) { return s == null || s.trim().isEmpty(); }
     private static String firstNonEmpty(String a, String b) { return isEmpty(a) ? (b == null ? "" : b) : a; }
 
-    //
+    // Compressed Video Helper
+    private String compressedVideoUrl(String originalFileName) {
+        int dot = originalFileName.lastIndexOf('.');
+        String name = (dot > 0) ? originalFileName.substring(0, dot) : originalFileName;
+        String ext  = (dot > 0) ? originalFileName.substring(dot) : "";
+        return COMPRESSED_BASE + consignmentIdStr() + "/" + name + "_c" + ext;
+    }
+
     @androidx.annotation.Nullable
     private Uri preferResultUri(@androidx.annotation.Nullable Intent data,
                                 @androidx.annotation.Nullable Uri fallback) {
@@ -990,30 +970,14 @@ public class CheckInDetailsActivity extends AppCompatActivity {
             }
         });
     }
+
     private String getDisplayVin() {
         String fromModel = (intakeModel != null && intakeModel.vinVerify != null)
                 ? safeStr(intakeModel.vinVerify.newVin) : "";
         if (!TextUtils.isEmpty(fromModel)) return fromModel;
         return vin != null ? vin : "";
     }
-    // Check to Make sure you actually took a photo
 
-    private boolean hasVinPhoto() {
-        return intakeModel != null &&
-                intakeModel.vinVerify != null &&
-                !TextUtils.isEmpty(intakeModel.vinVerify.photoUrl);
-    }
-    private boolean hasMileagePhoto() {
-        return intakeModel != null &&
-                intakeModel.mileage != null &&
-                !TextUtils.isEmpty(intakeModel.mileage.photoUrl);
-    }
-    private boolean hasKeyPhoto() {
-        return intakeModel != null &&
-                intakeModel.keyCheck != null &&
-                !TextUtils.isEmpty(intakeModel.keyCheck.photoUrl);
-    }
-    //
     // Keep the persisted Description state in your working model
     private VehicleTaskIntake.Description descModel() {
         if (intakeModel == null) intakeModel = new VehicleTaskIntake();
@@ -1036,27 +1000,24 @@ public class CheckInDetailsActivity extends AppCompatActivity {
             }
 
             if (Boolean.TRUE.equals(vinMatched)) {
-                // matched
                 setStatusIcon(verifyIcon, true);
                 vinDone = true;
                 vinNoMatchMode = false;
                 setVinExpanded(false);
             } else {
-                // not matched (or null)
                 if (!TextUtils.isEmpty(newVin)) {
-                    // User (or server) provided a corrected VIN already → considered completed
                     setStatusIcon(verifyIcon, true);
                     vinDone = true;
                     vinNoMatchMode = true;
                     setVinExpanded(false);
                 } else {
-                    // needs user action
                     setStatusIcon(verifyIcon, false);
                     vinDone = false;
                     vinNoMatchMode = true;
                 }
             }
         }
+
         // Mileage
         if (it.mileage != null) {
             Integer odo = it.mileage.odometer;
@@ -1110,19 +1071,16 @@ public class CheckInDetailsActivity extends AppCompatActivity {
                 if (descIncorrectGroup != null) descIncorrectGroup.setVisibility(View.GONE);
                 clearDescIncorrectChecks();
             } else if (anyReasons) {
-                // Reasons already exist → consider the section complete
-                setStatusIcon(descIcon, true);   // green = done
+                setStatusIcon(descIcon, true);
                 descDone = true;
                 setDescExpanded(false);
                 if (descIncorrectGroup != null) descIncorrectGroup.setVisibility(View.GONE);
 
-                // Optionally reflect server state in the checkboxes (even though hidden)
                 if (cbIncorrectMileage != null) cbIncorrectMileage.setChecked(Boolean.TRUE.equals(it.description.isIncorrectMileage));
                 if (cbIncorrectVin != null)     cbIncorrectVin.setChecked(Boolean.TRUE.equals(it.description.isInCorrectVin));
                 if (cbSpellingErrors != null)   cbSpellingErrors.setChecked(Boolean.TRUE.equals(it.description.isIncorrectSpelling));
                 if (cbIncorrectDetails != null) cbIncorrectDetails.setChecked(Boolean.TRUE.equals(it.description.isIncorrectDetails));
             } else {
-                // No decision yet
                 setStatusIcon(descIcon, false);
                 descDone = false;
                 if (descIncorrectGroup != null) descIncorrectGroup.setVisibility(View.VISIBLE);
@@ -1135,17 +1093,13 @@ public class CheckInDetailsActivity extends AppCompatActivity {
             qualityHasConcerns = it.quality.isConcerns;
 
             if (Boolean.FALSE.equals(it.quality.isConcerns)) {
-                // No concerns
                 setStatusIcon(qualityIcon, true);
                 qualityDone = true;
                 setQualityExpanded(false);
                 if (qualityDetailsGroup != null) qualityDetailsGroup.setVisibility(View.GONE);
-                clearQualityChecks(); // to match server state (no concerns)
+                clearQualityChecks();
             } else if (Boolean.TRUE.equals(it.quality.isConcerns)) {
-                // Has concerns
                 setStatusIcon(qualityIcon, false);
-                // If server provided details, show them and mark NOT done until user confirms,
-                // or mark done directly if you prefer. Here we mark done so Confirm can enable:
                 qualityDone = true;
                 setQualityExpanded(false);
                 if (qualityDetailsGroup != null) qualityDetailsGroup.setVisibility(View.GONE);
@@ -1164,10 +1118,14 @@ public class CheckInDetailsActivity extends AppCompatActivity {
             if (!TextUtils.isEmpty(url)) {
                 setStatusIcon(videoIcon, true);
                 videoDone = true;
+                if (btnVideoAccept != null) {
+                    btnVideoAccept.setEnabled(false);
+                    btnVideoAccept.setAlpha(0.5f);
+                    btnVideoAccept.setText("ACCEPTED");
+                }
             }
         }
 
-        // (optional) it.checkInBy available if you want to display
         refreshConfirmEnabled();
     }
 
@@ -1179,20 +1137,14 @@ public class CheckInDetailsActivity extends AppCompatActivity {
 
         // ---------------- VIN ----------------
         if (body.vinVerify == null) body.vinVerify = new VehicleTaskIntake.VinVerify();
-
-        // Matched flag from UI
         body.vinVerify.isMatched = Boolean.TRUE.equals(vinMatched);
 
-        // Always persist the VIN currently shown to the user (original or corrected)
-        String currentVinShown = currentVinForApi(); // assumes helper from earlier message
+        String currentVinShown = currentVinForApi();
         body.vinVerify.newVin = TextUtils.isEmpty(currentVinShown) ? "" : currentVinShown;
 
-        // isNotified from checkbox
         body.vinVerify.isNotified = (cbVinNotified != null && cbVinNotified.isChecked());
 
-        // Photo URL: only keep if we truly captured a VIN photo earlier; else blank
         if (TextUtils.isEmpty(body.vinVerify.photoUrl)) {
-            // If intakeModel holds a captured vin photo, keep it; otherwise blank
             String capturedVinUrl = (intakeModel != null && intakeModel.vinVerify != null)
                     ? intakeModel.vinVerify.photoUrl : null;
             body.vinVerify.photoUrl = TextUtils.isEmpty(capturedVinUrl) ? "" : capturedVinUrl;
@@ -1203,14 +1155,10 @@ public class CheckInDetailsActivity extends AppCompatActivity {
 
         String milesTxt = safe(enterMileageInput);
         if (!TextUtils.isEmpty(milesTxt)) {
-            try {
-                body.mileage.odometer = Integer.parseInt(milesTxt);
-            } catch (NumberFormatException ignore) {
-                // leave null if invalid
-            }
+            try { body.mileage.odometer = Integer.parseInt(milesTxt); }
+            catch (NumberFormatException ignore) {}
         }
 
-        // Photo URL: only if a mileage photo was truly captured; else blank
         if (TextUtils.isEmpty(body.mileage.photoUrl)) {
             String capturedMileageUrl = (intakeModel != null && intakeModel.mileage != null)
                     ? intakeModel.mileage.photoUrl : null;
@@ -1233,9 +1181,8 @@ public class CheckInDetailsActivity extends AppCompatActivity {
         } else if (Boolean.TRUE.equals(noKey)) {
             body.keyCheck.hasKey = false;
             body.keyCheck.numberOfKeys = null;
-        } // else leave as-is if neither selected
+        }
 
-        // Photo URL: only if a key photo was truly captured; else blank
         if (TextUtils.isEmpty(body.keyCheck.photoUrl)) {
             String capturedKeyUrl = (intakeModel != null && intakeModel.keyCheck != null)
                     ? intakeModel.keyCheck.photoUrl : null;
@@ -1253,7 +1200,6 @@ public class CheckInDetailsActivity extends AppCompatActivity {
             body.description.isIncorrectSpelling = Boolean.TRUE.equals(src.isIncorrectSpelling);
             body.description.isIncorrectDetails  = Boolean.TRUE.equals(src.isIncorrectDetails);
         } else {
-            // Default if user never interacted
             body.description.isCorrect           = true;
             body.description.isIncorrectMileage  = false;
             body.description.isInCorrectVin      = false;
@@ -1281,7 +1227,6 @@ public class CheckInDetailsActivity extends AppCompatActivity {
 
         // ---------------- VIDEO ----------------
         if (body.video == null) body.video = new VehicleTaskIntake.VideoInfo();
-        // Keep whatever was set when user accepted the intake video; otherwise blank
         if (TextUtils.isEmpty(body.video.videoUrl)) {
             String capturedVideoUrl = (intakeModel != null && intakeModel.video != null)
                     ? intakeModel.video.videoUrl : null;
@@ -1318,7 +1263,7 @@ public class CheckInDetailsActivity extends AppCompatActivity {
     private void setVinExpanded(boolean expanded) {
         vinExpanded = expanded;
         if (verifyVinValue != null) {
-            verifyVinValue.setText(getDisplayVin()); // <- use newVin if present
+            verifyVinValue.setText(getDisplayVin());
             verifyVinValue.setVisibility(expanded ? View.VISIBLE : View.GONE);
         }
         if (verifyActions != null) verifyActions.setVisibility(expanded ? View.VISIBLE : View.GONE);
@@ -1369,14 +1314,6 @@ public class CheckInDetailsActivity extends AppCompatActivity {
             icon.setColorFilter(Color.parseColor("#D32F2F"));
         }
     }
-    /** Returns "GT6/{consignmentid}" or "GT6/unknown" if not available. */
-    private String consignmentSubdir() {
-        String id = "unknown";
-        if (vehicle != null && vehicle.consignmentid != null) {
-            id = String.valueOf(vehicle.consignmentid);
-        }
-        return "GT6/" + id;
-    }
 
     private void updateKeyCountEnabled() {
         boolean enable = cbFobs != null && cbFobs.isChecked();
@@ -1406,9 +1343,8 @@ public class CheckInDetailsActivity extends AppCompatActivity {
     }
 
     private void ensureCameraForPhoto(String label) {
-        pendingVideoUri = null; // make sure photo flow never reuses video state
-
-        pendingVideoCapture = false; // we’re doing a photo
+        pendingVideoUri = null;
+        pendingVideoCapture = false;
         pendingPhotoLabel = label;
 
         boolean cameraOk = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
@@ -1447,7 +1383,6 @@ public class CheckInDetailsActivity extends AppCompatActivity {
             return;
         }
 
-        // Android 13+ needs READ_MEDIA_VIDEO to read the camera’s returned Uri
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             boolean readVidOk = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_VIDEO)
                     == PackageManager.PERMISSION_GRANTED;
@@ -1456,7 +1391,6 @@ public class CheckInDetailsActivity extends AppCompatActivity {
                 return;
             }
         } else if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
-            // Legacy write permission for API 28-
             boolean writeOk = ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
                     == PackageManager.PERMISSION_GRANTED;
             if (!writeOk) {
@@ -1467,8 +1401,11 @@ public class CheckInDetailsActivity extends AppCompatActivity {
 
         openVideoCamera();
     }
+
     private void openVideoCamera() {
-        // Pre-create a row in Movies/GT6/{id} WITHOUT IS_PENDING
+        // ✅ avoid “recording failed” loops caused by stale/duplicate MediaStore rows
+        deleteExistingIntakeVideoRowBestEffort();
+
         Uri dest = createVideoUriForExternalCapture();
         if (dest == null) {
             Toast.makeText(this, "Failed to create video destination.", Toast.LENGTH_SHORT).show();
@@ -1480,7 +1417,6 @@ public class CheckInDetailsActivity extends AppCompatActivity {
         Intent intent = new Intent(MediaStore.ACTION_VIDEO_CAPTURE);
         intent.putExtra(MediaStore.EXTRA_VIDEO_QUALITY, 1);
 
-        // Strong hint + robust grants
         intent.putExtra(MediaStore.EXTRA_OUTPUT, dest);
         intent.setClipData(android.content.ClipData.newRawUri("video", dest));
         intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
@@ -1499,83 +1435,10 @@ public class CheckInDetailsActivity extends AppCompatActivity {
         }
     }
 
-
-
-    private String resolveDisplayPath(Uri uri) {
-        Cursor c = null;
-        try {
-            String[] cols = {
-                    MediaStore.MediaColumns.DISPLAY_NAME,
-                    MediaStore.MediaColumns.RELATIVE_PATH,
-                    MediaStore.MediaColumns.DATA // may be null on Q+
-            };
-            c = getContentResolver().query(uri, cols, null, null, null);
-            if (c != null && c.moveToFirst()) {
-                String name = safeStr(c.getString(0));
-                String rel  = safeStr(c.getString(1)); // like "Movies/GT6/162872/"
-                String data = safeStr(c.getString(2)); // path for legacy devices
-                if (!rel.isEmpty()) return rel + name;
-                if (!data.isEmpty()) return data;
-                return name;
-            }
-        } catch (Exception ignored) {
-        } finally {
-            if (c != null) c.close();
-        }
-        return uri.toString();
-    }
-
-    @androidx.annotation.Nullable
-    private Uri findLatestCapturedVideo(long notBeforeMillis) {
-        Cursor c = null;
-        try {
-            String[] cols = { MediaStore.Video.Media._ID, MediaStore.Video.Media.DATE_ADDED };
-            String order = MediaStore.Video.Media.DATE_ADDED + " DESC";
-            c = getContentResolver().query(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, cols, null, null, order);
-            if (c != null && c.moveToFirst()) {
-                long dateAddedSec = c.getLong(1);
-                long whenMs = dateAddedSec * 1000L;
-                if (whenMs >= notBeforeMillis) {
-                    long id = c.getLong(0);
-                    return Uri.withAppendedPath(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, String.valueOf(id));
-                }
-            }
-        } catch (Exception ignored) {
-        } finally {
-            if (c != null) c.close();
-        }
-        return null;
-    }
-
-    private Uri findLatestCapturedImage(long notBeforeMillis) {
-        Cursor c = null;
-        try {
-            String[] cols = {
-                    MediaStore.Images.Media._ID,
-                    MediaStore.Images.Media.DATE_ADDED
-            };
-            String order = MediaStore.Images.Media.DATE_ADDED + " DESC";
-            c = getContentResolver().query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, cols, null, null, order);
-            if (c != null && c.moveToFirst()) {
-                long dateAddedSec = c.getLong(1);
-                long whenMs = dateAddedSec * 1000L;
-                if (whenMs >= notBeforeMillis) {
-                    long id = c.getLong(0);
-                    return Uri.withAppendedPath(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, String.valueOf(id));
-                }
-            }
-        } catch (Exception ignored) {
-        } finally {
-            if (c != null) c.close();
-        }
-        return null;
-    }
-
     // Single canonical version of openCameraPhoto
     private void openCameraPhoto(String label) {
         pendingPhotoLabel = (label == null || label.trim().isEmpty()) ? "vin" : label.trim();
 
-        // Pre-create dest in Pictures/GT6/{id} WITHOUT IS_PENDING
         Uri dest = createPhotoUriForExternalCapture(pendingPhotoLabel);
         if (dest == null) {
             Toast.makeText(this, "Failed to create photo destination.", Toast.LENGTH_SHORT).show();
@@ -1586,7 +1449,6 @@ public class CheckInDetailsActivity extends AppCompatActivity {
 
         Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
 
-        // Hint output + robust grants
         intent.putExtra(MediaStore.EXTRA_OUTPUT, dest);
         intent.setClipData(android.content.ClipData.newRawUri("image", dest));
         intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
@@ -1601,7 +1463,6 @@ public class CheckInDetailsActivity extends AppCompatActivity {
         }
     }
 
-
     private boolean hasNonZeroSize(Uri uri) {
         Cursor c = null;
         try {
@@ -1615,13 +1476,11 @@ public class CheckInDetailsActivity extends AppCompatActivity {
         }
         return false;
     }
-    // resolve Driver Name for API
+
     private String resolveDriverName() {
-        // Prefer what Lookup/Main passed via Intent
         String fromIntent = driver;
         if (fromIntent != null && !fromIntent.trim().isEmpty()) return fromIntent.trim();
 
-        // Fallback to process-scoped selection (if you added the session helper)
         try {
             String fromSession = com.example.gt6driver.session.CurrentSelection.get().getDriverName();
             if (fromSession != null && !fromSession.trim().isEmpty()) return fromSession.trim();
@@ -1629,8 +1488,8 @@ public class CheckInDetailsActivity extends AppCompatActivity {
 
         return "";
     }
-    /** After we copy to dest, verify it’s in the exact GT6 folder we expect and show a loud Toast+Log. */
-    private void verifyDestAndReport(Uri dest, String mediaKind /* "image" or "video" */) {
+
+    private void verifyDestAndReport(Uri dest, String mediaKind) {
         Cursor c = null;
         String name = "unknown";
         String rel = "";
@@ -1643,7 +1502,7 @@ public class CheckInDetailsActivity extends AppCompatActivity {
             c = getContentResolver().query(dest, cols, null, null, null);
             if (c != null && c.moveToFirst()) {
                 name = safeStr(c.getString(0));
-                rel  = safeStr(c.getString(1)); // e.g., "Pictures/GT6/162872/" or "Movies/GT6/162872/"
+                rel  = safeStr(c.getString(1));
                 long sz = c.getLong(2);
                 android.util.Log.i("GT6-COPY", mediaKind + " saved → RELATIVE_PATH=" + rel + " name=" + name + " size=" + sz);
             } else {
@@ -1658,39 +1517,19 @@ public class CheckInDetailsActivity extends AppCompatActivity {
         Toast.makeText(this, mediaKind + " saved: " + where, Toast.LENGTH_LONG).show();
     }
 
-    /** Optional: after successful copy, remove the source from DCIM/Camera with user confirmation on Android 11+. */
-    private void promptDeleteSourceIfWanted(@androidx.annotation.Nullable Uri source) {
-        if (source == null) return;
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                // Request user confirmation to delete the source
-                java.util.ArrayList<Uri> uris = new java.util.ArrayList<>();
-                uris.add(source);
-                IntentSender sender = MediaStore.createDeleteRequest(getContentResolver(), uris).getIntentSender();
-                startIntentSender(sender, null, 0, 0, 0);
-            } else {
-                // Pre-Android 11, we can try straight delete (may still fail on some OEMs)
-                getContentResolver().delete(source, null, null);
-            }
-        } catch (Exception e) {
-            android.util.Log.w("GT6-COPY", "Delete source request failed: " + source, e);
-        }
-    }
-
-    // Small utils
     private boolean anyTrue(Boolean... arr) {
         if (arr == null) return false;
         for (Boolean b : arr) if (Boolean.TRUE.equals(b)) return true;
         return false;
     }
-    // returns just the numeric/string id (no GT6 prefix)
+
     private String consignmentIdStr() {
         if (vehicle != null && vehicle.consignmentid != null) {
             return String.valueOf(vehicle.consignmentid);
         }
         return "unknown";
     }
-    // === ADD: helpers to toggle IS_PENDING and to grant URI perms ===
+
     private void setPending(Uri uri, boolean isPending) {
         if (uri == null) return;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -1703,12 +1542,12 @@ public class CheckInDetailsActivity extends AppCompatActivity {
     private void grantOutputUriToCamera(Intent intent, Uri uri) {
         if (uri == null) return;
         intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        // Wide grant to all potential handlers
         for (ResolveInfo ri : getPackageManager().queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)) {
             grantUriPermission(ri.activityInfo.packageName, uri,
                     Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
         }
     }
+
     private Uri createIntakePhotoUri(String label) {
         String baseName;
         if ("keycheck".equalsIgnoreCase(label)) baseName = "keycheck_intake";
@@ -1738,6 +1577,7 @@ public class CheckInDetailsActivity extends AppCompatActivity {
             }
         }
     }
+
     private Uri createVideoUriForIntake() {
         final String fileName = "intake.mp4";
         final String relPath = Environment.DIRECTORY_MOVIES + "/GT6/" + consignmentIdStr();
@@ -1762,44 +1602,39 @@ public class CheckInDetailsActivity extends AppCompatActivity {
             }
         }
     }
+
     private void refreshConfirmEnabled() {
         if (btnConfirm == null) return;
 
-        // ✅ Your app logic: Confirm is always enabled once the user begins intake.
-        // If you want to gate by completion flags, you can uncomment below.
-        boolean allDone = vinDone && mileageDone && keyDone && videoDone && descDone && qualityDone;
-
-        btnConfirm.setEnabled(true); // change to 'allDone' if you want strict gating
+        // If you want strict gating, use: boolean allDone = vinDone && mileageDone && keyDone && videoDone && descDone && qualityDone;
+        btnConfirm.setEnabled(true);
         btnConfirm.setAlpha(1f);
     }
+
     private void hideKeyboard() {
         View view = getCurrentFocus();
-        if (view == null) {
-            view = new View(this);
-        }
+        if (view == null) view = new View(this);
         InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
-        if (imm != null) {
-            imm.hideSoftInputFromWindow(view.getWindowToken(), 0);
-        }
+        if (imm != null) imm.hideSoftInputFromWindow(view.getWindowToken(), 0);
     }
+
     private void showKeyboardFor(View view) {
         if (view == null) return;
         view.requestFocus();
         InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
-        if (imm != null) {
-            imm.showSoftInput(view, InputMethodManager.SHOW_IMPLICIT);
-        }
+        if (imm != null) imm.showSoftInput(view, InputMethodManager.SHOW_IMPLICIT);
     }
 
     private String mediaUrl(String fileName) {
-        // driver/{consignmentId}/{fileName}
         return BLOB_BASE + consignmentIdStr() + "/" + fileName;
     }
+
     private String safeStr(String s) { return s == null ? "" : s; }
+
     private String safe(TextInputEditText et) {
         return et == null || et.getText() == null ? "" : et.getText().toString().trim();
     }
-    /** The VIN we are currently showing to the user (prefers corrected/new VIN if present). */
+
     private String currentVinForApi() {
         String ui = (verifyVinValue != null && verifyVinValue.getText() != null)
                 ? verifyVinValue.getText().toString().trim()
@@ -1807,6 +1642,7 @@ public class CheckInDetailsActivity extends AppCompatActivity {
         if (!TextUtils.isEmpty(ui)) return ui;
         return (vin != null ? vin.trim() : "");
     }
+
     private void setPanelsEnabled(boolean enabled) {
         float alpha = enabled ? 1f : 0.6f;
 
@@ -1825,7 +1661,6 @@ public class CheckInDetailsActivity extends AppCompatActivity {
         setGroupEnabled(qualityPanel, enabled);
     }
 
-    /** Recursively enables or disables all views in a group. */
     private void setGroupEnabled(View v, boolean enabled) {
         if (v == null) return;
         v.setEnabled(enabled);
@@ -1836,14 +1671,7 @@ public class CheckInDetailsActivity extends AppCompatActivity {
             }
         }
     }
-    private @androidx.annotation.Nullable String getMimeTypeOf(Uri uri) {
-        try { return getContentResolver().getType(uri); } catch (Exception ignore) {}
-        return null;
-    }
-    private boolean isImageRow(Uri uri) {
-        String mt = getMimeTypeOf(uri);
-        return mt != null && mt.startsWith("image/");
-    }
+
     private boolean saveBitmapToUriAsJpeg(android.graphics.Bitmap bmp, Uri dest, int quality) {
         try (java.io.OutputStream out = getContentResolver().openOutputStream(dest, "w")) {
             if (out == null) return false;
@@ -1854,6 +1682,7 @@ public class CheckInDetailsActivity extends AppCompatActivity {
             return false;
         }
     }
+
     // Use THIS when giving the Uri to an external camera app via EXTRA_OUTPUT.
     private Uri createVideoUriForExternalCapture() {
         final String fileName = "intake.mp4";
@@ -1864,7 +1693,6 @@ public class CheckInDetailsActivity extends AppCompatActivity {
             cv.put(MediaStore.MediaColumns.DISPLAY_NAME, fileName);
             cv.put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4");
             cv.put(MediaStore.MediaColumns.RELATIVE_PATH, relPath);
-            // NOTE: NO IS_PENDING here; external camera needs to write to it.
             return getContentResolver().insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, cv);
         } else {
             File movies = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES);
@@ -1879,7 +1707,7 @@ public class CheckInDetailsActivity extends AppCompatActivity {
             }
         }
     }
-    // Use this when handing a Uri to the external camera app (NO IS_PENDING).
+
     private Uri createPhotoUriForExternalCapture(String label) {
         String baseName;
         if ("keycheck".equalsIgnoreCase(label)) baseName = "keycheck_intake";
@@ -1894,7 +1722,6 @@ public class CheckInDetailsActivity extends AppCompatActivity {
             cv.put(MediaStore.MediaColumns.DISPLAY_NAME, fileName);
             cv.put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg");
             cv.put(MediaStore.MediaColumns.RELATIVE_PATH, relPath);
-            // NOTE: NO IS_PENDING here – external camera must be able to write.
             return getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, cv);
         } else {
             File pictures = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
@@ -1909,8 +1736,8 @@ public class CheckInDetailsActivity extends AppCompatActivity {
             }
         }
     }
+
     private void finalizePhotoAndBind(Uri dest, String label) {
-        // Update your model url based on label (same logic you already had)
         if (intakeModel == null) intakeModel = new VehicleTaskIntake();
         String fileName;
         if ("keycheck".equalsIgnoreCase(label)) {
@@ -1929,6 +1756,91 @@ public class CheckInDetailsActivity extends AppCompatActivity {
         verifyDestAndReport(dest, "Image");
     }
 
+    // ✅ NEW: Auto-accept intake video so user can’t lose it by forgetting to tap Accept
+    private void acceptIntakeVideoIfPresent() {
+        if (lastCapturedVideoUri == null) return;
+
+        if (intakeModel == null) intakeModel = new VehicleTaskIntake();
+        if (intakeModel.video == null) intakeModel.video = new VehicleTaskIntake.VideoInfo();
+
+        intakeModel.video.videoUrl = compressedVideoUrl("intake.mp4");
+
+        setStatusIcon(videoIcon, true);
+        videoDone = true;
+
+        if (btnVideoAccept != null) {
+            btnVideoAccept.setEnabled(false);
+            btnVideoAccept.setAlpha(0.5f);
+            btnVideoAccept.setText("ACCEPTED");
+        }
+
+        setVideoExpanded(false);
+        refreshConfirmEnabled();
+    }
+
+    // ✅ NEW: helps avoid “Recording failed” loops from stale intake.mp4 MediaStore rows
+    private void deleteExistingIntakeVideoRowBestEffort() {
+        try {
+            final String relPath = Environment.DIRECTORY_MOVIES + "/GT6/" + consignmentIdStr();
+            final String displayName = "intake.mp4";
+
+            String selection = MediaStore.MediaColumns.DISPLAY_NAME + "=? AND " + MediaStore.MediaColumns.RELATIVE_PATH + "=?";
+            String[] args = new String[]{ displayName, relPath + "/" }; // some OEMs store trailing slash
+
+            int deleted = getContentResolver().delete(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, selection, args);
+
+            if (deleted <= 0) {
+                // try without trailing slash just in case OEM stores it differently
+                String[] args2 = new String[]{ displayName, relPath };
+                getContentResolver().delete(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, selection, args2);
+            }
+        } catch (Exception ignored) {}
+    }
+
+    // ---- Missing in your paste: these were referenced earlier ----
+    // If you already have these elsewhere, keep your originals and remove these duplicates.
+    @androidx.annotation.Nullable
+    private Uri findLatestCapturedVideo(long notBeforeMillis) {
+        Cursor c = null;
+        try {
+            String[] cols = { MediaStore.Video.Media._ID, MediaStore.Video.Media.DATE_ADDED };
+            String order = MediaStore.Video.Media.DATE_ADDED + " DESC";
+            c = getContentResolver().query(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, cols, null, null, order);
+            if (c != null && c.moveToFirst()) {
+                long dateAddedSec = c.getLong(1);
+                long whenMs = dateAddedSec * 1000L;
+                if (whenMs >= notBeforeMillis) {
+                    long id = c.getLong(0);
+                    return Uri.withAppendedPath(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, String.valueOf(id));
+                }
+            }
+        } catch (Exception ignored) {
+        } finally {
+            if (c != null) c.close();
+        }
+        return null;
+    }
+
+    private Uri findLatestCapturedImage(long notBeforeMillis) {
+        Cursor c = null;
+        try {
+            String[] cols = { MediaStore.Images.Media._ID, MediaStore.Images.Media.DATE_ADDED };
+            String order = MediaStore.Images.Media.DATE_ADDED + " DESC";
+            c = getContentResolver().query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, cols, null, null, order);
+            if (c != null && c.moveToFirst()) {
+                long dateAddedSec = c.getLong(1);
+                long whenMs = dateAddedSec * 1000L;
+                if (whenMs >= notBeforeMillis) {
+                    long id = c.getLong(0);
+                    return Uri.withAppendedPath(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, String.valueOf(id));
+                }
+            }
+        } catch (Exception ignored) {
+        } finally {
+            if (c != null) c.close();
+        }
+        return null;
+    }
 }
 
 

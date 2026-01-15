@@ -22,8 +22,6 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Method;
-import java.util.HashSet;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class MediaUploadWorker extends Worker {
@@ -92,6 +90,7 @@ public class MediaUploadWorker extends Worker {
         try {
             Uri u = Uri.parse(containerUrl);
             String host = (u != null) ? u.getHost() : "<?>";
+
             Log.i(TAG, "Worker cfg: host=" + host +
                     " containerUrl=" + containerUrl +
                     " sasHints=" + (sasRaw.contains("si=") ? "storedPolicy" : "adhoc"));
@@ -103,9 +102,6 @@ public class MediaUploadWorker extends Worker {
         final AzureUploader uploader = new AzureUploader(sasRaw);
         final ContentResolver cr = getApplicationContext().getContentResolver();
 
-        // Track consignmentIds we uploaded, so we can remove folders afterwards
-        Set<String> touchedConsignments = new HashSet<>();
-
         boolean okImages = processTable(
                 cr,
                 MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
@@ -113,8 +109,7 @@ public class MediaUploadWorker extends Worker {
                 uploader,
                 containerUrl,
                 prefix,
-                /*isVideo=*/false,
-                touchedConsignments
+                /*isVideo=*/false
         );
 
         boolean okVideos = processTable(
@@ -124,25 +119,13 @@ public class MediaUploadWorker extends Worker {
                 uploader,
                 containerUrl,
                 prefix,
-                /*isVideo=*/true,
-                touchedConsignments
+                /*isVideo=*/true
         );
 
-        // Only remove local folders when all uploads succeeded this pass
-        if (okImages && okVideos) {
-            for (String id : touchedConsignments) {
-                try {
-                    MediaCleanup.removeLocalConsignmentMedia(getApplicationContext(), id);
-                    Log.i(TAG, "Local consignment media removed for id=" + id);
-                } catch (Exception e) {
-                    Log.w(TAG, "Cleanup failed for id=" + id + ": " + e.getMessage());
-                }
-            }
-        }
-// Re-arm content triggers so new captures continue to auto-upload
+        // Re-arm content triggers so new captures continue to auto-upload
         GT6MediaSync.enqueueContentTriggers(getApplicationContext());
-        return (okImages && okVideos) ? Result.success() : Result.retry();
 
+        return (okImages && okVideos) ? Result.success() : Result.retry();
     }
 
     private boolean processTable(ContentResolver cr,
@@ -151,8 +134,7 @@ public class MediaUploadWorker extends Worker {
                                  AzureUploader uploader,
                                  String containerUrl,
                                  String prefix,
-                                 boolean isVideo,
-                                 Set<String> touchedConsignments) {
+                                 boolean isVideo) {
 
         // Primary query (your original folders)
         String like1 = isVideo ? "Movies/GT6/%" : "Pictures/GT6/%";
@@ -179,12 +161,14 @@ public class MediaUploadWorker extends Worker {
 
         try (Cursor c = cr.query(table, projection, sel, args,
                 MediaStore.MediaColumns.DATE_ADDED + " DESC")) {
+
             if (c != null) {
                 totalFound = c.getCount();
                 Log.i(TAG, (isVideo ? "[VIDEO]" : "[IMAGE]") +
                         " MediaStore query found " + totalFound + " rows.");
+
                 while (c.moveToNext()) {
-                    if (!uploadRow(cr, table, c, defaultMime, uploader, containerUrl, prefix, isVideo, touchedConsignments)) {
+                    if (!uploadRow(cr, table, c, defaultMime, uploader, containerUrl, prefix, isVideo)) {
                         allOk = false; // trigger retry
                     }
                 }
@@ -241,10 +225,11 @@ public class MediaUploadWorker extends Worker {
 
             try (Cursor c = cr.query(files, filesProj, filesSel, filesArgs,
                     MediaStore.MediaColumns.DATE_ADDED + " DESC")) {
+
                 if (c != null) {
                     Log.i(TAG, "[VIDEO][FALLBACK] Files matched: " + c.getCount());
                     while (c.moveToNext()) {
-                        if (!uploadRow(cr, files, c, "video/mp4", uploader, containerUrl, prefix, true, touchedConsignments)) {
+                        if (!uploadRow(cr, files, c, "video/mp4", uploader, containerUrl, prefix, true)) {
                             allOk = false;
                         }
                     }
@@ -285,8 +270,7 @@ public class MediaUploadWorker extends Worker {
                               AzureUploader uploader,
                               String containerUrl,
                               String prefix,
-                              boolean isVideo,
-                              Set<String> touchedConsignments) {
+                              boolean isVideo) {
 
         long id        = c.getLong(0);
         String name    = safe(c.getString(1));
@@ -323,7 +307,6 @@ public class MediaUploadWorker extends Worker {
                 if (azureBlobExistsReflect(uploader, containerUrl, blobPath)) {
                     Log.i(TAG, "Skip upload; blob already exists: " + containerUrl + "/" + blobPath);
                     tryDelete(getApplicationContext(), cr, itemUri); // attempt cleanup anyway
-                    touchedConsignments.add(consignmentId);
                     return true;
                 }
             } catch (Exception checkEx) {
@@ -339,11 +322,10 @@ public class MediaUploadWorker extends Worker {
                 long contentLen = size > 0 ? size : guessLength(cr, itemUri);
                 uploader.putBlobAuto(containerUrl, blobPath, mime, contentLen, in); // handles >256MB
 
-                // Delete after success (skip if not owner on Android 11+)
+                // Delete immediately after success
                 tryDelete(getApplicationContext(), cr, itemUri);
 
-                Log.i(TAG, "Uploaded and deleted: " + itemUri);
-                touchedConsignments.add(consignmentId);
+                Log.i(TAG, "Uploaded; delete attempted: " + itemUri);
                 return true;
 
             } catch (FileNotFoundException e) {
@@ -399,6 +381,8 @@ public class MediaUploadWorker extends Worker {
             int n = cr.delete(uri, null, null);
             if (n <= 0) {
                 Log.w(TAG, "Delete returned 0 for " + uri);
+            } else {
+                Log.i(TAG, "Deleted local: rows=" + n + " uri=" + uri);
             }
         } catch (SecurityException se) {
             Log.w(TAG, "Delete security exception for " + uri + ": " + se.getMessage());
@@ -441,9 +425,6 @@ public class MediaUploadWorker extends Worker {
     public void onStopped() {
         super.onStopped();
         Log.w(TAG, "Worker onStopped() called. isStopped=" + isStopped());
-        // If on WorkManager 2.9+, you can inspect reason:
-        // int reason = getStopReason();
-        // Log.w(TAG, "Stop reason = " + reason);
     }
 
     private ForegroundInfo makeForegroundInfo(String text) {
@@ -478,6 +459,7 @@ public class MediaUploadWorker extends Worker {
         return url.replaceAll("/+$", "");
     }
 }
+
 
 
 

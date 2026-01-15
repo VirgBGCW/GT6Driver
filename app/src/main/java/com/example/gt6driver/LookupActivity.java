@@ -1,10 +1,14 @@
+// app/src/main/java/com/example/gt6driver/LookupActivity.java
 package com.example.gt6driver;
 
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
+import android.os.Environment;
+import android.os.StatFs;
 import android.text.Editable;
 import android.text.TextWatcher;
+import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -12,20 +16,19 @@ import android.view.inputmethod.InputMethodManager;
 import android.widget.TextView;
 
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.content.ContextCompat;
+import androidx.constraintlayout.widget.ConstraintLayout;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.gt6driver.model.VehicleDetail;
+import com.example.gt6driver.net.ApiClient;
+import com.example.gt6driver.net.LotSearchResponse;
+import com.example.gt6driver.net.VehicleSearchApi;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.textfield.TextInputEditText;
 
 import java.util.ArrayList;
 import java.util.List;
-
-import com.example.gt6driver.net.ApiClient;
-import com.example.gt6driver.net.VehicleSearchApi;
-import com.example.gt6driver.net.LotSearchResponse;
 
 import retrofit2.Call;
 import retrofit2.Callback;
@@ -49,6 +52,10 @@ public class LookupActivity extends AppCompatActivity {
 
     // If tbuncpath might be relative, set your base here (or leave empty)
     private static final String IMG_BASE = ""; // e.g., "http://auctioneer.barrett-jackson.com/"
+
+    // ===================== STORAGE GUARD =====================
+    // Adjust this threshold as needed (example: 2GB free required)
+    private static final long MIN_FREE_BYTES = 2L * 1024L * 1024L * 1024L;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -103,10 +110,15 @@ public class LookupActivity extends AppCompatActivity {
         btnSearch.setEnabled(false);
         TextWatcher tw = new SimpleTextWatcher() {
             @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
-                btnSearch.setEnabled(!safe(vinInput).isEmpty()
+                // Re-check storage each time input changes (lightweight) so button state stays correct
+                boolean hasAnyInput = !safe(vinInput).isEmpty()
                         || !safe(lotNumberInput).isEmpty()
-                        || !safe(descriptionInput).isEmpty());
-                if (errorText != null) errorText.setVisibility(View.GONE);
+                        || !safe(descriptionInput).isEmpty();
+
+                boolean storageOk = checkStorageAndApplyUiGuard(false);
+                btnSearch.setEnabled(hasAnyInput && storageOk);
+
+                if (errorText != null && storageOk) errorText.setVisibility(View.GONE);
             }
         };
         vinInput.addTextChangedListener(tw);
@@ -121,6 +133,12 @@ public class LookupActivity extends AppCompatActivity {
             lotNumberInput.clearFocus();
             vinInput.clearFocus();
             descriptionInput.clearFocus();
+
+            // Hard guard right before action
+            if (!checkStorageAndApplyUiGuard(true)) {
+                adapter.setItems(new ArrayList<>());
+                return;
+            }
 
             String vinStr = safe(vinInput);
             String lotStr = safe(lotNumberInput);
@@ -143,6 +161,22 @@ public class LookupActivity extends AppCompatActivity {
             showError("Missing eventId. Please select an event and try again.");
             btnSearch.setEnabled(false);
         }
+
+        // ✅ Storage check when screen loads
+        checkStorageAndApplyUiGuard(true);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // ✅ Storage check when screen is revisited/refreshed
+        checkStorageAndApplyUiGuard(true);
+
+        // Re-evaluate search enable state (input + storage)
+        boolean hasAnyInput = !safe(vinInput).isEmpty()
+                || !safe(lotNumberInput).isEmpty()
+                || !safe(descriptionInput).isEmpty();
+        btnSearch.setEnabled(hasAnyInput && checkStorageAndApplyUiGuard(false));
     }
 
     private String safe(TextInputEditText et) {
@@ -155,13 +189,61 @@ public class LookupActivity extends AppCompatActivity {
         if (errorText != null) errorText.setVisibility(View.GONE);
     }
 
+    /**
+     * Default error display (keeps whatever XML constraints you have for the "no results" area).
+     */
     private void showError(String msg) {
         if (errorText != null) {
+            // restore a "normal" look (in case low-storage previously styled it)
+            errorText.setBackgroundColor(0x00000000);
+            errorText.setPadding(0, 0, 0, 0);
+            errorText.setGravity(Gravity.START);
+
+            errorText.setTextSize(18f);
+            errorText.setTextColor(0xFFFFFFFF);
+
             errorText.setText(msg);
             errorText.setVisibility(View.VISIBLE);
         } else {
             android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_LONG).show();
         }
+    }
+
+    /**
+     * ✅ BIG + CENTERED low-storage message in middle of screen.
+     * Requires activity_lookup root to be a ConstraintLayout (typical).
+     */
+    private void showErrorLowCentered(String msg) {
+        if (errorText == null) {
+            android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_LONG).show();
+            return;
+        }
+
+        errorText.setText(msg);
+        errorText.setTextSize(26f);
+        errorText.setTextColor(0xFFFFFFFF);
+        errorText.setBackgroundColor(0xCCB00020); // translucent red
+        errorText.setGravity(Gravity.CENTER);
+        errorText.setPadding(dp(20), dp(20), dp(20), dp(20));
+
+        ViewGroup.LayoutParams lp = errorText.getLayoutParams();
+        if (lp instanceof ConstraintLayout.LayoutParams) {
+            ConstraintLayout.LayoutParams clp = (ConstraintLayout.LayoutParams) lp;
+
+            // center it
+            clp.topToTop = ConstraintLayout.LayoutParams.PARENT_ID;
+            clp.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID;
+            clp.startToStart = ConstraintLayout.LayoutParams.PARENT_ID;
+            clp.endToEnd = ConstraintLayout.LayoutParams.PARENT_ID;
+            clp.verticalBias = 0.50f;
+
+            // match constraints for width
+            clp.width = 0;
+
+            errorText.setLayoutParams(clp);
+        }
+
+        errorText.setVisibility(View.VISIBLE);
     }
 
     private void cancelAll() {
@@ -170,7 +252,50 @@ public class LookupActivity extends AppCompatActivity {
         if (descCall != null && !descCall.isCanceled()) { descCall.cancel(); descCall = null; }
     }
 
+    // ===================== STORAGE HELPERS =====================
+
+    private long getAvailableBytesInternal() {
+        try {
+            StatFs stat = new StatFs(Environment.getDataDirectory().getAbsolutePath());
+            return stat.getAvailableBytes();
+        } catch (Exception e) {
+            return Long.MAX_VALUE;
+        }
+    }
+
+    private String formatBytes(long bytes) {
+        if (bytes < 0) return "0 B";
+        final String[] units = {"B", "KB", "MB", "GB", "TB"};
+        double b = (double) bytes;
+        int i = 0;
+        while (b >= 1024.0 && i < units.length - 1) {
+            b /= 1024.0;
+            i++;
+        }
+        return String.format(java.util.Locale.US, "%.1f %s", b, units[i]);
+    }
+
+    private boolean checkStorageAndApplyUiGuard(boolean showMessage) {
+        long free = getAvailableBytesInternal();
+        boolean ok = free >= MIN_FREE_BYTES;
+
+        if (!ok) {
+            btnSearch.setEnabled(false);
+
+            if (showMessage) {
+                String msg = "LOW STORAGE: Only " + formatBytes(free) + " free.\n"
+                        + "Free space and try again.\n"
+                        + "Need at least " + formatBytes(MIN_FREE_BYTES) + ".";
+                showErrorLowCentered(msg);
+            }
+        }
+
+        return ok;
+    }
+
     private void performLotSearch() {
+        if (!checkStorageAndApplyUiGuard(true)) return;
+
         String lotStr = safe(lotNumberInput);
         if (lotStr.isEmpty()) {
             showError("Enter a Lot number.");
@@ -178,7 +303,6 @@ public class LookupActivity extends AppCompatActivity {
             return;
         }
 
-// Allow integer or decimal (e.g., 300 or 300.1)
         if (!lotStr.matches("\\d+(?:\\.\\d+)?")) {
             showError("Lot must be a number (e.g., 300 or 300.1).");
             adapter.setItems(new ArrayList<>());
@@ -218,6 +342,8 @@ public class LookupActivity extends AppCompatActivity {
     }
 
     private void performVinSearch() {
+        if (!checkStorageAndApplyUiGuard(true)) return;
+
         String vinStr = safe(vinInput);
         if (vinStr.isEmpty()) {
             showError("Enter a VIN.");
@@ -265,6 +391,8 @@ public class LookupActivity extends AppCompatActivity {
     }
 
     private void performDescriptionSearch() {
+        if (!checkStorageAndApplyUiGuard(true)) return;
+
         String terms = safe(descriptionInput);
         if (terms.isEmpty()) {
             showError("Enter a description.");
@@ -331,7 +459,7 @@ public class LookupActivity extends AppCompatActivity {
             d.checkinmileage = v.checkinmileage;
             d.col = v.col;
             d.consignmentid = v.consignmentid;
-            d.opportunityId = v.opportunityId;         // ✅ new unified name
+            d.opportunityId = v.opportunityId;
             d.exteriorcolor = v.exteriorcolor;
             d.intakevideo = v.intakevideo;
             d.itemid = v.itemid;
@@ -348,7 +476,7 @@ public class LookupActivity extends AppCompatActivity {
             d.status = v.status;
             d.targettime = v.targettime;
             d.tbuncpath = v.tbuncpath;
-            d.tentid = v.tentid;
+            d.tentid = v.tentid;   // ✅ we will use this in UI
             d.vin = v.vin;
             d.year = v.year;
 
@@ -446,6 +574,10 @@ public class LookupActivity extends AppCompatActivity {
         if (imm != null) imm.hideSoftInputFromWindow(view.getWindowToken(), 0);
     }
 
+    private int dp(int dps) {
+        return Math.round(getResources().getDisplayMetrics().density * dps);
+    }
+
     @Override
     protected void onStop() {
         super.onStop();
@@ -454,7 +586,6 @@ public class LookupActivity extends AppCompatActivity {
 
     // ---------- Adapter ----------
 
-    // ---------- Adapter ----------
     static class VehicleAdapter extends RecyclerView.Adapter<VehicleAdapter.VH> {
 
         interface OnItemClick { void onClick(int position, VehicleDetail row); }
@@ -477,6 +608,7 @@ public class LookupActivity extends AppCompatActivity {
             final TextView tvLot;
             final TextView tvDesc;
             final TextView tvVinNumber;
+            final TextView tvParking;
             final android.widget.ImageView ivThumb;
 
             VH(View itemView) {
@@ -485,6 +617,7 @@ public class LookupActivity extends AppCompatActivity {
                 tvLot       = itemView.findViewById(R.id.tvLot);
                 tvDesc      = itemView.findViewById(R.id.tvDesc);
                 tvVinNumber = itemView.findViewById(R.id.tvVinNumber);
+                tvParking   = itemView.findViewById(R.id.tvParking);
                 ivThumb     = itemView.findViewById(R.id.ivThumb);
             }
         }
@@ -499,9 +632,8 @@ public class LookupActivity extends AppCompatActivity {
         public void onBindViewHolder(VH holder, int position) {
             VehicleDetail row = items.get(position);
 
-            // lotnumber is String
             String lotStr = (row.lotnumber == null) ? "" : row.lotnumber;
-            holder.tvLot.setText(lotStr.isEmpty() ? "LOT —" : "LOT # " + lotStr);
+            holder.tvLot.setText(lotStr.isEmpty() ? "LOT -" : "LOT # " + lotStr);
 
             String title = (row.title == null || row.title.isEmpty())
                     ? (row.marketingdescription == null ? "" : row.marketingdescription)
@@ -509,6 +641,25 @@ public class LookupActivity extends AppCompatActivity {
             holder.tvDesc.setText(title);
 
             holder.tvVinNumber.setText((row.vin == null || row.vin.isEmpty()) ? "" : "VIN: " + row.vin);
+
+            // ✅ Display exactly: "TENTID COL-ROW" (no labels)
+            String tent = (row.tentid == null) ? "" : String.valueOf(row.tentid);
+
+            String c = (row.col == null) ? "" : row.col.trim();
+            String r = (row.row == null) ? "" : row.row.trim();
+
+            String colRow = "";
+            if (!c.isEmpty() && !r.isEmpty()) colRow = c + "-" + r;
+            else if (!c.isEmpty()) colRow = c;
+            else if (!r.isEmpty()) colRow = r;
+
+            String display;
+            if (!tent.isEmpty() && !colRow.isEmpty()) display = tent + " " + colRow;
+            else if (!tent.isEmpty()) display = tent;
+            else if (!colRow.isEmpty()) display = colRow;
+            else display = "-";
+
+            holder.tvParking.setText(display);
 
             if (row.thumbUrl != null && !row.thumbUrl.isEmpty()) {
                 int radius = 16;
@@ -542,13 +693,13 @@ public class LookupActivity extends AppCompatActivity {
         }
     }
 
-
     // ---- Simple TextWatcher helper ----
     abstract static class SimpleTextWatcher implements TextWatcher {
         @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
         @Override public void afterTextChanged(Editable s) {}
     }
 }
+
 
 
 

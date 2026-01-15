@@ -1,15 +1,15 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-
-<!-- ===== Network / Camera ===== -->
+    <!-- ===== Network / Camera ===== -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.CAMERA" />
 
     <!-- ===== Media / Storage ===== -->
+    <!-- Android 13+ scoped readers -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
-    <!-- Pre-Android 13 fallback -->
+    <!-- Pre-Android 13 fallback readers -->
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
@@ -24,11 +24,13 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
-    <!-- ===== Bluetooth / Nearby Devices (as you had) ===== -->
+    <!-- ===== Bluetooth / Nearby Devices ===== -->
+    <!-- Android 12+ -->
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission
         android:name="android.permission.BLUETOOTH_SCAN"
         android:usesPermissionFlags="neverForLocation" />
+    <!-- Pre-Android 12 fallbacks -->
     <uses-permission
         android:name="android.permission.BLUETOOTH"
         android:maxSdkVersion="30" />
@@ -40,9 +42,12 @@
         android:maxSdkVersion="30" />
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
 
-    <!-- ===== NFC (optional) ===== -->
+    <!-- ===== NFC ===== -->
     <uses-permission android:name="android.permission.NFC" />
     <uses-feature android:name="android.hardware.nfc" android:required="false" />
+
+    <!-- ✅ Vibration (needed for haptic feedback) -->
+    <uses-permission android:name="android.permission.VIBRATE" />
 
     <application
         android:allowBackup="true"
@@ -64,13 +69,13 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
-        <!-- ===== Your foreground sync watcher/uploader ===== -->
+        <!-- Foreground sync service -->
         <service
             android:name=".sync.GT6MediaSyncService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
-        <!-- ✅ WorkManager's own foreground service needs a type on Android 14+ -->
+        <!-- WorkManager foreground service (Android 12/13/14+) -->
         <service
             android:name="androidx.work.impl.foreground.SystemForegroundService"
             android:exported="false"

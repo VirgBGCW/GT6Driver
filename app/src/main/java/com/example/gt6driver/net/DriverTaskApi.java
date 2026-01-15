@@ -6,13 +6,11 @@ import retrofit2.Call;
 import retrofit2.http.Body;
 import retrofit2.http.GET;
 import retrofit2.http.PUT;
+import retrofit2.http.POST;
 import retrofit2.http.Path;
 
-// import your models:
-// import com.example.gt6driver.model.VehicleTaskIntake;
-// import com.example.gt6driver.model.ReleaseVehicleTaskPayload;
-// import com.example.gt6driver.model.ReleasePayload;
 import com.example.gt6driver.model.ConsignmentKeyPayload;
+import com.example.gt6driver.model.EventVehicleStatusPayload;
 
 public interface DriverTaskApi {
 
@@ -44,7 +42,15 @@ public interface DriverTaskApi {
             @Path("opportunityId") String opportunityId,
             @Body ConsignmentKeyPayload body
     );
+
+    // ==== EVENT VEHICLE STATUS ====
+    @PUT("api/v1/Opportunity/Consignment/EventVehicleStatus")
+    Call<Void> updateEventVehicleStatus(
+            @Body EventVehicleStatusPayload body
+    );
+
 }
+
 
 
 

@@ -1,4 +1,3 @@
-
 // app/src/main/java/com/example/gt6driver/CheckOutDetailsActivity.java
 package com.example.gt6driver;
 
@@ -7,6 +6,7 @@ import android.content.ClipData;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentSender;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.database.Cursor;
@@ -25,9 +25,8 @@ import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.util.Log;
-import com.google.gson.Gson;
-import retrofit2.Retrofit;
 
+import com.google.gson.Gson;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
@@ -62,9 +61,15 @@ import retrofit2.Response;
 public class CheckOutDetailsActivity extends AppCompatActivity {
 
     // ===== Consistent with CheckIn =====
-    //
     private static final String TAG = "GT6Release";
+
+    // NOTE: Leaving your existing base as-is per request ("only mp4 need to change")
     private static final String BLOB_BASE = "https://stgt6driverappprod.blob.core.windows.net/";
+
+    // ✅ NEW: compressed playback base for mp4 ONLY
+    private static final String COMPRESSED_VIDEO_BASE =
+            "https://stgt6driverappprod.blob.core.windows.net/compressed-files/";
+
     private static final String EXTRA_VEHICLE        = "vehicle";
     private static final String EXTRA_OPPORTUNITY_ID = "opportunityId";
 
@@ -384,14 +389,12 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
                             lastCapturedVideoUri = target;
                             try { getContentResolver().notifyChange(lastCapturedVideoUri, null); } catch (Exception ignored) {}
 
-                            setStatusIcon(videoIcon, false);
-                            videoDone = false;
-                            setVideoExpanded(true);
+                            // ✅ NEW: auto-accept (same as if user pressed ACCEPT)
+                            acceptReleaseVideoIfAvailable();
 
                             // If you want to kick your uploader immediately:
                             com.example.gt6driver.sync.GT6MediaSync.enqueueImmediate(this);
 
-                            Toast.makeText(this, "Video captured. Tap Accept to confirm.", Toast.LENGTH_SHORT).show();
                             refreshConfirmEnabled();
                         } else {
                             // user cancelled; nothing to do
@@ -402,8 +405,6 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
                     }
                 }
         );
-
-//
 
         // CAMERA permission
         requestCameraPermissionLauncher = registerForActivityResult(
@@ -612,20 +613,8 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
             });
         }
         if (btnVideoAccept != null) {
-            btnVideoAccept.setOnClickListener(v -> {
-                if (lastCapturedVideoUri == null) {
-                    Toast.makeText(this, "No video to accept. Please record first.", Toast.LENGTH_SHORT).show();
-                    return;
-                }
-                if (releaseModel == null) releaseModel = new ReleasePayload();
-                if (releaseModel.video == null) releaseModel.video = new ReleasePayload.Video();
-                releaseModel.video.videoUrl = mediaUrl("release.mp4"); // deterministic
-                setStatusIcon(videoIcon, true);
-                videoDone = true;
-                Toast.makeText(this, "Release video accepted.", Toast.LENGTH_SHORT).show();
-                setVideoExpanded(false);
-                refreshConfirmEnabled();
-            });
+            // ✅ CHANGED: button still works, but shares the same logic as auto-accept
+            btnVideoAccept.setOnClickListener(v -> acceptReleaseVideoIfAvailable());
         }
 
         // CONFIRM → build payload and call VehicleTask /Release
@@ -673,6 +662,27 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
         refreshConfirmEnabled();
     }
 
+    // ✅ NEW: shared accept logic used by BOTH auto-accept after capture and the ACCEPT button
+    private void acceptReleaseVideoIfAvailable() {
+        if (lastCapturedVideoUri == null) {
+            Toast.makeText(this, "No video to accept. Please record first.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        if (releaseModel == null) releaseModel = new ReleasePayload();
+        if (releaseModel.video == null) releaseModel.video = new ReleasePayload.Video();
+
+        // mp4 playback URL should point at compressed-files/{id}/release_c.mp4
+        releaseModel.video.videoUrl = compressedMp4Url("release");
+
+        setStatusIcon(videoIcon, true);
+        videoDone = true;
+
+        Toast.makeText(this, "Release video accepted.", Toast.LENGTH_SHORT).show();
+        setVideoExpanded(false);
+        refreshConfirmEnabled();
+    }
+
     private boolean copyUri(Uri from, Uri to) {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -702,7 +712,7 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
         }
     }
 
-// ===== Build payload (no auto-filling of photo URLs) =====
+    // ===== Build payload (no auto-filling of photo URLs) =====
     private ReleasePayload buildReleaseFromUi() {
         // Start from the working model so any captured URLs already set are preserved
         ReleasePayload p = (releaseModel != null ? releaseModel : new ReleasePayload());
@@ -789,7 +799,6 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
 
         return p;
     }
-
 
     // ====== Bind from server (kept, just sanity tweaks) ======
     private void applyReleaseToUi(ReleasePayload r) {
@@ -893,6 +902,11 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
 
     private String mediaUrl(String fileName) {
         return BLOB_BASE + consignmentIdStr() + "/" + fileName;
+    }
+
+    // ✅ NEW: mp4 playback URL builder (compressed-files/{id}/{name}_c.mp4)
+    private String compressedMp4Url(String baseNameNoExt) {
+        return COMPRESSED_VIDEO_BASE + consignmentIdStr() + "/" + baseNameNoExt + "_c.mp4";
     }
 
     private void ensureCameraForPhoto(String label) {
@@ -1014,7 +1028,7 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
             }
         }
     }
-//
+
     private String resolveDriverName() {
         if (driver != null && !driver.trim().isEmpty()) return driver.trim();
         try {
@@ -1028,10 +1042,6 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
         // No EXTRA_OUTPUT → OEM camera shows OK/CANCEL review UI
         Intent intent = new Intent(MediaStore.ACTION_VIDEO_CAPTURE);
         intent.putExtra(MediaStore.EXTRA_VIDEO_QUALITY, 1);
-
-        // These can suppress review UI on some devices—omit for reliability:
-        // intent.putExtra(MediaStore.EXTRA_DURATION_LIMIT, 120);
-        // intent.putExtra(MediaStore.EXTRA_SIZE_LIMIT, 200 * 1024 * 1024L);
 
         if (intent.resolveActivity(getPackageManager()) != null) {
             recordVideoLauncher.launch(intent);
@@ -1228,7 +1238,6 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
 
     // ===================== Consignment Key "Released" update =====================
 
-// ===================== Consignment Key "Released" update =====================
     /** Fire-and-forget call to Consignment/Key API per requirements, with logging */
     private void postConsignmentReleasedUpdate() {
         if (isEmpty(opportunityId)) return;
@@ -1249,27 +1258,25 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
         );
 
         try {
-            // Build client & service once
             retrofit2.Retrofit retrofit = ApiClient.getMemberApi();
             final DriverTaskApi api = retrofit.create(DriverTaskApi.class);
 
-            // Optional: log the URL we’re effectively hitting
             String baseUrl = retrofit.baseUrl().toString();
             String endpointPath = "api/v1/Opportunity/Consignment/" + opportunityId + "/Key";
             String fullUrl = baseUrl + endpointPath;
-            String payloadJson = new com.google.gson.Gson().toJson(body);
+            String payloadJson = new Gson().toJson(body);
             Log.i(TAG, "PUT " + fullUrl);
             Log.i(TAG, "Payload: " + payloadJson);
 
-            api.updateConsignmentKey(opportunityId, body).enqueue(new retrofit2.Callback<Void>() {
-                @Override public void onResponse(retrofit2.Call<Void> call, retrofit2.Response<Void> resp) {
+            api.updateConsignmentKey(opportunityId, body).enqueue(new Callback<Void>() {
+                @Override public void onResponse(Call<Void> call, Response<Void> resp) {
                     Log.i(TAG, "Response: HTTP " + resp.code());
                     if (!resp.isSuccessful()) {
                         Toast.makeText(CheckOutDetailsActivity.this,
                                 "Consignment key update failed (" + resp.code() + ")", Toast.LENGTH_SHORT).show();
                     }
                 }
-                @Override public void onFailure(retrofit2.Call<Void> call, Throwable t) {
+                @Override public void onFailure(Call<Void> call, Throwable t) {
                     Log.e(TAG, "Network failure calling Consignment Key API", t);
                     Toast.makeText(CheckOutDetailsActivity.this,
                             "Network error updating consignment key", Toast.LENGTH_SHORT).show();

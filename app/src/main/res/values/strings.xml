@@ -38,7 +38,8 @@
     <string name="user">User</string>
     <string name="driver_number_hint">Driver #</string>
     <string name="cancel">Cancel</string>
-    <string name="nfc">NFC</string>
+    <string name="checkin">CHECKIN</string>
+    <string name="pigpen">PIGPEN</string>
     <string name="driver_number_error">Enter driver number</string>
     <string name="driver_number_digits">Numbers only</string>
     <string name="cd_key_bag">Print key bag tag</string>

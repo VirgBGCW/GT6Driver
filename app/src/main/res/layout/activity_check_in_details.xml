@@ -4,22 +4,8 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@android:color/black">
-
-    <!-- Root guidelines (used by the sticky button) -->
-    <androidx.constraintlayout.widget.Guideline
-        android:id="@+id/leftGuide"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        app:layout_constraintGuide_percent="0.125" />
-
-    <androidx.constraintlayout.widget.Guideline
-        android:id="@+id/rightGuide"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        app:layout_constraintGuide_percent="0.875" />
+    android:background="@android:color/black"
+    android:fitsSystemWindows="true">
 
     <!-- Scrollable content area -->
     <androidx.core.widget.NestedScrollView
@@ -30,6 +16,7 @@
         android:overScrollMode="ifContentScrolls"
         android:clipToPadding="false"
         android:paddingBottom="24dp"
+        android:layout_marginTop="16dp"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
@@ -41,34 +28,20 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content">
 
-            <!-- Inner guidelines for scrolling content -->
-            <androidx.constraintlayout.widget.Guideline
-                android:id="@+id/contentLeft"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                app:layout_constraintGuide_percent="0.125" />
-
-            <androidx.constraintlayout.widget.Guideline
-                android:id="@+id/contentRight"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                app:layout_constraintGuide_percent="0.875" />
-
-            <!-- Selected Vehicle panel -->
             <!-- Selected Vehicle panel -->
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/vehiclePanel"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="24dp"
+                android:layout_marginStart="16dp"
+                android:layout_marginEnd="16dp"
                 app:cardCornerRadius="16dp"
                 app:cardElevation="2dp"
                 app:cardBackgroundColor="@android:color/white"
                 app:layout_constraintTop_toTopOf="parent"
-                app:layout_constraintStart_toStartOf="@id/contentLeft"
-                app:layout_constraintEnd_toEndOf="@id/contentRight">
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -124,7 +97,6 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-
             <!-- CHECK IN label -->
             <TextView
                 android:id="@+id/checkInLabel"
@@ -134,9 +106,10 @@
                 android:textStyle="bold"
                 android:textSize="20sp"
                 android:textColor="@android:color/white"
-                app:layout_constraintStart_toStartOf="@id/contentLeft"
-                app:layout_constraintTop_toBottomOf="@id/vehiclePanel"
-                android:layout_marginTop="16dp" />
+                android:layout_marginTop="16dp"
+                android:layout_marginStart="16dp"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@id/vehiclePanel" />
 
             <!-- VERIFY VIN PANEL -->
             <com.google.android.material.card.MaterialCardView
@@ -145,13 +118,15 @@
                 android:layout_height="wrap_content"
                 android:clickable="true"
                 android:focusable="true"
+                android:layout_marginTop="8dp"
+                android:layout_marginStart="16dp"
+                android:layout_marginEnd="16dp"
                 app:cardBackgroundColor="@android:color/white"
                 app:cardCornerRadius="12dp"
                 app:cardElevation="1dp"
                 app:layout_constraintTop_toBottomOf="@id/checkInLabel"
-                app:layout_constraintStart_toStartOf="@id/contentLeft"
-                app:layout_constraintEnd_toEndOf="@id/contentRight"
-                android:layout_marginTop="8dp">
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent">
 
                 <androidx.constraintlayout.widget.ConstraintLayout
                     android:id="@+id/verifyVinHeader"
@@ -318,13 +293,15 @@
                 android:layout_height="wrap_content"
                 android:clickable="true"
                 android:focusable="true"
+                android:layout_marginTop="12dp"
+                android:layout_marginStart="16dp"
+                android:layout_marginEnd="16dp"
                 app:cardBackgroundColor="@android:color/white"
                 app:cardCornerRadius="12dp"
                 app:cardElevation="1dp"
                 app:layout_constraintTop_toBottomOf="@id/verifyVinPanel"
-                app:layout_constraintStart_toStartOf="@id/contentLeft"
-                app:layout_constraintEnd_toEndOf="@id/contentRight"
-                android:layout_marginTop="12dp">
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent">
 
                 <androidx.constraintlayout.widget.ConstraintLayout
                     android:id="@+id/mileageHeader"
@@ -429,13 +406,15 @@
                 android:layout_height="wrap_content"
                 android:clickable="true"
                 android:focusable="true"
+                android:layout_marginTop="12dp"
+                android:layout_marginStart="16dp"
+                android:layout_marginEnd="16dp"
                 app:cardBackgroundColor="@android:color/white"
                 app:cardCornerRadius="12dp"
                 app:cardElevation="1dp"
                 app:layout_constraintTop_toBottomOf="@+id/mileagePanel"
-                app:layout_constraintStart_toStartOf="@id/contentLeft"
-                app:layout_constraintEnd_toEndOf="@id/contentRight"
-                android:layout_marginTop="12dp">
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent">
 
                 <androidx.constraintlayout.widget.ConstraintLayout
                     android:id="@+id/keyHeader"
@@ -565,9 +544,11 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
+                android:layout_marginStart="16dp"
+                android:layout_marginEnd="16dp"
                 app:layout_constraintTop_toBottomOf="@id/keyPanel"
-                app:layout_constraintStart_toStartOf="@id/contentLeft"
-                app:layout_constraintEnd_toEndOf="@id/contentRight"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
                 app:cardBackgroundColor="@android:color/white"
                 app:cardCornerRadius="12dp"
                 app:cardElevation="1dp">
@@ -668,10 +649,12 @@
                 android:id="@+id/descPanel"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                app:layout_constraintTop_toBottomOf="@id/videoPanel"
-                app:layout_constraintStart_toStartOf="@id/contentLeft"
-                app:layout_constraintEnd_toEndOf="@id/contentRight"
                 android:layout_marginTop="12dp"
+                android:layout_marginStart="16dp"
+                android:layout_marginEnd="16dp"
+                app:layout_constraintTop_toBottomOf="@id/videoPanel"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
                 app:cardBackgroundColor="@android:color/white"
                 app:cardCornerRadius="12dp"
                 app:cardElevation="1dp">
@@ -765,7 +748,6 @@
                                 app:cornerRadius="12dp" />
                         </LinearLayout>
 
-                        <!-- INCORRECT sub-group (2 checkboxes per row) -->
                         <LinearLayout
                             android:id="@+id/descIncorrectGroup"
                             android:layout_width="match_parent"
@@ -774,7 +756,6 @@
                             android:layout_marginTop="12dp"
                             android:visibility="gone">
 
-                            <!-- Row 1 -->
                             <LinearLayout
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
@@ -798,7 +779,6 @@
                                     android:textColor="@android:color/black" />
                             </LinearLayout>
 
-                            <!-- Row 2 -->
                             <LinearLayout
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
@@ -844,10 +824,12 @@
                 android:id="@+id/qualityPanel"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                app:layout_constraintTop_toBottomOf="@id/descPanel"
-                app:layout_constraintStart_toStartOf="@id/contentLeft"
-                app:layout_constraintEnd_toEndOf="@id/contentRight"
                 android:layout_marginTop="12dp"
+                android:layout_marginStart="16dp"
+                android:layout_marginEnd="16dp"
+                app:layout_constraintTop_toBottomOf="@id/descPanel"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
                 app:cardBackgroundColor="@android:color/white"
                 app:cardCornerRadius="12dp"
                 app:cardElevation="1dp">
@@ -940,7 +922,6 @@
                                 app:cornerRadius="12dp" />
                         </LinearLayout>
 
-                        <!-- CONCERNS sub-group (2 checkboxes per row) -->
                         <LinearLayout
                             android:id="@+id/qualityDetailsGroup"
                             android:layout_width="match_parent"
@@ -949,7 +930,6 @@
                             android:layout_marginTop="12dp"
                             android:visibility="gone">
 
-                            <!-- Row 1 -->
                             <LinearLayout
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
@@ -973,7 +953,6 @@
                                     android:textColor="@android:color/black" />
                             </LinearLayout>
 
-                            <!-- Row 2 -->
                             <LinearLayout
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
@@ -998,7 +977,6 @@
                                     android:textColor="@android:color/black" />
                             </LinearLayout>
 
-                            <!-- Row 3 (single item + spacer to keep 2-column alignment) -->
                             <LinearLayout
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
@@ -1014,7 +992,6 @@
                                     android:text="Service Lights"
                                     android:textColor="@android:color/black" />
 
-                                <!-- spacer to fill the second column -->
                                 <View
                                     android:layout_width="0dp"
                                     android:layout_height="0dp"
@@ -1037,7 +1014,6 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- Bottom spacer so the last card isn't tight against the sticky button -->
             <Space
                 android:id="@+id/pageBottomSpacer"
                 android:layout_width="0dp"
@@ -1045,6 +1021,7 @@
                 app:layout_constraintTop_toBottomOf="@id/qualityPanel"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintEnd_toEndOf="parent" />
+
         </androidx.constraintlayout.widget.ConstraintLayout>
     </androidx.core.widget.NestedScrollView>
 
@@ -1058,10 +1035,12 @@
         android:textColor="@android:color/white"
         android:textStyle="bold"
         app:cornerRadius="12dp"
-        app:layout_constraintStart_toStartOf="@id/leftGuide"
-        app:layout_constraintEnd_toEndOf="@id/rightGuide"
-        app:layout_constraintBottom_toBottomOf="parent"
-        android:layout_marginBottom="24dp" />
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="24dp"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>
 

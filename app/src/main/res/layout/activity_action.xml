@@ -53,60 +53,114 @@
         app:strokeColor="@android:color/darker_gray"
         app:strokeWidth="1dp">
 
-        <LinearLayout
+        <androidx.constraintlayout.widget.ConstraintLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
             android:padding="16dp">
 
-            <!-- Left image area -->
+            <!-- IMAGE (upper-left) -->
             <ImageView
                 android:id="@+id/panelImage"
                 android:layout_width="140dp"
                 android:layout_height="84dp"
                 android:scaleType="centerCrop"
                 android:contentDescription="@string/vehicle_image"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
                 tools:src="@drawable/ic_menu_gallery" />
 
-            <!-- Texts on the right -->
-            <LinearLayout
+            <!-- LOT # (upper-right) -->
+            <TextView
+                android:id="@+id/panelLot"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:orientation="vertical"
+                android:textStyle="bold"
+                android:textSize="18sp"
+                android:textColor="@android:color/black"
+                app:layout_constraintTop_toTopOf="@id/panelImage"
+                app:layout_constraintBottom_toBottomOf="@id/panelImage"
+                app:layout_constraintStart_toEndOf="@id/panelImage"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintHorizontal_bias="1"
                 android:layout_marginStart="12dp"
-                android:gravity="center_vertical">
+                tools:text="LOT # 1234" />
 
-                <TextView
-                    android:id="@+id/panelLot"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:textStyle="bold"
-                    android:textSize="18sp"
-                    android:textColor="@android:color/black"
-                    tools:text="LOT # 1234" />
+            <!-- DESCRIPTION (under image, full width to the right edge) -->
+            <TextView
+                android:id="@+id/panelDesc"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:textSize="16sp"
+                android:textColor="@android:color/black"
+                android:layout_marginTop="8dp"
+                app:layout_constraintTop_toBottomOf="@id/panelImage"
+                app:layout_constraintStart_toStartOf="@id/panelImage"
+                app:layout_constraintEnd_toEndOf="parent"
+                tools:text="1969 Ford Mustang Fastback" />
 
-                <TextView
-                    android:id="@+id/panelDesc"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:textSize="16sp"
-                    android:textColor="@android:color/black"
-                    android:layout_marginTop="4dp"
-                    tools:text="1969 Ford Mustang Fastback" />
+            <!-- VIN label -->
+            <TextView
+                android:id="@+id/panelVinLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="VIN"
+                android:textColor="@android:color/black"
+                android:textStyle="bold"
+                android:textSize="18sp"
+                android:layout_marginTop="8dp"
+                app:layout_constraintTop_toBottomOf="@id/panelDesc"
+                app:layout_constraintStart_toStartOf="@id/panelDesc" />
 
-                <TextView
-                    android:id="@+id/panelVin"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:textSize="16sp"
-                    android:textColor="@android:color/black"
-                    android:layout_marginTop="2dp"
-                    android:textStyle="bold"
-                    tools:text="VIN: 1FAxxxxxxx1234567" />
-            </LinearLayout>
+            <!-- Location name (right side of VIN label row) -->
+            <TextView
+                android:id="@+id/panelLocationName"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="end"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:textColor="@android:color/black"
+                android:textStyle="bold"
+                android:textSize="18sp"
+                app:layout_constraintTop_toTopOf="@id/panelVinLabel"
+                app:layout_constraintBottom_toBottomOf="@id/panelVinLabel"
+                app:layout_constraintEnd_toEndOf="parent"
+                tools:text="TENT A" />
 
-        </LinearLayout>
+            <!-- VIN value (left) -->
+            <TextView
+                android:id="@+id/panelVinValue"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:textColor="@android:color/black"
+                android:textStyle="normal"
+                android:textSize="16sp"
+                android:layout_marginTop="2dp"
+                android:maxLines="1"
+                android:ellipsize="end"
+                app:layout_constraintTop_toBottomOf="@id/panelVinLabel"
+                app:layout_constraintStart_toStartOf="@id/panelVinLabel"
+                app:layout_constraintEnd_toStartOf="@id/panelRowCol"
+                tools:text="1FAxxxxxxxxx1234567" />
+
+            <!-- ROW-COL value (right, same row as VIN value) -->
+            <TextView
+                android:id="@+id/panelRowCol"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@android:color/black"
+                android:textStyle="bold"
+                android:textSize="16sp"
+                android:layout_marginTop="2dp"
+                android:gravity="end"
+                android:maxLines="1"
+                app:layout_constraintTop_toTopOf="@id/panelVinValue"
+                app:layout_constraintBottom_toBottomOf="@id/panelVinValue"
+                app:layout_constraintEnd_toEndOf="parent"
+                tools:text="6 - WW" />
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
     </com.google.android.material.card.MaterialCardView>
 
     <!-- KEY BAG TAG (Key icon) -->
@@ -123,7 +177,7 @@
         android:layout_marginEnd="8dp"
         app:cornerRadius="16dp"
         app:rippleColor="@color/m3_ref_palette_neutral_variant40"
-        app:icon="@drawable/ic_key_24"
+        app:icon="@drawable/baseline_key_24"
         app:iconTint="@color/redButton"
         app:iconSize="36dp"
         app:iconGravity="textStart"
@@ -167,6 +221,7 @@
         android:backgroundTint="@android:color/white"
         android:layout_marginTop="16dp"
         android:layout_marginStart="8dp"
+        android:layout_marginEnd="8dp"
         app:cornerRadius="16dp"
         app:rippleColor="@color/m3_ref_palette_neutral_variant40"
         app:icon="@drawable/ic_steering_24"
@@ -175,18 +230,39 @@
         app:iconGravity="textStart"
         app:layout_constraintTop_toBottomOf="@id/vehiclePanel"
         app:layout_constraintStart_toEndOf="@id/btnCarTag"
+        app:layout_constraintEnd_toStartOf="@id/btnDriverCheckIn" />
+
+    <!-- DRIVER CHECK-IN (SECURITY icon, icon-only) -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnDriverCheckIn"
+        style="?attr/materialButtonOutlinedStyle"
+        android:layout_width="0dp"
+        android:layout_height="96dp"
+        android:text=""
+        android:gravity="center"
+        android:contentDescription="Driver Check-In"
+        android:backgroundTint="@android:color/white"
+        android:layout_marginTop="16dp"
+        android:layout_marginStart="8dp"
+        app:cornerRadius="16dp"
+        app:rippleColor="@color/m3_ref_palette_neutral_variant40"
+        app:icon="@drawable/ic_baseline_security_24"
+        app:iconTint="@color/redButton"
+        app:iconSize="36dp"
+        app:iconGravity="textStart"
+        app:layout_constraintTop_toBottomOf="@id/vehiclePanel"
+        app:layout_constraintStart_toEndOf="@id/btnAssignDriver"
         app:layout_constraintEnd_toEndOf="@id/rightGuide" />
 
-
-    <!-- Barrier below the three side-by-side buttons -->
+    <!-- Barrier below the 4-button icon row -->
     <androidx.constraintlayout.widget.Barrier
         android:id="@+id/tagsRowBottom"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         app:barrierDirection="bottom"
-        app:constraint_referenced_ids="btnKeyBagTags,btnCarTag,btnAssignDriver" />
+        app:constraint_referenced_ids="btnKeyBagTags,btnCarTag,btnAssignDriver,btnDriverCheckIn" />
 
-    <!-- INTAKE -->
+    <!-- INTAKE (restored; full width) -->
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btnCheckIn"
         android:layout_width="0dp"
@@ -204,7 +280,7 @@
         app:layout_constraintStart_toStartOf="@id/leftGuide"
         app:layout_constraintEnd_toEndOf="@id/rightGuide" />
 
-    <!-- RELEASE -->
+    <!-- RELEASE (full width, below intake) -->
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btnCheckOut"
         android:layout_width="0dp"
@@ -223,6 +299,10 @@
         app:layout_constraintEnd_toEndOf="@id/rightGuide" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>
+
+
+
+
 
 
 

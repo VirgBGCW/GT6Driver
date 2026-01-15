@@ -10,8 +10,8 @@ android {
         applicationId = "com.example.gt6driver"
         minSdk = 24
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.0"
+        versionCode = 10
+        versionName = "SD2026"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

@@ -67,6 +67,9 @@
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
+        android:spinnerMode="dropdown"
+        android:popupBackground="@android:color/white"
+        android:background="@android:color/white"
         app:layout_constraintTop_toBottomOf="@id/progress"
         app:layout_constraintStart_toStartOf="@id/leftGuide"
         app:layout_constraintEnd_toEndOf="@id/rightGuide" />
@@ -91,9 +94,62 @@
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
+        android:spinnerMode="dropdown"
+        android:popupBackground="@android:color/white"
+        android:background="@android:color/white"
         app:layout_constraintTop_toBottomOf="@id/driverLabel"
         app:layout_constraintStart_toStartOf="@id/leftGuide"
         app:layout_constraintEnd_toEndOf="@id/rightGuide" />
+
+    <!-- ✅ Device Name -->
+    <TextView
+        android:id="@+id/tvDeviceName"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="Device Name"
+        android:textColor="@color/white"
+        android:textSize="13sp"
+        android:textStyle="bold"
+        android:alpha="0.90"
+        android:gravity="center"
+        android:textAlignment="center"
+        android:layout_marginBottom="4dp"
+        app:layout_constraintBottom_toTopOf="@id/tvLocalVideos"
+        app:layout_constraintStart_toStartOf="@id/leftGuide"
+        app:layout_constraintEnd_toEndOf="@id/rightGuide" />
+
+    <!-- ✅ NEW: Local Videos count (between device name and version) -->
+    <TextView
+        android:id="@+id/tvLocalVideos"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="Local Videos —"
+        android:textColor="@color/white"
+        android:textSize="13sp"
+        android:textStyle="bold"
+        android:alpha="0.90"
+        android:gravity="center"
+        android:textAlignment="center"
+        android:layout_marginBottom="4dp"
+        app:layout_constraintBottom_toTopOf="@id/tvVersion"
+        app:layout_constraintStart_toStartOf="@id/leftGuide"
+        app:layout_constraintEnd_toEndOf="@id/rightGuide" />
+
+    <!-- ✅ Version (name + code) -->
+    <TextView
+        android:id="@+id/tvVersion"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="v0.0 (0)"
+        android:textColor="@color/white"
+        android:textSize="12sp"
+        android:alpha="0.75"
+        android:gravity="center"
+        android:textAlignment="center"
+        android:layout_marginBottom="12dp"
+        app:layout_constraintStart_toStartOf="@id/leftGuide"
+        app:layout_constraintEnd_toEndOf="@id/rightGuide"
+        app:layout_constraintBottom_toTopOf="@id/btnSubmit" />
 
     <!-- Submit button pinned to bottom -->
     <com.google.android.material.button.MaterialButton
@@ -114,4 +170,7 @@
         android:backgroundTint="@color/redButton" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>
+
+
+
 
