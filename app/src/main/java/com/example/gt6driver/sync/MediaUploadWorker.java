@@ -18,10 +18,18 @@ import androidx.work.ForegroundInfo;
 import androidx.work.Worker;
 import androidx.work.WorkerParameters;
 
+import com.example.gt6driver.util.DeviceInfo;
+
+import org.json.JSONObject;
+
+import java.io.BufferedReader;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.lang.reflect.Method;
+import java.util.HashMap;
+import java.util.Locale;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class MediaUploadWorker extends Worker {
@@ -30,17 +38,15 @@ public class MediaUploadWorker extends Worker {
     private static final String TAG = "GT6-Worker";
 
     // === Keys expected from GT6MediaSync ===
-    public static final String KEY_SAS = "sasQuery";                // SAS query (with or without leading '?')
-    public static final String KEY_CONTAINER_URL = "containerUrl";  // e.g. https://acct.blob.core.windows.net/driver
-    public static final String KEY_RECURSIVE = "recursive";         // (unused here, reserved)
-    public static final String KEY_PREFIX = "prefix";               // optional blob path prefix (e.g., event/date)
+    public static final String KEY_SAS = "sasQuery";
+    public static final String KEY_CONTAINER_URL = "containerUrl";
+    public static final String KEY_RECURSIVE = "recursive";
+    public static final String KEY_PREFIX = "prefix";
 
-    // === Defaults if inputs AND prefs are missing (last-ditch) ===
     private static final String DEFAULT_CONTAINER_BASE = "https://stgt6driverappprod.blob.core.windows.net";
     private static final String DEFAULT_CONTAINER_NAME = "driver";
     private static final String DEFAULT_PREFIX = "";
 
-    // Per-blob in-process lock to prevent concurrent duplicate uploads
     private static final ConcurrentHashMap<String, Object> LOCKS = new ConcurrentHashMap<>();
     private static Object lockFor(String key) { return LOCKS.computeIfAbsent(key, k -> new Object()); }
 
@@ -51,42 +57,34 @@ public class MediaUploadWorker extends Worker {
     @NonNull
     @Override
     public Result doWork() {
-        // Foreground (Android 14+ needs a type)
         setForegroundAsync(makeForegroundInfo("GT6: uploading media..."));
 
-        // ---- Read inputs; if missing, fall back to GT6MediaSync (prefs); if still missing, use hard defaults ----
         final String sasInputParam       = getInputData().getString(KEY_SAS);
         final String containerInputParam = getInputData().getString(KEY_CONTAINER_URL);
         String prefix                    = getInputData().getString(KEY_PREFIX);
 
-        // Also fetch prefs to help debug where values came from
         final String sasPref       = GT6MediaSync.getSas(getApplicationContext());
         final String containerPref = GT6MediaSync.getContainerUrl(getApplicationContext());
 
-        // Choose effective values (inputs > prefs > defaults)
         final String sasRaw = !TextUtils.isEmpty(sasInputParam) ? sasInputParam : sasPref;
         final String containerRaw = !TextUtils.isEmpty(containerInputParam) ? containerInputParam : containerPref;
 
         Log.i(TAG, "CFG SOURCE: inputUrl=" + containerInputParam + " prefUrl=" + containerPref +
                 " defaultUrl=" + (DEFAULT_CONTAINER_BASE + "/" + DEFAULT_CONTAINER_NAME));
 
-        // Validate SAS (must exist from either input or prefs)
         if (TextUtils.isEmpty(sasRaw)) {
             Log.e(TAG, "Missing SAS");
             return Result.failure(new Data.Builder().putString("error", "Missing SAS").build());
         }
 
-        // Normalize container URL (fallback to hard default only if prefs missing)
         final String containerUrl = normalizeContainerUrl(
                 TextUtils.isEmpty(containerRaw)
                         ? (DEFAULT_CONTAINER_BASE + "/" + DEFAULT_CONTAINER_NAME)
                         : containerRaw
         );
 
-        // Normalize prefix (may be empty)
         prefix = trimSlashes(TextUtils.isEmpty(prefix) ? DEFAULT_PREFIX : prefix);
 
-        // Log the resolved config (do NOT print full SAS)
         try {
             Uri u = Uri.parse(containerUrl);
             String host = (u != null) ? u.getHost() : "<?>";
@@ -98,7 +96,6 @@ public class MediaUploadWorker extends Worker {
             Log.e(TAG, "Worker cfg logging failed: " + e.getMessage());
         }
 
-        // Build uploader (constructor will prepend '?' if missing)
         final AzureUploader uploader = new AzureUploader(sasRaw);
         final ContentResolver cr = getApplicationContext().getContentResolver();
 
@@ -109,7 +106,7 @@ public class MediaUploadWorker extends Worker {
                 uploader,
                 containerUrl,
                 prefix,
-                /*isVideo=*/false
+                false
         );
 
         boolean okVideos = processTable(
@@ -119,10 +116,9 @@ public class MediaUploadWorker extends Worker {
                 uploader,
                 containerUrl,
                 prefix,
-                /*isVideo=*/true
+                true
         );
 
-        // Re-arm content triggers so new captures continue to auto-upload
         GT6MediaSync.enqueueContentTriggers(getApplicationContext());
 
         return (okImages && okVideos) ? Result.success() : Result.retry();
@@ -136,7 +132,6 @@ public class MediaUploadWorker extends Worker {
                                  String prefix,
                                  boolean isVideo) {
 
-        // Primary query (your original folders)
         String like1 = isVideo ? "Movies/GT6/%" : "Pictures/GT6/%";
         String like2 = isVideo ? "Movies/gt6/%" : "Pictures/gt6/%";
         String sel   = MediaStore.MediaColumns.RELATIVE_PATH + " LIKE ? OR " +
@@ -149,27 +144,24 @@ public class MediaUploadWorker extends Worker {
                 MediaStore.MediaColumns.RELATIVE_PATH,
                 MediaStore.MediaColumns.SIZE,
                 MediaStore.MediaColumns.MIME_TYPE,
-                // API 30+; harmless on older (query will just omit)
                 "owner_package_name"
         };
 
         Log.i(TAG, (isVideo ? "[VIDEO]" : "[IMAGE]") +
                 " scanning sel=(" + sel + ") args=[" + args[0] + "," + args[1] + "]");
 
-        int totalFound = 0;
         boolean allOk = true;
 
         try (Cursor c = cr.query(table, projection, sel, args,
                 MediaStore.MediaColumns.DATE_ADDED + " DESC")) {
 
             if (c != null) {
-                totalFound = c.getCount();
                 Log.i(TAG, (isVideo ? "[VIDEO]" : "[IMAGE]") +
-                        " MediaStore query found " + totalFound + " rows.");
+                        " MediaStore query found " + c.getCount() + " rows.");
 
                 while (c.moveToNext()) {
                     if (!uploadRow(cr, table, c, defaultMime, uploader, containerUrl, prefix, isVideo)) {
-                        allOk = false; // trigger retry
+                        allOk = false;
                     }
                 }
             } else {
@@ -178,86 +170,6 @@ public class MediaUploadWorker extends Worker {
         } catch (Exception e) {
             Log.e(TAG, "Primary query failed: " + e.getMessage());
             allOk = false;
-        }
-
-        // If nothing matched, dump the most recent 10 rows for visibility (NO 'LIMIT' in sortOrder)
-        if (totalFound == 0) {
-            try (Cursor dbg = cr.query(
-                    table,
-                    new String[] {
-                            MediaStore.MediaColumns._ID,
-                            MediaStore.MediaColumns.DISPLAY_NAME,
-                            MediaStore.MediaColumns.RELATIVE_PATH
-                    },
-                    null, null,
-                    MediaStore.MediaColumns.DATE_ADDED + " DESC"
-            )) {
-                if (dbg != null) {
-                    int lim = 0;
-                    while (dbg.moveToNext() && lim++ < 10) {
-                        Log.i(TAG, (isVideo ? "[VIDEO]" : "[IMAGE]") + " DEBUG row: " +
-                                "name=" + dbg.getString(1) +
-                                " relPath=" + dbg.getString(2));
-                    }
-                }
-            } catch (Exception e) {
-                Log.w(TAG, "DEBUG probe failed: " + e.getMessage());
-            }
-        }
-
-        // Fallback: query Files under Movies/GT6 when primary had 0 videos
-        if (isVideo && totalFound == 0) {
-            Uri files = MediaStore.Files.getContentUri("external");
-            String filesSel =
-                    "(" + MediaStore.MediaColumns.RELATIVE_PATH + " LIKE ? OR " +
-                            MediaStore.MediaColumns.RELATIVE_PATH + " LIKE ?)" +
-                            " AND " + MediaStore.Files.FileColumns.MEDIA_TYPE + "=" +
-                            MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO;
-            String[] filesArgs = new String[]{ "Movies/GT6/%", "Movies/gt6/%" };
-
-            String[] filesProj = new String[] {
-                    MediaStore.Files.FileColumns._ID,
-                    MediaStore.MediaColumns.DISPLAY_NAME,
-                    MediaStore.MediaColumns.RELATIVE_PATH,
-                    MediaStore.MediaColumns.SIZE,
-                    MediaStore.MediaColumns.MIME_TYPE
-            };
-
-            try (Cursor c = cr.query(files, filesProj, filesSel, filesArgs,
-                    MediaStore.MediaColumns.DATE_ADDED + " DESC")) {
-
-                if (c != null) {
-                    Log.i(TAG, "[VIDEO][FALLBACK] Files matched: " + c.getCount());
-                    while (c.moveToNext()) {
-                        if (!uploadRow(cr, files, c, "video/mp4", uploader, containerUrl, prefix, true)) {
-                            allOk = false;
-                        }
-                    }
-                } else {
-                    Log.w(TAG, "[VIDEO][FALLBACK] Files query returned null cursor");
-                }
-            } catch (Exception e) {
-                Log.e(TAG, "[VIDEO][FALLBACK] Files query failed: " + e.getMessage());
-                allOk = false;
-            }
-        }
-
-        // Optional: very broad probe to see any GT6 anywhere
-        if (totalFound == 0) {
-            String broadSel = MediaStore.MediaColumns.RELATIVE_PATH + " LIKE ?";
-            String[] broadArgs = new String[] { "%/GT6/%" };
-            try (Cursor c = cr.query(table, projection, broadSel, broadArgs,
-                    MediaStore.MediaColumns.DATE_ADDED + " DESC")) {
-                if (c != null) {
-                    Log.i(TAG, (isVideo ? "[VIDEO]" : "[IMAGE]") +
-                            " broad probe matched: " + c.getCount());
-                    int lim = 0;
-                    while (c.moveToNext() && lim++ < 10) {
-                        Log.i(TAG, "  → name=" + c.getString(1) +
-                                " relPath=" + c.getString(2));
-                    }
-                }
-            } catch (Exception ignore) {}
         }
 
         return allOk;
@@ -285,28 +197,54 @@ public class MediaUploadWorker extends Worker {
         if (TextUtils.isEmpty(consignmentId)) {
             Log.w(TAG, (isVideo ? "[VIDEO]" : "[IMAGE]") +
                     " skip (no consignmentId) relPath=" + relPath + " name=" + name);
-            return true; // not a failure, just skip
+            return true;
         }
 
         if (TextUtils.isEmpty(name)) {
             name = isVideo ? "release.mp4" : "photo.jpg";
         }
 
-        // Build blob path (no extra "driver" here; containerUrl already points at container)
         String blobPath = joinPath(prefix, consignmentId, name);
 
-        // ---- ensure only one worker handles this blob at a time ----
         Object lock = lockFor(blobPath);
         synchronized (lock) {
+
+            // ----- Build metadata -----
+            HashMap<String, String> meta = buildDefaultMeta(consignmentId, name, relPath);
+
+            // ✅ If this is a video, attempt to read sidecar: {base}.meta.json
+            Uri sidecarUri = null;
+            if (isVideo) {
+                String base = baseNameNoExt(name); // "release" from "release.mp4"
+                String sidecarName = base + ".meta.json";
+
+                sidecarUri = findSidecarInDownloads(cr, sidecarName, consignmentId);
+                if (sidecarUri != null) {
+                    HashMap<String, String> sidecarMeta = readSidecarJson(cr, sidecarUri);
+                    if (sidecarMeta != null && !sidecarMeta.isEmpty()) {
+                        meta.putAll(sidecarMeta); // sidecar overrides defaults
+                        Log.i(TAG, "Sidecar found; metadata overridden from " + sidecarName);
+                    } else {
+                        Log.w(TAG, "Sidecar found but empty/unreadable: " + sidecarUri);
+                    }
+                } else {
+                    Log.i(TAG, "No sidecar found for " + sidecarName + "; using defaults.");
+                }
+            }
+
             Log.i(TAG, "Uploading → " + containerUrl + "/" + blobPath +
                     " (mime=" + mime + ", size=" + size + ")");
 
-            // Skip if it already exists in Azure (prevents re-uploads).
-            // This uses reflection so the code compiles even if AzureUploader doesn't have blobExists()
             try {
                 if (azureBlobExistsReflect(uploader, containerUrl, blobPath)) {
                     Log.i(TAG, "Skip upload; blob already exists: " + containerUrl + "/" + blobPath);
-                    tryDelete(getApplicationContext(), cr, itemUri); // attempt cleanup anyway
+
+                    // Cleanup local media anyway
+                    tryDelete(getApplicationContext(), cr, itemUri);
+
+                    // If we found a sidecar, clean it too
+                    if (sidecarUri != null) tryDelete(getApplicationContext(), cr, sidecarUri);
+
                     return true;
                 }
             } catch (Exception checkEx) {
@@ -316,40 +254,139 @@ public class MediaUploadWorker extends Worker {
             try (InputStream in = cr.openInputStream(itemUri)) {
                 if (in == null) {
                     Log.w(TAG, "InputStream null for " + itemUri);
-                    return true; // skip
+                    return true;
                 }
 
                 long contentLen = size > 0 ? size : guessLength(cr, itemUri);
-                uploader.putBlobAuto(containerUrl, blobPath, mime, contentLen, in); // handles >256MB
 
-                // Delete immediately after success
+                // ✅ Upload WITH metadata (this is what Azure Properties will show)
+                uploader.putBlobAuto(containerUrl, blobPath, mime, contentLen, in, meta);
+
+                // Delete local media after success
                 tryDelete(getApplicationContext(), cr, itemUri);
 
-                Log.i(TAG, "Uploaded; delete attempted: " + itemUri);
+                // Delete sidecar too after success (best-effort)
+                if (sidecarUri != null) tryDelete(getApplicationContext(), cr, sidecarUri);
+
+                Log.i(TAG, "Uploaded; delete attempted: " + itemUri +
+                        (sidecarUri != null ? (" + sidecar " + sidecarUri) : ""));
                 return true;
 
             } catch (FileNotFoundException e) {
                 Log.w(TAG, "File not found: " + itemUri);
-                return true; // skip
+                return true;
             } catch (IOException e) {
                 Log.e(TAG, "Upload failed; will retry. " + e.getMessage());
-                return false; // cause retry
-            } finally {
-                // optional: release the key to keep map from growing forever
-                // LOCKS.remove(blobPath);
+                return false;
             }
         }
     }
 
-    // Try to call AzureUploader.blobExists(String, String) via reflection if available.
+    // ---------------- Sidecar helpers ----------------
+
+    /** Defaults used when sidecar isn't present. */
+    private HashMap<String, String> buildDefaultMeta(String consignmentId, String filename, String relPath) {
+        HashMap<String, String> meta = new HashMap<>();
+        meta.put("createdat", java.time.Instant.now().toString()); // ISO-8601
+        meta.put("driver", "Upload Agent");
+        meta.put("device", DeviceInfo.getDeviceName(getApplicationContext()));
+        meta.put("consignmentid", consignmentId);
+        meta.put("filename", filename);
+        meta.put("relpath", relPath);
+        return meta;
+    }
+
+    /** Find sidecar in Downloads (recommended storage location for JSON sidecars on scoped storage). */
+    private Uri findSidecarInDownloads(ContentResolver cr, String sidecarName, String consignmentId) {
+        // We look for:
+        // DISPLAY_NAME = "release.meta.json"
+        // and RELATIVE_PATH contains "/GT6/{consignmentId}/" or just "/GT6/" (in case you don't nest by id)
+        Uri table = MediaStore.Downloads.EXTERNAL_CONTENT_URI;
+
+        String[] proj = new String[] {
+                MediaStore.MediaColumns._ID,
+                MediaStore.MediaColumns.DISPLAY_NAME,
+                MediaStore.MediaColumns.RELATIVE_PATH
+        };
+
+        String sel = MediaStore.MediaColumns.DISPLAY_NAME + "=? AND (" +
+                MediaStore.MediaColumns.RELATIVE_PATH + " LIKE ? OR " +
+                MediaStore.MediaColumns.RELATIVE_PATH + " LIKE ?" +
+                ")";
+
+        String like1 = "%/GT6/" + consignmentId + "/%";
+        String like2 = "%/GT6/%";
+
+        try (Cursor c = cr.query(table, proj, sel, new String[]{sidecarName, like1, like2},
+                MediaStore.MediaColumns.DATE_ADDED + " DESC")) {
+
+            if (c != null && c.moveToFirst()) {
+                long id = c.getLong(0);
+                return ContentUris.withAppendedId(table, id);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Sidecar lookup failed: " + e.getMessage());
+        }
+        return null;
+    }
+
+    /** Read sidecar JSON and convert into metadata map; unknown keys are ignored. */
+    private HashMap<String, String> readSidecarJson(ContentResolver cr, Uri sidecarUri) {
+        try (InputStream in = cr.openInputStream(sidecarUri)) {
+            if (in == null) return null;
+
+            BufferedReader br = new BufferedReader(new InputStreamReader(in));
+            StringBuilder sb = new StringBuilder();
+            String line;
+            while ((line = br.readLine()) != null) sb.append(line);
+
+            JSONObject o = new JSONObject(sb.toString());
+            HashMap<String, String> meta = new HashMap<>();
+
+            // Accept either your keys or normalized keys
+            putIfPresent(meta, "createdat", o.optString("createdAt", null));
+            putIfPresent(meta, "createdat", o.optString("createdat", null));
+
+            putIfPresent(meta, "consignmentid", o.optString("consignmentId", null));
+            putIfPresent(meta, "consignmentid", o.optString("consignmentid", null));
+
+            putIfPresent(meta, "device", o.optString("device", null));
+
+            putIfPresent(meta, "driver", o.optString("driver", null));
+
+            putIfPresent(meta, "lot", o.optString("lot", null));
+
+            return meta;
+
+        } catch (Exception e) {
+            Log.w(TAG, "Sidecar read failed: " + e.getMessage());
+            return null;
+        }
+    }
+
+    private static void putIfPresent(HashMap<String, String> meta, String key, String value) {
+        if (meta == null) return;
+        if (TextUtils.isEmpty(key)) return;
+        if (value == null) return;
+        String v = value.trim();
+        if (v.isEmpty() || "null".equalsIgnoreCase(v)) return;
+        meta.put(key.toLowerCase(Locale.US), v);
+    }
+
+    private static String baseNameNoExt(String filename) {
+        if (filename == null) return "";
+        int dot = filename.lastIndexOf('.');
+        return (dot > 0) ? filename.substring(0, dot) : filename;
+    }
+
+    // ---------------- Existing helpers ----------------
+
     private static boolean azureBlobExistsReflect(AzureUploader uploader, String containerUrl, String blobPath) throws Exception {
         try {
             Method m = uploader.getClass().getMethod("blobExists", String.class, String.class);
             Object res = m.invoke(uploader, containerUrl, blobPath);
             if (res instanceof Boolean) return (Boolean) res;
-        } catch (NoSuchMethodException nsme) {
-            // silently ignore if method not present (older AzureUploader)
-        }
+        } catch (NoSuchMethodException nsme) {}
         return false;
     }
 
@@ -364,7 +401,6 @@ public class MediaUploadWorker extends Worker {
 
     private static void tryDelete(Context ctx, ContentResolver cr, Uri uri) {
         try {
-            // On Android 11+ only the owner app can delete silently.
             if (android.os.Build.VERSION.SDK_INT >= 30 && ctx != null) {
                 String myPkg = ctx.getPackageName();
                 String owner = null;
@@ -393,7 +429,6 @@ public class MediaUploadWorker extends Worker {
 
     private static String safe(String s) { return s == null ? "" : s; }
 
-    /** Finds consignmentId in RELATIVE_PATH like "Pictures/GT6/158515/" or "Movies/gt6/158515/". */
     private static String parseConsignmentId(String rel) {
         if (TextUtils.isEmpty(rel)) return null;
         int idx = rel.indexOf("GT6/");
@@ -404,7 +439,6 @@ public class MediaUploadWorker extends Worker {
         return (slash > 0) ? tail.substring(0, slash) : tail;
     }
 
-    // ---------- helpers to keep blob names tidy ----------
     private static String trimSlashes(String s) {
         if (s == null) return "";
         return s.replaceAll("^/+", "").replaceAll("/+$", "");
@@ -428,7 +462,6 @@ public class MediaUploadWorker extends Worker {
     }
 
     private ForegroundInfo makeForegroundInfo(String text) {
-        // Create/update the channel (safe to call repeatedly)
         if (android.os.Build.VERSION.SDK_INT >= 26) {
             android.app.NotificationChannel ch = new android.app.NotificationChannel(
                     FG_CHANNEL, "GT6 Uploads", android.app.NotificationManager.IMPORTANCE_LOW);
@@ -442,7 +475,6 @@ public class MediaUploadWorker extends Worker {
                 .setOngoing(true)
                 .build();
 
-        // API 29+: include the FGS type (dataSync)
         if (android.os.Build.VERSION.SDK_INT >= 29) {
             return new ForegroundInfo(
                     FG_ID,
@@ -459,6 +491,8 @@ public class MediaUploadWorker extends Worker {
         return url.replaceAll("/+$", "");
     }
 }
+
+
 
 
 

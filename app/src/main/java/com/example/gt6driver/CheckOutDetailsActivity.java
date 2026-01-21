@@ -48,6 +48,7 @@ import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.checkbox.MaterialCheckBox;
 import com.google.android.material.textfield.TextInputEditText;
 import com.google.android.material.textfield.TextInputLayout;
+import com.example.gt6driver.util.DeviceInfo;
 
 // Common Nav extras
 import com.example.gt6driver.Nav;
@@ -92,15 +93,6 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
     private TextView vinWarningMessage;
     private boolean vinExpanded = false;
     private boolean vinNoMatchMode = false;
-
-    // MILEAGE
-    private MaterialCardView mileagePanel;
-    private View mileageGroup;
-    private ImageView mileageIcon;
-    private TextInputLayout enterMileageLayout;
-    private TextInputEditText enterMileageInput;
-    private MaterialButton btnMileageUpdate;
-    private boolean mileageExpanded = false;
 
     // KEY CHECK
     private MaterialCardView keyPanel;
@@ -164,11 +156,10 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
 
     // Completion flags
     private boolean vinDone = false;
-    private boolean mileageDone = false;
     private boolean keyDone = false;
     private boolean videoDone = false;
 
-    private ImageButton btnMileageCamera, btnKeyCamera;
+    private ImageButton btnKeyCamera;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -194,15 +185,6 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
         noMatchGroup     = findViewById(R.id.noMatchGroup);
         verifyVinValue   = findViewById(R.id.verifyVinValue);
         vinWarningMessage= findViewById(R.id.vinWarningMessage);
-
-        // Mileage
-        mileagePanel       = findViewById(R.id.mileagePanel);
-        mileageGroup       = findViewById(R.id.mileageGroup);
-        mileageIcon        = findViewById(R.id.mileageIcon);
-        enterMileageLayout = findViewById(R.id.enterMileageLayout);
-        enterMileageInput  = findViewById(R.id.enterMileageInput);
-        btnMileageUpdate   = findViewById(R.id.btnMileageUpdate);
-        btnMileageCamera   = findViewById(R.id.btnMileageCamera);
 
         // Key
         keyPanel            = findViewById(R.id.keyPanel);
@@ -323,10 +305,6 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
                                         if (releaseModel.keyCheck == null) releaseModel.keyCheck = new ReleasePayload.KeyCheck();
                                         releaseModel.keyCheck.photoUrl = mediaUrl("keycheck_release.jpg");
                                         break;
-                                    case "mileage":
-                                        if (releaseModel.mileage == null) releaseModel.mileage = new ReleasePayload.Mileage();
-                                        releaseModel.mileage.photoUrl = mediaUrl("mileage_release.jpg");
-                                        break;
                                     case "owner":
                                         if (releaseModel.ownerVerification == null) releaseModel.ownerVerification = new ReleasePayload.OwnerVerification();
                                         releaseModel.ownerVerification.licensePhotoUrl = mediaUrl("owner_release.jpg");
@@ -362,6 +340,7 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
         );
 
         // ==== VIDEO launcher (like CheckIn) ====
+// ==== VIDEO launcher (like CheckIn) ====
         recordVideoLauncher = registerForActivityResult(
                 new ActivityResultContracts.StartActivityForResult(),
                 result -> {
@@ -389,10 +368,36 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
                             lastCapturedVideoUri = target;
                             try { getContentResolver().notifyChange(lastCapturedVideoUri, null); } catch (Exception ignored) {}
 
-                            // ✅ NEW: auto-accept (same as if user pressed ACCEPT)
+                            // ✅ NEW: write sidecar JSON with metadata your uploader can attach to Azure blob
+// ✅ NEW: write sidecar JSON (DIRECT filesystem)
+                            String createdAtUtc = isoUtcNow();
+                            String deviceName = DeviceInfo.getDeviceName(this);
+
+                            boolean sidecarOk = writeSidecarJsonToDownload(
+                                    "release",
+                                    isoUtcNow(),
+                                    consignmentIdStr(),
+                                    deviceName,
+                                    resolveDriverName(),
+                                    (lot != null ? lot : "")
+                            );
+
+
+                            Log.i(TAG, "Sidecar write attempted for release.meta.json ok=" + sidecarOk);
+                            if (!sidecarOk) {
+                                Toast.makeText(this, "Sidecar JSON FAILED (see logcat " + TAG + ")", Toast.LENGTH_LONG).show();
+                            }
+
+
+
+// DEBUG: verify the sidecar row exists (Q+ only)
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                                Log.i(TAG, "Sidecar write attempted for release.meta.json");
+                            }
+                            // ✅ auto-accept (same as if user pressed ACCEPT)
                             acceptReleaseVideoIfAvailable();
 
-                            // If you want to kick your uploader immediately:
+                            // Kick uploader immediately (optional)
                             com.example.gt6driver.sync.GT6MediaSync.enqueueImmediate(this);
 
                             refreshConfirmEnabled();
@@ -405,6 +410,7 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
                     }
                 }
         );
+
 
         // CAMERA permission
         requestCameraPermissionLauncher = registerForActivityResult(
@@ -454,30 +460,6 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
                 if (noMatchGroup != null) noMatchGroup.setVisibility(View.VISIBLE);
                 setVinExpanded(true);
                 refreshConfirmEnabled();
-            });
-        }
-
-        // MILEAGE
-        if (mileagePanel != null) mileagePanel.setOnClickListener(v -> toggleMileagePanel());
-        if (btnMileageUpdate != null) {
-            btnMileageUpdate.setOnClickListener(v -> {
-                String miles = safe(enterMileageInput);
-                if (TextUtils.isEmpty(miles)) {
-                    enterMileageInput.setError("Mileage is required");
-                    enterMileageInput.requestFocus();
-                    return;
-                }
-                setStatusIcon(mileageIcon, true);
-                mileageDone = true;
-                setMileageExpanded(false);
-                refreshConfirmEnabled();
-            });
-        }
-        if (btnMileageCamera != null) {
-            btnMileageCamera.setOnClickListener(v -> {
-                setMileageExpanded(true);
-                hideKeyboard();
-                ensureCameraForPhoto("mileage");
             });
         }
 
@@ -661,6 +643,201 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
 
         refreshConfirmEnabled();
     }
+    // New findVideoRow to prevent Duplicates
+    @androidx.annotation.Nullable
+    private Uri findVideoRow(String relPathNoSlash, String displayName) {
+        Uri collection = MediaStore.Video.Media.EXTERNAL_CONTENT_URI;
+        String[] proj = { MediaStore.Video.Media._ID };
+
+        // OEMs differ on trailing slash storage
+        String[] relPaths = new String[] {
+                relPathNoSlash,
+                relPathNoSlash + "/"
+        };
+
+        String sel = MediaStore.MediaColumns.DISPLAY_NAME + "=? AND " +
+                MediaStore.MediaColumns.RELATIVE_PATH + "=?";
+
+        for (String rp : relPaths) {
+            try (Cursor c = getContentResolver().query(
+                    collection, proj, sel, new String[]{displayName, rp}, null)) {
+                if (c != null && c.moveToFirst()) {
+                    long id = c.getLong(0);
+                    return Uri.withAppendedPath(collection, String.valueOf(id));
+                }
+            } catch (Exception ignored) {}
+        }
+        return null;
+    }
+
+    // Side Car to Write Meta Data so we know who - tablet, etc did the video
+    private boolean writeSidecarJsonToDownload(
+            String baseNameNoExt,   // "release" or "intake"
+            String createdAtUtc,
+            String consignmentId,
+            String tablet,
+            String driver,
+            String lot
+    ) {
+        final String sidecarName = baseNameNoExt + ".meta.json";
+
+        try {
+            // MUST be under Download/ on this device
+            final String relPath = Environment.DIRECTORY_DOWNLOADS + "/GT6/" + consignmentId + "/";
+
+            Uri collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI;
+
+            // Delete existing to avoid "(1)"
+            try {
+                String sel = MediaStore.MediaColumns.DISPLAY_NAME + "=? AND " +
+                        MediaStore.MediaColumns.RELATIVE_PATH + "=?";
+                int d = getContentResolver().delete(collection, sel, new String[]{ sidecarName, relPath });
+                Log.i(TAG, "Sidecar(Download): deleted existing rows d=" + d);
+            } catch (Exception e) {
+                Log.w(TAG, "Sidecar(Download): delete existing failed", e);
+            }
+
+            ContentValues cv = new ContentValues();
+            cv.put(MediaStore.MediaColumns.DISPLAY_NAME, sidecarName);
+            cv.put(MediaStore.MediaColumns.MIME_TYPE, "application/json");
+            cv.put(MediaStore.MediaColumns.RELATIVE_PATH, relPath);
+            cv.put(MediaStore.MediaColumns.IS_PENDING, 1);
+
+            Uri jsonUri = getContentResolver().insert(collection, cv);
+            if (jsonUri == null) {
+                Log.e(TAG, "Sidecar(Download): insert returned null relPath=" + relPath);
+                return false;
+            }
+
+            String json =
+                    "{"
+                            + "\"createdAt\":\"" + createdAtUtc + "\","
+                            + "\"consignmentId\":\"" + consignmentId + "\","
+                            + "\"tablet\":\"" + tablet + "\","
+                            + "\"driver\":\"" + driver + "\","
+                            + "\"lot\":\"" + lot + "\""
+                            + "}";
+
+            try (java.io.OutputStream out = getContentResolver().openOutputStream(jsonUri, "w")) {
+                if (out == null) {
+                    Log.e(TAG, "Sidecar(Download): openOutputStream null " + jsonUri);
+                    try { getContentResolver().delete(jsonUri, null, null); } catch (Exception ignored) {}
+                    return false;
+                }
+                out.write(json.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                out.flush();
+            }
+
+            ContentValues done = new ContentValues();
+            done.put(MediaStore.MediaColumns.IS_PENDING, 0);
+            getContentResolver().update(jsonUri, done, null, null);
+
+            long size = 0;
+            try (Cursor c = getContentResolver().query(
+                    jsonUri, new String[]{ MediaStore.MediaColumns.SIZE, MediaStore.MediaColumns.RELATIVE_PATH, MediaStore.MediaColumns.DISPLAY_NAME },
+                    null, null, null
+            )) {
+                if (c != null && c.moveToFirst()) {
+                    size = c.getLong(0);
+                    Log.i(TAG, "Sidecar(Download): wrote " + c.getString(1) + c.getString(2) +
+                            " size=" + size + " uri=" + jsonUri);
+                }
+            }
+
+            return size > 0;
+
+        } catch (Exception e) {
+            Log.e(TAG, "Sidecar(Download): write failed", e);
+            return false;
+        }
+    }
+
+
+
+    // getting utc , extra stuff
+    private String isoUtcNow() {
+        long now = System.currentTimeMillis();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            return java.time.Instant.ofEpochMilli(now).toString();
+        }
+        java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US);
+        sdf.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+        return sdf.format(new java.util.Date(now));
+    }
+
+
+
+    // Will look for existing and also insert date time stamp
+    private Uri createOrReplaceReleaseVideoUri() {
+        final String fileName = "release.mp4";
+        final String relPath =
+                Environment.DIRECTORY_MOVIES + "/" + consignmentSubdir();
+
+        // Timestamp "now"
+        final long nowMs = System.currentTimeMillis();
+
+        // ISO-8601 string (best for logs + parsing)
+        final String isoTime;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            isoTime = java.time.Instant.ofEpochMilli(nowMs).toString();
+        } else {
+            // Fallback for API < 26
+            java.text.SimpleDateFormat sdf =
+                    new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ", java.util.Locale.US);
+            isoTime = sdf.format(new java.util.Date(nowMs));
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+
+            // 🔥 CRITICAL: remove existing row to prevent (1) suffix
+            Uri existing = findVideoRow(relPath, fileName);
+            if (existing != null) {
+                try { getContentResolver().delete(existing, null, null); }
+                catch (Exception ignored) {}
+            }
+
+            ContentValues cv = new ContentValues();
+            cv.put(MediaStore.MediaColumns.DISPLAY_NAME, fileName);
+            cv.put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4");
+            cv.put(MediaStore.MediaColumns.RELATIVE_PATH, relPath);
+
+            // ✅ Timestamp metadata (seconds since epoch for these columns)
+            cv.put(MediaStore.MediaColumns.DATE_ADDED, nowMs / 1000L);
+            cv.put(MediaStore.MediaColumns.DATE_MODIFIED, nowMs / 1000L);
+
+            // ✅ Human-readable metadata you can inspect later
+            cv.put(MediaStore.MediaColumns.TITLE, "Release Video");
+
+            cv.put(MediaStore.MediaColumns.IS_PENDING, 1);
+
+            return getContentResolver()
+                    .insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, cv);
+
+        } else {
+            File movies =
+                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES);
+            File dir = new File(movies, consignmentSubdir());
+            if (!dir.exists() && !dir.mkdirs()) return null;
+
+            File f = new File(dir, fileName);
+            try {
+                if (f.exists()) f.delete();
+                f.createNewFile();
+
+                // ✅ Best-effort filesystem timestamp for pre-Q
+                // (Metadata fields like DESCRIPTION aren't available via filesystem-only approach)
+                // Still useful if someone browses file properties.
+                //noinspection ResultOfMethodCallIgnored
+                f.setLastModified(nowMs);
+
+                return FileProvider.getUriForFile(
+                        this, getPackageName() + ".fileprovider", f);
+            } catch (Exception e) {
+                return null;
+            }
+        }
+    }
+
 
     // ✅ NEW: shared accept logic used by BOTH auto-accept after capture and the ACCEPT button
     private void acceptReleaseVideoIfAvailable() {
@@ -728,23 +905,6 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
         if (p.vinVerify == null) p.vinVerify = new ReleasePayload.VinVerify();
         // Your UI uses vinDone + vinNoMatchMode
         p.vinVerify.isMatched = vinDone && !vinNoMatchMode;
-
-        // ---- Mileage ----
-        if (p.mileage == null) p.mileage = new ReleasePayload.Mileage();
-
-        String milesTxt = safe(enterMileageInput);
-        if (!TextUtils.isEmpty(milesTxt)) {
-            try {
-                p.mileage.odometer = Integer.parseInt(milesTxt.replaceAll("[^0-9]", ""));
-            } catch (Exception ignore) {
-                // leave as-is/null if invalid
-            }
-        }
-
-        // Only include a mileage photo URL if one was actually captured earlier
-        if (TextUtils.isEmpty(p.mileage.photoUrl)) {
-            p.mileage.photoUrl = "";  // blank when no captured photo
-        }
 
         // ---- Key Check ----
         if (p.keyCheck == null) p.keyCheck = new ReleasePayload.KeyCheck();
@@ -821,15 +981,6 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
             setVinExpanded(false);
         }
 
-        // Mileage
-        if (r.mileage != null) {
-            if (r.mileage.odometer != null && enterMileageInput != null) {
-                enterMileageInput.setText(String.valueOf(r.mileage.odometer));
-                setStatusIcon(mileageIcon, true);
-                mileageDone = true;
-            }
-            setMileageExpanded(false);
-        }
 
         // Key check
         if (r.keyCheck != null) {
@@ -875,12 +1026,29 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
         }
 
         // Video
-        if (r.video != null && r.video.videoUrl != null) {
-            try { lastCapturedVideoUri = Uri.parse(r.video.videoUrl); } catch (Exception ignored) {}
+// Video  ✅ ONLY check if server returned a non-empty URL
+        String serverVideoUrl = null;
+        if (r.video != null) serverVideoUrl = r.video.videoUrl;
+
+        if (!TextUtils.isEmpty(serverVideoUrl) && serverVideoUrl.trim().length() > 0) {
+            // keep the model value
+            if (releaseModel == null) releaseModel = r;
+            if (releaseModel.video == null) releaseModel.video = new ReleasePayload.Video();
+            releaseModel.video.videoUrl = serverVideoUrl.trim();
+
+            // UI + completion flag
             videoDone = true;
             setStatusIcon(videoIcon, true);
             setVideoExpanded(false);
+
+            // lastCapturedVideoUri is only for local capture; don't force parse remote URL as content Uri
+            // lastCapturedVideoUri = null;
+        } else {
+            // No URL from API: video is NOT complete on load
+            videoDone = false;
+            setStatusIcon(videoIcon, false); // or leave as-is if you prefer neutral icon
         }
+
 
         refreshConfirmEnabled();
     }
@@ -1005,29 +1173,9 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
     }
 
     private Uri createVideoUriForRelease() {
-        String fileName = "release.mp4";
-        String subdir   = consignmentSubdir(); // "GT6/{consignmentid}"
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            ContentValues cv = new ContentValues();
-            cv.put(MediaStore.MediaColumns.DISPLAY_NAME, fileName);
-            cv.put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4");
-            cv.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/" + subdir);
-            return getContentResolver().insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, cv);
-        } else {
-            File movies = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES);
-            File dir = new File(movies, subdir);
-            if (!dir.exists() && !dir.mkdirs()) return null;
-
-            File file = new File(dir, fileName);
-            try {
-                return FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", file);
-            } catch (IllegalArgumentException e) {
-                e.printStackTrace();
-                return null;
-            }
-        }
+        return createOrReplaceReleaseVideoUri();
     }
+
 
     private String resolveDriverName() {
         if (driver != null && !driver.trim().isEmpty()) return driver.trim();
@@ -1074,12 +1222,6 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
         }
         if (verifyActions != null) verifyActions.setVisibility(expanded ? View.VISIBLE : View.GONE);
         if (noMatchGroup != null) noMatchGroup.setVisibility(expanded && vinNoMatchMode ? View.VISIBLE : View.GONE);
-    }
-
-    private void toggleMileagePanel() { setMileageExpanded(!mileageExpanded); }
-    private void setMileageExpanded(boolean expanded) {
-        mileageExpanded = expanded;
-        if (mileageGroup != null) mileageGroup.setVisibility(expanded ? View.VISIBLE : View.GONE);
     }
 
     private void toggleKeyPanel() { setKeyExpanded(!keyExpanded); }
@@ -1142,12 +1284,13 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
     }
 
     private void refreshConfirmEnabled() {
-        boolean allDone = vinDone && mileageDone && keyDone && ownerDone && videoDone;
+        boolean allDone = vinDone && keyDone && ownerDone && videoDone;
         if (btnConfirm != null) {
             btnConfirm.setEnabled(allDone);
             btnConfirm.setAlpha(allDone ? 1f : 0.5f);
         }
     }
+
 
     private void setConfirmBusy(boolean busy) {
         if (btnConfirm != null) {

@@ -6,7 +6,10 @@ import android.util.Log;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
 import okhttp3.HttpUrl;
 import okhttp3.MediaType;
@@ -46,10 +49,44 @@ public class AzureUploader {
     /** AUTO: small files via single Put Blob; large files via Put Block/Put Block List. */
     public void putBlobAuto(String baseContainerUrl, String blobPath, String mime, long contentLength, InputStream data) throws IOException {
         if (contentLength >= 0 && contentLength <= MAX_PUT_BLOB) {
-            putBlobSmall(baseContainerUrl, blobPath, mime, contentLength, data);
+            putBlobSmall(baseContainerUrl, blobPath, mime, contentLength, data, /*metadata=*/null);
         } else {
-            putBlobLarge(baseContainerUrl, blobPath, mime, contentLength, data);
+            putBlobLarge(baseContainerUrl, blobPath, mime, contentLength, data, /*metadata=*/null);
         }
+    }
+
+    /**
+     * AUTO w/ metadata:
+     * - If metadata is null or missing keys, we fill safe defaults:
+     *   - createdat: ISO-8601 UTC now
+     *   - driver: "Upload Agent"
+     *
+     * NOTE: device name must be provided by the caller (Worker) if desired.
+     */
+    public void putBlobAuto(String baseContainerUrl,
+                            String blobPath,
+                            String mime,
+                            long contentLength,
+                            InputStream data,
+                            Map<String, String> metadata) throws IOException {
+
+        Map<String, String> meta = normalizeAndDefaultMetadata(metadata);
+
+        if (contentLength >= 0 && contentLength <= MAX_PUT_BLOB) {
+            putBlobSmall(baseContainerUrl, blobPath, mime, contentLength, data, meta);
+        } else {
+            putBlobLarge(baseContainerUrl, blobPath, mime, contentLength, data, meta);
+        }
+    }
+
+    // ✅ Convenience overload to avoid any generic/signature mismatch surprises
+    public void putBlobAuto(String baseContainerUrl,
+                            String blobPath,
+                            String mime,
+                            long contentLength,
+                            InputStream data,
+                            HashMap<String, String> metadata) throws IOException {
+        putBlobAuto(baseContainerUrl, blobPath, mime, contentLength, data, (Map<String, String>) metadata);
     }
 
     /** Single-call Put Blob (<=256MB). */
@@ -57,22 +94,23 @@ public class AzureUploader {
                               String blobPath,
                               String mime,
                               long contentLength,
-                              InputStream data) throws IOException {
+                              InputStream data,
+                              Map<String, String> metadata) throws IOException {
 
         HttpUrl url = buildObjectUrl(baseContainerUrl, blobPath);
         if (url == null) throw new IOException("Invalid URL");
 
         RequestBody body = new InputStreamRequestBody(mime, contentLength, data);
 
-        Request req = new Request.Builder()
+        Request.Builder rb = new Request.Builder()
                 .url(url)
                 .put(body)
-                .header("x-ms-blob-type", "BlockBlob")
-                // Optional, but harmless:
-                // .header("x-ms-version", "2021-08-06")
-                .build();
+                .header("x-ms-blob-type", "BlockBlob");
 
-        try (Response resp = execWithRetry(req)) {
+        // Apply x-ms-meta-* headers (safe even if metadata is empty)
+        applyMetadataHeaders(rb, metadata);
+
+        try (Response resp = execWithRetry(rb.build())) {
             if (!resp.isSuccessful()) {
                 throw new IOException("Azure Put Blob failed " + resp.code() + ": " + resp.message());
             }
@@ -80,7 +118,13 @@ public class AzureUploader {
     }
 
     /** Multi-part Put Block / Put Block List for arbitrarily large files. */
-    private void putBlobLarge(String baseContainerUrl, String blobPath, String mime, long contentLength, InputStream in) throws IOException {
+    private void putBlobLarge(String baseContainerUrl,
+                              String blobPath,
+                              String mime,
+                              long contentLength,
+                              InputStream in,
+                              Map<String, String> metadata) throws IOException {
+
         // 1) Stream blocks
         List<String> blockIds = new ArrayList<>();
         byte[] buf = new byte[BLOCK_SIZE_BYTES];
@@ -99,8 +143,8 @@ public class AzureUploader {
             Log.i(TAG, "Block uploaded: " + read + " bytes (total=" + total + " mime=" + mime + ") to " + blobPath);
         }
 
-        // 2) Commit block list
-        putBlockList(baseContainerUrl, blobPath, blockIds, mime);
+        // 2) Commit block list (THIS is where metadata must be applied for large blobs)
+        putBlockList(baseContainerUrl, blobPath, blockIds, mime, metadata);
     }
 
     /** PUT …/blob?comp=block&blockid=base64 */
@@ -128,7 +172,6 @@ public class AzureUploader {
         Request req = new Request.Builder()
                 .url(url)
                 .put(body)
-                // .header("x-ms-version", "2021-08-06")
                 .build();
 
         try (Response resp = execWithRetry(req)) {
@@ -138,8 +181,13 @@ public class AzureUploader {
         }
     }
 
-    /** PUT …/blob?comp=blocklist with XML body listing blocks in order. */
-    private void putBlockList(String baseContainerUrl, String blobPath, List<String> blockIds, String mime) throws IOException {
+    /** PUT …/blob?comp=blocklist with XML body listing blocks in order (metadata applied here). */
+    private void putBlockList(String baseContainerUrl,
+                              String blobPath,
+                              List<String> blockIds,
+                              String mime,
+                              Map<String, String> metadata) throws IOException {
+
         HttpUrl base = buildObjectUrl(baseContainerUrl, blobPath);
         if (base == null) throw new IOException("Invalid URL");
 
@@ -155,14 +203,15 @@ public class AzureUploader {
         }
         xml.append("</BlockList>");
 
-        Request req = new Request.Builder()
+        Request.Builder rb = new Request.Builder()
                 .url(url)
                 .put(RequestBody.create(xml.toString(), MediaType.parse("application/xml")))
-                .header("x-ms-blob-content-type", (mime == null || mime.isEmpty()) ? "application/octet-stream" : mime)
-                // .header("x-ms-version", "2021-08-06")
-                .build();
+                .header("x-ms-blob-content-type", (mime == null || mime.isEmpty()) ? "application/octet-stream" : mime);
 
-        try (Response resp = execWithRetry(req)) {
+        // Apply x-ms-meta-* headers at commit time
+        applyMetadataHeaders(rb, metadata);
+
+        try (Response resp = execWithRetry(rb.build())) {
             if (!resp.isSuccessful()) {
                 throw new IOException("Put Block List failed " + resp.code() + ": " + resp.message());
             }
@@ -171,7 +220,7 @@ public class AzureUploader {
 
     /** Helper: deterministic, lexicographically sorted block IDs (5-digit seq). */
     private String encodeBlockId(int seq) {
-        String raw = String.format("blk-%05d", seq);
+        String raw = String.format(Locale.US, "blk-%05d", seq);
         return Base64.encodeToString(raw.getBytes(), Base64.NO_WRAP);
     }
 
@@ -235,6 +284,76 @@ public class AzureUploader {
         String withSas = built + (sasQuery == null ? "" : sasQuery);
 
         return HttpUrl.parse(withSas);
+    }
+
+    // ---------------- Metadata helpers ----------------
+
+    /**
+     * Normalize metadata and fill safe defaults if missing:
+     * - createdat: ISO-8601 UTC now
+     * - driver: "Upload Agent"
+     *
+     * (device is NOT filled here because uploader has no Context; caller should provide it.)
+     */
+    private static Map<String, String> normalizeAndDefaultMetadata(Map<String, String> in) {
+        Map<String, String> meta = new HashMap<>();
+        if (in != null) meta.putAll(in);
+
+        // createdat default
+        if (isBlank(meta.get("createdat"))) {
+            meta.put("createdat", utcNowIso());
+        }
+
+        // driver default
+        if (isBlank(meta.get("driver"))) {
+            meta.put("driver", "Upload Agent");
+        }
+
+        // Normalize aliases so you can pass either "device" or "tablet"
+        if (isBlank(meta.get("device")) && !isBlank(meta.get("tablet"))) {
+            meta.put("device", meta.get("tablet"));
+        }
+
+        return meta;
+    }
+
+    private static void applyMetadataHeaders(Request.Builder rb, Map<String, String> metadata) {
+        if (rb == null || metadata == null || metadata.isEmpty()) return;
+
+        for (Map.Entry<String, String> e : metadata.entrySet()) {
+            String k = e.getKey();
+            String v = e.getValue();
+
+            if (k == null) continue;
+            k = k.trim().toLowerCase(Locale.US);
+            if (k.isEmpty()) continue;
+
+            // Azure metadata key rules: use safe token-ish keys
+            k = k.replaceAll("[^a-z0-9\\-]", "-");
+            if (k.isEmpty()) continue;
+
+            if (v == null) v = "";
+            v = v.trim();
+
+            rb.header("x-ms-meta-" + k, v);
+        }
+    }
+
+    private static boolean isBlank(String s) {
+        return s == null || s.trim().isEmpty() || "null".equalsIgnoreCase(s.trim());
+    }
+
+    private static String utcNowIso() {
+        try {
+            // Available with desugaring / API 26+; you already use java.time.Duration
+            return java.time.Instant.now().toString();
+        } catch (Throwable t) {
+            // Fallback
+            java.text.SimpleDateFormat sdf =
+                    new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US);
+            sdf.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+            return sdf.format(new java.util.Date(System.currentTimeMillis()));
+        }
     }
 
     /** Streaming body for small uploads. */

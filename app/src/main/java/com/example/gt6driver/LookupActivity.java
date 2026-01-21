@@ -169,15 +169,37 @@ public class LookupActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+
+        // ✅ Cancel any in-flight calls
+        cancelAll();
+
+        // ✅ Clear previous inputs
+        if (lotNumberInput != null) lotNumberInput.setText("");
+        if (vinInput != null) vinInput.setText("");
+        if (descriptionInput != null) descriptionInput.setText("");
+
+        // ✅ Clear results + selection
+        if (adapter != null) adapter.setItems(new ArrayList<>());
+
+        // ✅ Hide error message
+        if (errorText != null) errorText.setVisibility(View.GONE);
+
+        // ✅ Clear focus + keyboard
+        lotNumberInput.clearFocus();
+        vinInput.clearFocus();
+        descriptionInput.clearFocus();
+        hideKeyboard();
+
         // ✅ Storage check when screen is revisited/refreshed
         checkStorageAndApplyUiGuard(true);
 
-        // Re-evaluate search enable state (input + storage)
-        boolean hasAnyInput = !safe(vinInput).isEmpty()
-                || !safe(lotNumberInput).isEmpty()
-                || !safe(descriptionInput).isEmpty();
-        btnSearch.setEnabled(hasAnyInput && checkStorageAndApplyUiGuard(false));
+        // ✅ Search button stays disabled (no input)
+        if (btnSearch != null) {
+            btnSearch.setText("Search");
+            btnSearch.setEnabled(false);
+        }
     }
+
 
     private String safe(TextInputEditText et) {
         return et.getText() == null ? "" : et.getText().toString().trim();
@@ -208,6 +230,35 @@ public class LookupActivity extends AppCompatActivity {
             android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_LONG).show();
         }
     }
+// Clear Previous input and results
+private void resetLookupUi() {
+    // cancel any in-flight network calls
+    cancelAll();
+
+    // clear inputs
+    if (lotNumberInput != null) lotNumberInput.setText("");
+    if (vinInput != null) vinInput.setText("");
+    if (descriptionInput != null) descriptionInput.setText("");
+
+    // clear results
+    if (adapter != null) adapter.setItems(new ArrayList<>());
+
+    // hide error
+    if (errorText != null) errorText.setVisibility(View.GONE);
+
+    // reset search button
+    if (btnSearch != null) {
+        btnSearch.setText("Search");
+        btnSearch.setEnabled(false);
+    }
+
+    // clear focus + keyboard
+    lotNumberInput.clearFocus();
+    vinInput.clearFocus();
+    descriptionInput.clearFocus();
+    hideKeyboard();
+}
+
 
     /**
      * ✅ BIG + CENTERED low-storage message in middle of screen.
@@ -303,11 +354,13 @@ public class LookupActivity extends AppCompatActivity {
             return;
         }
 
-        if (!lotStr.matches("\\d+(?:\\.\\d+)?")) {
-            showError("Lot must be a number (e.g., 300 or 300.1).");
+// allow optional leading "-" and optional decimal (e.g. -145, 300, 300.1, -300.1)
+        if (!lotStr.matches("-?\\d+(?:\\.\\d+)?")) {
+            showError("Lot must be a number (e.g., -145, 300, 300.1).");
             adapter.setItems(new ArrayList<>());
             return;
         }
+
 
         cancelAll();
         setLoading(true);

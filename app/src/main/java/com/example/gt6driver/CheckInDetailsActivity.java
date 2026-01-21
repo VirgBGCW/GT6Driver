@@ -23,7 +23,9 @@ import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
-import android.content.ClipData;
+import android.util.Log;
+import java.nio.charset.StandardCharsets;
+import com.example.gt6driver.util.DeviceInfo;
 
 import com.example.gt6driver.model.VehicleDetail;
 
@@ -395,10 +397,12 @@ public class CheckInDetailsActivity extends AppCompatActivity {
                 }
         );
 
-        // ===== VIDEO launcher =====
+// ===== VIDEO launcher =====
         recordVideoLauncher = registerForActivityResult(
                 new ActivityResultContracts.StartActivityForResult(),
                 result -> {
+                    Uri finalDest = null;
+
                     try {
                         // ---- User canceled or failed ----
                         if (result.getResultCode() != RESULT_OK) {
@@ -408,8 +412,6 @@ public class CheckInDetailsActivity extends AppCompatActivity {
                                     try { getContentResolver().delete(pendingVideoUri, null, null); } catch (Exception ignore) {}
                                 }
                             }
-                            pendingVideoUri = null;
-                            pendingVideoCapture = false;
                             return;
                         }
 
@@ -422,51 +424,72 @@ public class CheckInDetailsActivity extends AppCompatActivity {
                         if (requested != null && awaitNonZeroSize(requested)) {
                             setPending(requested, false);
                             try { getContentResolver().notifyChange(requested, null); } catch (Exception ignore) {}
-
-                            lastCapturedVideoUri = requested;
-                            verifyDestAndReport(requested, "Video");
-
-                            // ✅ AUTO-ACCEPT immediately (no chance to forget and “lose” it)
-                            acceptIntakeVideoIfPresent();
-                            return;
-                        }
-
-                        // ---- Case B: OEM ignored EXTRA_OUTPUT; figure out the source to copy from ----
-                        if (returned == null) {
-                            returned = findLatestCapturedVideo(now - 120_000L);
-                        }
-                        if (returned == null) {
-                            if (requested != null) {
-                                setPending(requested, false);
-                                if (!awaitNonZeroSize(requested)) {
-                                    try { getContentResolver().delete(requested, null, null); } catch (Exception ignore) {}
-                                }
+                            finalDest = requested;
+                        } else {
+                            // ---- Case B: OEM ignored EXTRA_OUTPUT; figure out the source to copy from ----
+                            if (returned == null) {
+                                returned = findLatestCapturedVideo(now - 120_000L);
                             }
-                            Toast.makeText(this, "Camera didn't produce a readable video.", Toast.LENGTH_SHORT).show();
-                            return;
+                            if (returned == null) {
+                                if (requested != null) {
+                                    setPending(requested, false);
+                                    if (!awaitNonZeroSize(requested)) {
+                                        try { getContentResolver().delete(requested, null, null); } catch (Exception ignore) {}
+                                    }
+                                }
+                                Toast.makeText(this, "Camera didn't produce a readable video.", Toast.LENGTH_SHORT).show();
+                                return;
+                            }
+
+                            Uri dest = (requested != null) ? requested : createVideoUriForIntake();
+                            if (dest == null) {
+                                Toast.makeText(this, "Failed to create GT6 video row.", Toast.LENGTH_SHORT).show();
+                                return;
+                            }
+
+                            boolean ok = copyUri(returned, dest);
+                            if (!ok || !awaitNonZeroSize(dest)) {
+                                try { getContentResolver().delete(dest, null, null); } catch (Exception ignore) {}
+                                Toast.makeText(this, "Video copy failed.", Toast.LENGTH_SHORT).show();
+                                return;
+                            }
+
+                            setPending(dest, false);
+                            try { getContentResolver().notifyChange(dest, null); } catch (Exception ignore) {}
+                            finalDest = dest;
                         }
 
-                        Uri dest = (requested != null) ? requested : createVideoUriForIntake();
-                        if (dest == null) {
-                            Toast.makeText(this, "Failed to create GT6 video row.", Toast.LENGTH_SHORT).show();
-                            return;
-                        }
+                        // ---- COMMON SUCCESS PATH (runs for BOTH A and B) ----
+                        lastCapturedVideoUri = finalDest;
+                        verifyDestAndReport(finalDest, "Video");
 
-                        boolean ok = copyUri(returned, dest);
-                        if (!ok || !awaitNonZeroSize(dest)) {
-                            try { getContentResolver().delete(dest, null, null); } catch (Exception ignore) {}
-                            Toast.makeText(this, "Video copy failed.", Toast.LENGTH_SHORT).show();
-                            return;
-                        }
+                        // ✅ Write sidecar for intake video (Downloads/GT6/{id}/intake.meta.json)
+                        String createdAtUtc = isoUtcNow();
+                        String deviceName = DeviceInfo.getDeviceName(this);
+                        String driverName = resolveDriverName();
+                        if (TextUtils.isEmpty(driverName)) driverName = "Upload Agent"; // last resort
 
-                        setPending(dest, false);
-                        try { getContentResolver().notifyChange(dest, null); } catch (Exception ignore) {}
+                        boolean sidecarOk = writeSidecarJsonToDownload(
+                                "intake",
+                                createdAtUtc,
+                                consignmentIdStr(),
+                                deviceName,
+                                driverName,
+                                (lot != null ? lot : "")
+                        );
 
-                        lastCapturedVideoUri = dest;
-                        verifyDestAndReport(dest, "Video");
+                        Log.i(TAG, "Sidecar write attempted for intake.meta.json ok=" + sidecarOk);
 
-                        // ✅ AUTO-ACCEPT immediately
+                        // ✅ IMPORTANT: disable duplication while testing intake metadata
+                        // If you REALLY need it later, store it outside Movies/GT6 so the worker doesn't upload it.
+                        // (leave this off for now)
+                        // if (DUPLICATE_INTAKE_VIDEO) { ... }
+
+                        // ✅ Auto-accept intake video (sets intakeModel.videoUrl)
                         acceptIntakeVideoIfPresent();
+
+                        // ✅ Kick uploader immediately
+                        com.example.gt6driver.sync.GT6MediaSync.enqueueImmediate(this);
 
                     } finally {
                         pendingVideoUri = null;
@@ -474,6 +497,8 @@ public class CheckInDetailsActivity extends AppCompatActivity {
                     }
                 }
         );
+
+
 
         // ===== Permission launchers =====
         requestReadImagesPermissionLauncher = registerForActivityResult(
@@ -885,6 +910,143 @@ public class CheckInDetailsActivity extends AppCompatActivity {
         // Fire API load once UI is ready
         driverTaskRepo = new DriverTaskRepository();
         fetchIntakeAndBind();
+    }
+    // SIDE CAR STUFF
+    private static final String TAG = "GT6Intake";
+
+    // If you want a preserved copy in Movies/GT6/{id}/intake_src.mp4
+    private static final boolean DUPLICATE_INTAKE_VIDEO = true;
+
+    // UTC ISO timestamp helper
+    private String isoUtcNow() {
+        long now = System.currentTimeMillis();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            return java.time.Instant.ofEpochMilli(now).toString();
+        }
+        java.text.SimpleDateFormat sdf =
+                new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US);
+        sdf.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+        return sdf.format(new java.util.Date(now));
+    }
+    private boolean writeSidecarJsonToDownload(
+            String baseNameNoExt,   // "intake"
+            String createdAtUtc,
+            String consignmentId,
+            String tablet,
+            String driver,
+            String lot
+    ) {
+        final String sidecarName = baseNameNoExt + ".meta.json";
+
+        try {
+            final String relPath = Environment.DIRECTORY_DOWNLOADS + "/GT6/" + consignmentId + "/";
+
+            Uri collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI;
+
+            // Delete existing to avoid "(1)"
+            try {
+                String sel = MediaStore.MediaColumns.DISPLAY_NAME + "=? AND " +
+                        MediaStore.MediaColumns.RELATIVE_PATH + "=?";
+                int d = getContentResolver().delete(collection, sel, new String[]{ sidecarName, relPath });
+                Log.i(TAG, "Sidecar(Download): deleted existing rows d=" + d);
+            } catch (Exception e) {
+                Log.w(TAG, "Sidecar(Download): delete existing failed", e);
+            }
+
+            ContentValues cv = new ContentValues();
+            cv.put(MediaStore.MediaColumns.DISPLAY_NAME, sidecarName);
+            cv.put(MediaStore.MediaColumns.MIME_TYPE, "application/json");
+            cv.put(MediaStore.MediaColumns.RELATIVE_PATH, relPath);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                cv.put(MediaStore.MediaColumns.IS_PENDING, 1);
+            }
+
+            Uri jsonUri = getContentResolver().insert(collection, cv);
+            if (jsonUri == null) {
+                Log.e(TAG, "Sidecar(Download): insert returned null relPath=" + relPath);
+                return false;
+            }
+
+            String json =
+                    "{"
+                            + "\"createdAt\":\"" + createdAtUtc + "\","
+                            + "\"consignmentId\":\"" + consignmentId + "\","
+                            + "\"tablet\":\"" + tablet + "\","
+                            + "\"driver\":\"" + driver + "\","
+                            + "\"lot\":\"" + lot + "\""
+                            + "}";
+
+            try (java.io.OutputStream out = getContentResolver().openOutputStream(jsonUri, "w")) {
+                if (out == null) {
+                    Log.e(TAG, "Sidecar(Download): openOutputStream null " + jsonUri);
+                    try { getContentResolver().delete(jsonUri, null, null); } catch (Exception ignored) {}
+                    return false;
+                }
+                out.write(json.getBytes(StandardCharsets.UTF_8));
+                out.flush();
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                ContentValues done = new ContentValues();
+                done.put(MediaStore.MediaColumns.IS_PENDING, 0);
+                getContentResolver().update(jsonUri, done, null, null);
+            }
+
+            long size = 0;
+            try (Cursor c = getContentResolver().query(
+                    jsonUri, new String[]{ MediaStore.MediaColumns.SIZE },
+                    null, null, null
+            )) {
+                if (c != null && c.moveToFirst()) size = c.getLong(0);
+            }
+
+            Log.i(TAG, "Sidecar(Download): wrote size=" + size + " uri=" + jsonUri);
+            return size > 0;
+
+        } catch (Exception e) {
+            Log.e(TAG, "Sidecar(Download): write failed", e);
+            return false;
+        }
+    }
+    private Uri createOrReplaceIntakeSourceVideoUri() {
+        final String fileName = "intake_src.mp4";
+        final String relPath = Environment.DIRECTORY_MOVIES + "/GT6/" + consignmentIdStr();
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            // delete existing row best-effort to avoid (1)
+            try {
+                String sel = MediaStore.MediaColumns.DISPLAY_NAME + "=? AND " + MediaStore.MediaColumns.RELATIVE_PATH + "=?";
+                getContentResolver().delete(
+                        MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                        sel,
+                        new String[]{ fileName, relPath + "/" } // OEM trailing slash
+                );
+                getContentResolver().delete(
+                        MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                        sel,
+                        new String[]{ fileName, relPath }
+                );
+            } catch (Exception ignored) {}
+
+            ContentValues cv = new ContentValues();
+            cv.put(MediaStore.MediaColumns.DISPLAY_NAME, fileName);
+            cv.put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4");
+            cv.put(MediaStore.MediaColumns.RELATIVE_PATH, relPath);
+            return getContentResolver().insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, cv);
+        } else {
+            File movies = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES);
+            File dir = new File(movies, "GT6/" + consignmentIdStr());
+            if (!dir.exists() && !dir.mkdirs()) return null;
+            File f = new File(dir, fileName);
+            try {
+                if (f.exists()) f.delete();
+                //noinspection ResultOfMethodCallIgnored
+                f.createNewFile();
+                return FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", f);
+            } catch (Exception e) {
+                return null;
+            }
+        }
     }
 
     private static boolean isEmpty(String s) { return s == null || s.trim().isEmpty(); }
