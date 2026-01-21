@@ -1,4 +1,3 @@
-// app/src/main/java/com/example/gt6driver/MainActivity.java
 package com.example.gt6driver;
 
 import android.Manifest;
@@ -21,6 +20,7 @@ import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.constraintlayout.widget.ConstraintLayout;
@@ -28,6 +28,8 @@ import androidx.core.content.ContextCompat;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
+import androidx.recyclerview.widget.GridLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 import androidx.work.Configuration;
 import androidx.work.WorkInfo;
 import androidx.work.WorkManager;
@@ -49,29 +51,38 @@ import java.util.concurrent.Executors;
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
+import androidx.core.content.ContextCompat;
 
 public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "GT6-Worker"; // filter this in Logcat
 
-    private Spinner spinnerEvent;
+    // ✅ Event grid
+    private RecyclerView rvEvents;
+    private EventButtonAdapter eventButtonAdapter;
+
+    // ✅ Driver spinner
     private Spinner spinnerDriver;
+
     private MaterialButton btnSubmit;
     private ProgressBar progress;
 
     // ✅ Header labels
     private TextView tvDeviceName;
-    private TextView tvLocalVideos; // ✅ NEW
+    private TextView tvLocalVideos;
     private TextView tvVersion;
 
-    private ArrayAdapter<EventItem> eventAdapter;
     private ArrayAdapter<String> driverNamesAdapter;
 
     private final List<EventItem> events = new ArrayList<>();
     private final List<DriverItem> drivers = new ArrayList<>();
 
-    private static final String STATE_EVENT_POS = "state_event_pos";
+    // ✅ selection state
+    @Nullable private EventItem selectedEvent = null;
+
+    private static final String STATE_EVENT_ID = "state_event_id";
     private static final String STATE_DRIVER_POS = "state_driver_pos";
+    private int pendingRestoreEventId = -1;
 
     private ActivityResultLauncher<String[]> permissionLauncher;
 
@@ -97,14 +108,14 @@ public class MainActivity extends AppCompatActivity {
                 this, "si=driver&spr=https&sv=2024-11-04&sr=c&sig=bkDZ74H2Fwmznej2B86lmh3eJXfQ9nI0csLwS8ixyN8%3D");
         Log.i(TAG, "Main: configured container=/driver and SAS (redacted).");
 
-        spinnerEvent  = findViewById(R.id.spinnerEvent);
+        rvEvents      = findViewById(R.id.rvEvents);
         spinnerDriver = findViewById(R.id.spinnerDriver);
         btnSubmit     = findViewById(R.id.btnSubmit);
         progress      = findViewById(R.id.progress);
 
         // ✅ Header labels
         tvDeviceName  = findViewById(R.id.tvDeviceName);
-        tvLocalVideos = findViewById(R.id.tvLocalVideos); // ✅ NEW (add to activity_main.xml)
+        tvLocalVideos = findViewById(R.id.tvLocalVideos);
         tvVersion     = findViewById(R.id.tvVersion);
 
         // ✅ Refresh labels on first load
@@ -123,16 +134,10 @@ public class MainActivity extends AppCompatActivity {
             return insets;
         });
 
-        // EVENT spinner
-        events.clear();
-        events.add(EventItem.placeholder());
-        eventAdapter = new ArrayAdapter<>(
-                this,
-                R.layout.spinner_item_black,
-                events
-        );
-        eventAdapter.setDropDownViewResource(R.layout.spinner_item_black);
-        spinnerEvent.setAdapter(eventAdapter);
+        // ✅ Event grid (2 per row)
+        rvEvents.setLayoutManager(new GridLayoutManager(this, 2));
+        eventButtonAdapter = new EventButtonAdapter();
+        rvEvents.setAdapter(eventButtonAdapter);
 
         // DRIVER spinner
         buildDriversFromDirectory();
@@ -156,22 +161,21 @@ public class MainActivity extends AppCompatActivity {
                 updateSubmitEnabled();
             }
         };
-        spinnerEvent.setOnItemSelectedListener(selListener);
         spinnerDriver.setOnItemSelectedListener(selListener);
 
         btnSubmit.setOnClickListener(v -> {
-            EventItem selectedEvent = (EventItem) spinnerEvent.getSelectedItem();
+            EventItem selectedEventLocal = selectedEvent;
             int pos = spinnerDriver.getSelectedItemPosition();
             DriverItem selectedDriver = (pos >= 0 && pos < drivers.size()) ? drivers.get(pos) : null;
 
-            if (!isValid(selectedEvent) || !isValid(selectedDriver)) {
+            if (!isValid(selectedEventLocal) || !isValid(selectedDriver)) {
                 Toast.makeText(this, "Please select both EVENT and DRIVER.", Toast.LENGTH_SHORT).show();
                 return;
             }
 
             Intent intent = new Intent(MainActivity.this, LookupActivity.class);
-            intent.putExtra("eventName", selectedEvent.name);
-            intent.putExtra("eventId", selectedEvent.id);
+            intent.putExtra("eventName", selectedEventLocal.name);
+            intent.putExtra("eventId", selectedEventLocal.id);
             intent.putExtra("driver", selectedDriver.name);
             intent.putExtra("driverNumber", selectedDriver.number);
 
@@ -183,12 +187,10 @@ public class MainActivity extends AppCompatActivity {
         });
 
         if (savedInstanceState != null) {
-            int evPos = savedInstanceState.getInt(STATE_EVENT_POS, 0);
+            pendingRestoreEventId = savedInstanceState.getInt(STATE_EVENT_ID, -1);
             int drPos = savedInstanceState.getInt(STATE_DRIVER_POS, 0);
-            spinnerEvent.setSelection(Math.max(0, evPos));
             spinnerDriver.setSelection(Math.max(0, drPos));
         } else {
-            spinnerEvent.setSelection(0);
             spinnerDriver.setSelection(0);
         }
 
@@ -350,31 +352,31 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
-    protected void onSaveInstanceState(Bundle outState) {
+    protected void onSaveInstanceState(@NonNull Bundle outState) {
         super.onSaveInstanceState(outState);
-        outState.putInt(STATE_EVENT_POS, spinnerEvent.getSelectedItemPosition());
+        outState.putInt(STATE_EVENT_ID, selectedEvent != null ? selectedEvent.id : -1);
         outState.putInt(STATE_DRIVER_POS, spinnerDriver.getSelectedItemPosition());
     }
 
     private void updateSubmitEnabled() {
-        EventItem ev = (EventItem) spinnerEvent.getSelectedItem();
+        EventItem ev = selectedEvent;
         int pos = spinnerDriver.getSelectedItemPosition();
         DriverItem dr = (pos >= 0 && pos < drivers.size()) ? drivers.get(pos) : null;
         btnSubmit.setEnabled(isValid(ev) && isValid(dr));
     }
 
-    private boolean isValid(EventItem ev) {
+    private boolean isValid(@Nullable EventItem ev) {
         return ev != null && ev.id > 0;
     }
 
-    private boolean isValid(DriverItem dr) {
+    private boolean isValid(@Nullable DriverItem dr) {
         return dr != null && dr.number > 0 && dr.name != null && !dr.name.startsWith("Select ");
     }
 
     private void setLoading(boolean loading) {
         progress.setVisibility(loading ? View.VISIBLE : View.GONE);
-        spinnerEvent.setEnabled(!loading);
         spinnerDriver.setEnabled(!loading);
+        rvEvents.setEnabled(!loading);
         btnSubmit.setEnabled(!loading && btnSubmit.isEnabled());
     }
 
@@ -417,12 +419,26 @@ public class MainActivity extends AppCompatActivity {
 
                     if (!fetched.isEmpty()) {
                         events.clear();
-                        events.add(EventItem.placeholder());
                         events.addAll(fetched);
-                        eventAdapter.notifyDataSetChanged();
+
+                        eventButtonAdapter.setEvents(events);
+
+                        // Restore selection if we have one
+                        if (pendingRestoreEventId > 0) {
+                            eventButtonAdapter.selectById(pendingRestoreEventId);
+                            pendingRestoreEventId = -1;
+                        } else {
+                            // If nothing restored, keep selection cleared
+                            selectedEvent = null;
+                            eventButtonAdapter.clearSelection();
+                        }
+
                         updateSubmitEnabled();
                     } else {
                         Toast.makeText(MainActivity.this, "No events found.", Toast.LENGTH_SHORT).show();
+                        selectedEvent = null;
+                        eventButtonAdapter.setEvents(new ArrayList<>());
+                        updateSubmitEnabled();
                     }
                 } catch (Exception ex) {
                     Toast.makeText(MainActivity.this, "Error reading events.", Toast.LENGTH_SHORT).show();
@@ -498,8 +514,96 @@ public class MainActivity extends AppCompatActivity {
         final int id;
         final String name;
         EventItem(int id, String name) { this.id = id; this.name = name; }
-        static EventItem placeholder() { return new EventItem(-1, "Select Event…"); }
         @Override public String toString() { return name; }
+    }
+
+    // ===================== EVENT GRID ADAPTER =====================
+    private class EventButtonAdapter extends RecyclerView.Adapter<EventButtonAdapter.VH> {
+
+        private final List<EventItem> data = new ArrayList<>();
+        private int selectedId = -1;
+
+        void setEvents(@Nullable List<EventItem> items) {
+            data.clear();
+            if (items != null) data.addAll(items);
+            notifyDataSetChanged();
+        }
+
+        void clearSelection() {
+            selectedId = -1;
+            notifyDataSetChanged();
+        }
+
+        void selectById(int eventId) {
+            selectedId = eventId;
+            selectedEvent = null;
+
+            for (EventItem e : data) {
+                if (e != null && e.id == eventId) {
+                    selectedEvent = e;
+                    break;
+                }
+            }
+
+            notifyDataSetChanged();
+            updateSubmitEnabled();
+        }
+
+        @NonNull
+        @Override
+        public VH onCreateViewHolder(@NonNull android.view.ViewGroup parent, int viewType) {
+            View v = getLayoutInflater().inflate(R.layout.item_event_button, parent, false);
+            return new VH(v);
+        }
+
+        @Override
+        public void onBindViewHolder(@NonNull VH h, int position) {
+            EventItem item = data.get(position);
+            h.btn.setText(item.name);
+
+            boolean isSelected = (item.id == selectedId);
+
+            if (isSelected) {
+                // ✅ SELECTED: white background, red text
+                h.btn.setBackgroundTintList(
+                        ContextCompat.getColorStateList(h.btn.getContext(), android.R.color.white)
+                );
+                h.btn.setTextColor(
+                        ContextCompat.getColor(h.btn.getContext(), R.color.redButton)
+                );
+                h.btn.setAlpha(1f);
+            } else {
+                // ⬜ UNSELECTED: red background, white text
+                h.btn.setBackgroundTintList(
+                        ContextCompat.getColorStateList(h.btn.getContext(), R.color.redButton)
+                );
+                h.btn.setTextColor(
+                        ContextCompat.getColor(h.btn.getContext(), android.R.color.white)
+                );
+                h.btn.setAlpha(0.95f);
+            }
+
+            h.btn.setOnClickListener(v -> {
+                selectedId = item.id;
+                selectedEvent = item;
+                notifyDataSetChanged();
+                updateSubmitEnabled();
+            });
+        }
+
+
+        @Override
+        public int getItemCount() {
+            return data.size();
+        }
+
+        class VH extends RecyclerView.ViewHolder {
+            final MaterialButton btn;
+            VH(@NonNull View itemView) {
+                super(itemView);
+                btn = itemView.findViewById(R.id.btnEvent);
+            }
+        }
     }
 
     // ===================== PERMISSIONS / SERVICE =====================
@@ -592,6 +696,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 }
+
 
 
 

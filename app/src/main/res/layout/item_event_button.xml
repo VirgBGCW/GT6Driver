@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.button.MaterialButton
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/btnEvent"
+    android:layout_width="match_parent"
+    android:layout_height="64dp"
+    android:layout_margin="8dp"
+
+    android:minHeight="64dp"
+    android:insetTop="0dp"
+    android:insetBottom="0dp"
+
+    android:paddingStart="14dp"
+    android:paddingEnd="14dp"
+    android:paddingTop="12dp"
+    android:paddingBottom="12dp"
+
+    android:maxLines="2"
+    android:ellipsize="end"
+    android:textAllCaps="false"
+    android:text="Event"
+    android:textSize="15sp"
+    android:textStyle="bold"
+    android:textColor="@android:color/white"
+
+    app:cornerRadius="12dp"
+    android:backgroundTint="@color/redButton"
+
+    style="@style/Widget.MaterialComponents.Button" />
+
+
