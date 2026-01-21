@@ -1492,6 +1492,7 @@ public class ActionActivity extends AppCompatActivity {
         final MaterialButton[] pig = new MaterialButton[1];
         pig[0] = view.findViewById(R.id.btnDriverPigPen);
 
+        // ---- Ensure PIGPEN exists (your existing logic, kept) ----
         if (pig[0] == null) {
             MaterialButton created = new MaterialButton(this);
             created.setId(View.generateViewId());
@@ -1512,22 +1513,52 @@ public class ActionActivity extends AppCompatActivity {
             pig[0] = created;
         }
 
+        // ---- NEW: Big driver display line (instead of helper text) ----
+        final TextView tvDriverDisplay = new TextView(this);
+        tvDriverDisplay.setText("");
+        tvDriverDisplay.setTextColor(Color.WHITE);
+        tvDriverDisplay.setTypeface(Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD));
+        tvDriverDisplay.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22);
+        tvDriverDisplay.setPadding(0, dp(10), 0, 0);
+        tvDriverDisplay.setVisibility(View.GONE);
+
+        // Add it right under the TextInputLayout
+        if (view instanceof ViewGroup) {
+            ViewGroup root = (ViewGroup) view;
+
+            // Put it after tilDriver if possible
+            int tilIndex = root.indexOfChild(tilDriver);
+            if (tilIndex >= 0) {
+                root.addView(tvDriverDisplay, tilIndex + 1,
+                        new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            } else {
+                // fallback: just add to end
+                root.addView(tvDriverDisplay,
+                        new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            }
+        }
+
+        // Optional: stop using helper text entirely
+        tilDriver.setHelperText(null);
+
         final AlertDialog dlg = new MaterialAlertDialogBuilder(this)
                 .setView(view)
                 .setCancelable(true)
                 .create();
         dlg.show();
+
         if (dlg.getWindow() != null) {
             dlg.getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
         }
 
+        // Button labels
         btnCheckIn.setText("DRIVER");
         btnCancel.setText("CANCEL");
         pig[0].setText("PIGPEN");
 
+        // Initial disabled state
         btnCheckIn.setEnabled(false);
         pig[0].setEnabled(false);
-        tilDriver.setHelperText(null);
         tilDriver.setError(null);
 
         selectedDriverNumber = null;
@@ -1535,31 +1566,46 @@ public class ActionActivity extends AppCompatActivity {
 
         etDriver.addTextChangedListener(new android.text.TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
-            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
+            @Override public void afterTextChanged(android.text.Editable s) {}
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
                 selectedDriverNumber = (s == null) ? null : s.toString().trim();
                 selectedDriverName = null;
+
                 tilDriver.setError(null);
 
                 boolean ok = false;
+                tvDriverDisplay.setVisibility(View.GONE);
+                tvDriverDisplay.setText("");
+
                 if (s != null && s.length() > 0 && android.text.TextUtils.isDigitsOnly(s)) {
                     try {
                         int num = Integer.parseInt(selectedDriverNumber);
                         String name = DriverDirectory.nameFor(num);
+
                         if (name != null && !name.isEmpty()) {
+                            // ✅ VALID DRIVER — GREEN
                             selectedDriverName = name;
                             ok = true;
-                            tilDriver.setHelperText("Driver: " + name);
+
+                            tvDriverDisplay.setText("Driver: " + name);
+                            tvDriverDisplay.setTextColor(Color.parseColor("#2E7D32")); // Material green
+                            tvDriverDisplay.setVisibility(View.VISIBLE);
                         } else {
-                            tilDriver.setHelperText("Unknown driver number");
+                            // ❌ UNKNOWN DRIVER — RED
+                            tvDriverDisplay.setText("Unknown driver number");
+                            tvDriverDisplay.setTextColor(Color.parseColor("#C62828")); // Material red
+                            tvDriverDisplay.setVisibility(View.VISIBLE);
                         }
-                    } catch (NumberFormatException ignored) { }
-                } else {
-                    tilDriver.setHelperText(null);
+                    } catch (NumberFormatException ignored) {
+                    }
                 }
+
                 btnCheckIn.setEnabled(ok);
                 pig[0].setEnabled(ok);
             }
-            @Override public void afterTextChanged(android.text.Editable s) {}
+
         });
 
         etDriver.setOnEditorActionListener((v, actionId, event) -> {
@@ -1590,6 +1636,7 @@ public class ActionActivity extends AppCompatActivity {
             postConsignmentKeyUpdate("Moving to PIGPEN");
         });
     }
+
 }
 
 
