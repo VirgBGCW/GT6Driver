@@ -60,21 +60,33 @@ dependencies {
 
     // Printing
     implementation("androidx.print:print:1.0.0")
-    // QR Code
-    implementation ("com.google.zxing:core:3.5.3")
 
-    // ✅ Add this for androidx.preference.*
+    // QR Code
+    implementation("com.google.zxing:core:3.5.3")
+
+    // Preferences
     implementation("androidx.preference:preference:1.2.1")
-    // (Optional) KTX helpers if you start using Kotlin APIs:
-    // implementation("androidx.preference:preference-ktx:1.2.1")
 
     // Background Worker
     implementation("androidx.work:work-runtime:2.9.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+
+    // ✅ CameraX (PreviewView + Video Recorder)
+    val cameraxVersion = "1.3.4"
+    implementation("androidx.camera:camera-core:$cameraxVersion")
+    implementation("androidx.camera:camera-camera2:$cameraxVersion")
+    implementation("androidx.camera:camera-lifecycle:$cameraxVersion")
+    implementation("androidx.camera:camera-view:$cameraxVersion")
+    implementation("androidx.camera:camera-video:$cameraxVersion")
+
+    // ✅ Helpful for ListenableFuture / ProcessCameraProvider in some builds
+    implementation("com.google.guava:guava:33.2.1-android")
+
     // Tests
     testImplementation(libs.junit)
     androidTestImplementation(libs.ext.junit)
     androidTestImplementation(libs.espresso.core)
 }
+
 
 

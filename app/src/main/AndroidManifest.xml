@@ -4,6 +4,15 @@
     <!-- ===== Network / Camera ===== -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- ✅ Needed if you want audio in the recorded videos -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <!-- (Optional) Declare camera hardware; not required so app can still install on devices without camera -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+
+    <!-- ✅ (Optional) Declare microphone hardware as NOT required (avoids install blocks on rare devices) -->
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
 
     <!-- ===== Media / Storage ===== -->
     <!-- Android 13+ scoped readers -->
@@ -114,6 +123,12 @@
             android:exported="false"
             android:screenOrientation="portrait" />
 
+        <!-- ✅ Full-screen CameraX recorder -->
+        <activity
+            android:name=".ReleaseVideoActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
         <!-- Launcher -->
         <activity
             android:name=".MainActivity"
@@ -124,6 +139,7 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity android:name=".PropertyActivity" />
 
         <activity
             android:name=".ConfigActivity"

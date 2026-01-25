@@ -105,7 +105,10 @@ public class ActionActivity extends AppCompatActivity {
     private TextView panelRowCol;
 
     private ImageView panelImage;
-    private MaterialButton btnCheckIn, btnCheckOut, btnKeyBagTags, btnCarTag, btnAssignDriver, btnDriverCheckIn;
+
+    // ✅ UPDATED: added btnProperty
+    private MaterialButton btnCheckIn, btnCheckOut, btnProperty,
+            btnKeyBagTags, btnCarTag, btnAssignDriver, btnDriverCheckIn;
 
     // Context/state
     private int eventId = -1;
@@ -202,6 +205,10 @@ public class ActionActivity extends AppCompatActivity {
 
         btnCheckIn = findViewById(R.id.btnCheckIn);
         btnCheckOut = findViewById(R.id.btnCheckOut);
+
+        // ✅ NEW: PROPERTY button
+        btnProperty = findViewById(R.id.btnProperty);
+
         btnKeyBagTags = findViewById(R.id.btnKeyBagTags);
         btnCarTag = findViewById(R.id.btnCarTag);
         btnAssignDriver = findViewById(R.id.btnAssignDriver);
@@ -287,6 +294,15 @@ public class ActionActivity extends AppCompatActivity {
             putCommonExtras(i);
             startActivity(i);
         });
+
+        // ✅ NEW: PROPERTY screen navigation
+        if (btnProperty != null) {
+            btnProperty.setOnClickListener(v -> {
+                Intent i = new Intent(this, PropertyActivity.class);
+                putCommonExtras(i);
+                startActivity(i);
+            });
+        }
 
         btnDriverCheckIn.setOnClickListener(v -> {
             postDriverCheckInHardcoded();
@@ -1638,6 +1654,7 @@ public class ActionActivity extends AppCompatActivity {
     }
 
 }
+
 
 
 
