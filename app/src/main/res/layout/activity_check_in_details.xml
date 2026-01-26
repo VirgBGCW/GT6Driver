@@ -538,7 +538,7 @@
                 </androidx.constraintlayout.widget.ConstraintLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- INTAKE VIDEO PANEL -->
+            <!-- INTAKE VIDEO PANEL (updated to match RELEASE VIDEO panel) -->
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/videoPanel"
                 android:layout_width="0dp"
@@ -559,6 +559,7 @@
                     android:padding="16dp"
                     android:orientation="vertical">
 
+                    <!-- header row -->
                     <androidx.constraintlayout.widget.ConstraintLayout
                         android:id="@+id/videoHeader"
                         android:layout_width="match_parent"
@@ -578,6 +579,7 @@
                             app:layout_constraintBottom_toBottomOf="parent" />
 
                         <TextView
+                            android:id="@+id/videoTitle"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:text="INTAKE VIDEO"
@@ -591,6 +593,7 @@
                             app:layout_constraintEnd_toEndOf="parent" />
                     </androidx.constraintlayout.widget.ConstraintLayout>
 
+                    <!-- expanded group -->
                     <LinearLayout
                         android:id="@+id/videoGroup"
                         android:layout_width="match_parent"
@@ -599,42 +602,73 @@
                         android:paddingTop="12dp"
                         android:visibility="gone">
 
-                        <androidx.constraintlayout.widget.ConstraintLayout
+                        <!-- Keep these hidden so existing CheckInDetailsActivity code that looks them up won't crash -->
+                        <TextView
+                            android:id="@+id/videoPrompt"
+                            android:layout_width="1dp"
+                            android:layout_height="1dp"
+                            android:visibility="gone" />
+
+                        <ImageView
+                            android:id="@+id/videoPromptIcon"
+                            android:layout_width="1dp"
+                            android:layout_height="1dp"
+                            android:visibility="gone" />
+
+                        <!-- ✅ CameraX Preview (hidden until recording UI is active) -->
+                        <androidx.camera.view.PreviewView
+                            android:id="@+id/intakePreviewView"
                             android:layout_width="match_parent"
-                            android:layout_height="wrap_content">
+                            android:layout_height="220dp"
+                            android:layout_marginTop="10dp"
+                            android:visibility="gone"
+                            android:background="@android:color/black"
+                            app:implementationMode="performance"
+                            app:scaleType="fitCenter" />
 
-                            <TextView
-                                android:id="@+id/videoPrompt"
+                        <!-- ✅ Record/Stop row -->
+                        <LinearLayout
+                            android:id="@+id/videoRecordControls"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:layout_marginTop="10dp"
+                            android:visibility="gone">
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnVideoRecord"
                                 android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:text="Record Video"
-                                android:textColor="@android:color/black"
+                                android:layout_height="48dp"
+                                android:layout_weight="1"
+                                android:text="RECORD"
                                 android:textStyle="bold"
-                                android:textSize="20sp"
-                                app:layout_constraintStart_toStartOf="parent"
-                                app:layout_constraintEnd_toStartOf="@id/videoPromptIcon"
-                                app:layout_constraintTop_toTopOf="parent"
-                                app:layout_constraintBottom_toBottomOf="parent" />
+                                android:textColor="@android:color/white"
+                                android:backgroundTint="#D32F2F"
+                                app:cornerRadius="12dp" />
 
-                            <ImageView
-                                android:id="@+id/videoPromptIcon"
-                                android:layout_width="28dp"
-                                android:layout_height="28dp"
-                                android:contentDescription="Record video"
-                                android:clickable="true"
-                                android:focusable="true"
-                                android:src="@drawable/ic_videocam_24"
-                                android:tint="@android:color/black"
-                                app:layout_constraintEnd_toEndOf="parent"
-                                app:layout_constraintTop_toTopOf="parent"
-                                app:layout_constraintBottom_toBottomOf="parent" />
-                        </androidx.constraintlayout.widget.ConstraintLayout>
+                            <Space
+                                android:layout_width="12dp"
+                                android:layout_height="wrap_content" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnVideoStop"
+                                android:layout_width="0dp"
+                                android:layout_height="48dp"
+                                android:layout_weight="1"
+                                android:text="STOP"
+                                android:textStyle="bold"
+                                android:textColor="@android:color/white"
+                                android:backgroundTint="#444444"
+                                app:cornerRadius="12dp"
+                                android:enabled="false"
+                                android:alpha="0.6" />
+                        </LinearLayout>
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/btnVideoAccept"
                             android:layout_width="match_parent"
                             android:layout_height="48dp"
-                            android:text="ACCEPT"
+                            android:text="RECORD"
                             android:textStyle="bold"
                             android:textColor="@android:color/white"
                             android:backgroundTint="#D32F2F"
@@ -1043,6 +1077,7 @@
         app:layout_constraintBottom_toBottomOf="parent" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>
+
 
 
 

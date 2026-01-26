@@ -123,9 +123,15 @@
             android:exported="false"
             android:screenOrientation="portrait" />
 
-        <!-- ✅ Full-screen CameraX recorder -->
+        <!-- ✅ Full-screen CameraX recorder (Release) -->
         <activity
             android:name=".ReleaseVideoActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
+        <!-- ✅ Full-screen CameraX recorder (Intake) -->
+        <activity
+            android:name=".IntakeVideoActivity"
             android:exported="false"
             android:screenOrientation="portrait" />
 
@@ -139,6 +145,7 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
         <activity android:name=".PropertyActivity" />
 
         <activity
