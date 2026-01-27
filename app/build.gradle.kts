@@ -11,7 +11,7 @@ android {
         minSdk = 24
         targetSdk = 35
         versionCode = 16
-        versionName = "PALM BEACH 2026"
+        versionName = "PB2026"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

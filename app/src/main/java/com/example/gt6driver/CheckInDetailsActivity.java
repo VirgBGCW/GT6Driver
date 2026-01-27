@@ -44,6 +44,9 @@ import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.checkbox.MaterialCheckBox;
 import com.google.android.material.textfield.TextInputEditText;
 import com.google.android.material.textfield.TextInputLayout;
+import androidx.activity.OnBackPressedCallback;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+
 
 public class CheckInDetailsActivity extends AppCompatActivity {
 
@@ -260,6 +263,22 @@ public class CheckInDetailsActivity extends AppCompatActivity {
         cbTiresWheels = findViewById(R.id.cbTiresWheels);
         cbMechanical = findViewById(R.id.cbMechanical);
         cbServiceLights = findViewById(R.id.cbServiceLights);
+        // Back Button
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+
+                new MaterialAlertDialogBuilder(CheckInDetailsActivity.this)
+                        .setTitle("Cancel Intake")
+                        .setMessage("Are you sure you want to cancel?")
+                        .setNegativeButton("NO", (dialog, which) -> dialog.dismiss())
+                        .setPositiveButton("YES", (dialog, which) -> {
+                            dialog.dismiss();
+                            finish(); // go back to previous screen
+                        })
+                        .show();
+            }
+        });
 
         // Confirm button
         btnConfirm = findViewById(R.id.btnConfirmIntake);
@@ -693,15 +712,21 @@ public class CheckInDetailsActivity extends AppCompatActivity {
             btnVideoAccept.setEnabled(true);
 
             btnVideoAccept.setOnClickListener(v -> {
+                // If already accepted, do nothing
+                if (intakeModel != null && intakeModel.video != null
+                        && !TextUtils.isEmpty(safeStr(intakeModel.video.videoUrl))) {
+                    return;
+                }
+
                 setVideoExpanded(true);
                 hideKeyboard();
 
                 Intent intent = new Intent(CheckInDetailsActivity.this, IntakeVideoActivity.class);
                 intent.putExtra(IntakeVideoActivity.EXTRA_CONSIGNMENT_ID, consignmentIdStr());
                 intent.putExtra(IntakeVideoActivity.EXTRA_ENABLE_AUDIO, true);
-
                 recordVideoLauncher.launch(intent);
             });
+
         }
 
 
@@ -1179,11 +1204,38 @@ public class CheckInDetailsActivity extends AppCompatActivity {
 
         // Video (server state)
 // Video
-        if (btnVideoAccept != null) {
-            btnVideoAccept.setEnabled(true);
-            btnVideoAccept.setAlpha(1f);
-            btnVideoAccept.setText("RECORD VIDEO");
+// Video (server state)
+        String acceptedUrl = (it.video != null) ? safeStr(it.video.videoUrl) : "";
+
+        if (!TextUtils.isEmpty(acceptedUrl)) {
+            setStatusIcon(videoIcon, true);
+            videoDone = true;
+
+            if (btnVideoAccept != null) {
+                btnVideoAccept.setEnabled(false);
+                btnVideoAccept.setAlpha(0.5f);
+                btnVideoAccept.setText("ACCEPTED");
+            }
+            if (btnVideoRecord != null) {
+                btnVideoRecord.setEnabled(false);
+                btnVideoRecord.setAlpha(0.5f);
+            }
+        } else {
+            setStatusIcon(videoIcon, false);
+            videoDone = false;
+
+            if (btnVideoAccept != null) {
+                btnVideoAccept.setEnabled(true);
+                btnVideoAccept.setAlpha(1f);
+                btnVideoAccept.setText("RECORD VIDEO");
+            }
+            if (btnVideoRecord != null) {
+                btnVideoRecord.setEnabled(true);
+                btnVideoRecord.setAlpha(1f);
+                btnVideoRecord.setText("RECORD");
+            }
         }
+
 
         if (it.video != null) {
             String url = safeStr(it.video.videoUrl);
@@ -1713,33 +1765,37 @@ public class CheckInDetailsActivity extends AppCompatActivity {
         verifyDestAndReport(dest, "Image");
     }
 
-    // ✅ Auto-accept intake video so user can’t lose it by forgetting to tap Accept
+// ✅ Auto-accept intake video so user can’t lose it by forgetting to tap Accept
     private void acceptIntakeVideoIfPresent() {
         if (lastCapturedVideoUri == null) return;
 
         if (intakeModel == null) intakeModel = new VehicleTaskIntake();
         if (intakeModel.video == null) intakeModel.video = new VehicleTaskIntake.VideoInfo();
 
-        // This is the URL your API expects (based on your earlier code + naming convention)
+        // Store the URL your API expects (your existing naming convention)
         intakeModel.video.videoUrl = compressedVideoUrl("intake.mp4");
 
         videoDone = true;
         setStatusIcon(videoIcon, true);
 
+        // ✅ No re-record option
         if (btnVideoAccept != null) {
-            btnVideoAccept.setEnabled(true);
-            btnVideoAccept.setAlpha(1f);
-            btnVideoAccept.setText("RECORD AGAIN");
+            btnVideoAccept.setEnabled(false);
+            btnVideoAccept.setAlpha(0.5f);
+            btnVideoAccept.setText("ACCEPTED");
+        }
+        if (btnVideoRecord != null) {
+            btnVideoRecord.setEnabled(false);
+            btnVideoRecord.setAlpha(0.5f);
         }
 
-        // Kick uploader (optional but good)
+        // Kick uploader
         com.example.gt6driver.sync.GT6MediaSync.enqueueImmediate(this);
 
         refreshConfirmEnabled();
 
-        Log.i(TAG, "acceptIntakeVideoIfPresent: stored videoUrl=" + intakeModel.video.videoUrl
-                + " localUri=" + lastCapturedVideoUri);
     }
+
 
 
 
