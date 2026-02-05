@@ -7,7 +7,8 @@
     android:layout_height="match_parent"
     android:paddingTop="16dp"
     android:paddingBottom="0dp"
-    android:background="#000000">
+    android:background="#000000"
+    android:fitsSystemWindows="true">
 
     <!-- Guides to match your other screens -->
     <androidx.constraintlayout.widget.Guideline
@@ -154,22 +155,47 @@
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
-    <!-- Placeholder list panel (for “items that came with the car”) -->
-    <TextView
-        android:id="@+id/propertyItemsPlaceholder"
+    <!-- ✅ PROPERTY LIST -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rvProperty"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:text="Property items will appear here."
-        android:textColor="#bbbbbb"
-        android:textSize="14sp"
-        android:gravity="center"
-        android:background="#111111"
         android:layout_marginTop="14dp"
         android:layout_marginBottom="14dp"
+        android:padding="4dp"
+        android:clipToPadding="false"
         app:layout_constraintStart_toStartOf="@id/leftGuide"
         app:layout_constraintEnd_toEndOf="@id/rightGuide"
         app:layout_constraintTop_toBottomOf="@id/vehiclePanel"
         app:layout_constraintBottom_toTopOf="@id/btnCloseProperty" />
+
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/propertyEmptyState"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:visibility="gone"
+        android:layout_marginTop="24dp"
+        android:layout_marginBottom="24dp"
+        app:cardCornerRadius="16dp"
+        app:cardElevation="0dp"
+        app:cardBackgroundColor="#2a0f0f"
+        app:layout_constraintStart_toStartOf="@id/leftGuide"
+        app:layout_constraintEnd_toEndOf="@id/rightGuide"
+        app:layout_constraintTop_toBottomOf="@id/vehiclePanel"
+        app:layout_constraintBottom_toTopOf="@id/btnCloseProperty">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="No property found for this vehicle"
+            android:textColor="#ff9a9a"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:gravity="center"
+            android:padding="20dp"
+            android:includeFontPadding="false" />
+    </com.google.android.material.card.MaterialCardView>
+
 
     <!-- CLOSE button -->
     <com.google.android.material.button.MaterialButton

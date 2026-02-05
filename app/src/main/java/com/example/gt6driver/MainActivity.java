@@ -35,6 +35,7 @@ import androidx.work.WorkInfo;
 import androidx.work.WorkManager;
 
 import com.example.gt6driver.data.DriverDirectory;
+import com.example.gt6driver.model.MechanicDriverDto; // ✅ your package
 import com.example.gt6driver.net.ApiClient;
 import com.example.gt6driver.net.LookupService;
 import com.example.gt6driver.util.DeviceInfo;
@@ -46,12 +47,12 @@ import com.google.gson.JsonObject;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.Executors;
 
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
-import androidx.core.content.ContextCompat;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -96,14 +97,18 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        // Optional: restore cached drivers early (if you implemented it)
+        try {
+            DriverDirectory.initFromCache(this);
+        } catch (Exception ignored) {}
+
         // ---------- Initialize WorkManager logging (no Application class needed) ----------
         initWorkManagerVerboseOnce();
 
         // ---------- Force-correct upload config at app start ----------
-        // Container URL MUST include /driver. SAS must be query ONLY (no leading '?').
         com.example.gt6driver.sync.GT6MediaSync.setContainerUrl(
                 this, "https://stgt6driverappprod.blob.core.windows.net/driver");
-        // TODO: replace with your real SAS (no leading '?')
+
         com.example.gt6driver.sync.GT6MediaSync.setSas(
                 this, "si=driver&spr=https&sv=2024-11-04&sr=c&sig=bkDZ74H2Fwmznej2B86lmh3eJXfQ9nI0csLwS8ixyN8%3D");
         Log.i(TAG, "Main: configured container=/driver and SAS (redacted).");
@@ -118,7 +123,6 @@ public class MainActivity extends AppCompatActivity {
         tvLocalVideos = findViewById(R.id.tvLocalVideos);
         tvVersion     = findViewById(R.id.tvVersion);
 
-        // ✅ Refresh labels on first load
         refreshHeaderLabels();
 
         // Keep submit button above system bars / IME
@@ -139,29 +143,17 @@ public class MainActivity extends AppCompatActivity {
         eventButtonAdapter = new EventButtonAdapter();
         rvEvents.setAdapter(eventButtonAdapter);
 
-        // DRIVER spinner
-        buildDriversFromDirectory();
+        // ✅ DRIVER spinner: initialize adapter immediately with placeholder (and cached drivers if present)
+        initDriverSpinner();
 
-        ArrayList<String> driverNames = new ArrayList<>(drivers.size());
-        for (DriverItem d : drivers) driverNames.add(d.name);
-
-        driverNamesAdapter = new ArrayAdapter<>(
-                this,
-                R.layout.spinner_item_black,
-                driverNames
-        );
-        driverNamesAdapter.setDropDownViewResource(R.layout.spinner_item_black);
-        spinnerDriver.setAdapter(driverNamesAdapter);
-
-        AdapterView.OnItemSelectedListener selListener = new AdapterView.OnItemSelectedListener() {
+        spinnerDriver.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
                 updateSubmitEnabled();
             }
             @Override public void onNothingSelected(AdapterView<?> parent) {
                 updateSubmitEnabled();
             }
-        };
-        spinnerDriver.setOnItemSelectedListener(selListener);
+        });
 
         btnSubmit.setOnClickListener(v -> {
             EventItem selectedEventLocal = selectedEvent;
@@ -194,35 +186,30 @@ public class MainActivity extends AppCompatActivity {
             spinnerDriver.setSelection(0);
         }
 
-        // Permissions → start service → kick first scan (once) AFTER permissions granted
         permissionLauncher = registerForActivityResult(
                 new ActivityResultContracts.RequestMultiplePermissions(),
                 result -> ensurePermissionsAndStartSync()
         );
         ensurePermissionsAndStartSync();
 
+        // Load API data
         loadEventsFromApi();
+        loadDriversFromApi();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        // ✅ Refresh device name + version + local videos each time foregrounded
         refreshHeaderLabels();
     }
 
-    // ✅ refresh header labels in one place
     private void refreshHeaderLabels() {
         if (tvDeviceName != null) {
             String deviceName = DeviceInfo.getDeviceName(this);
             tvDeviceName.setText(deviceName);
             Log.i(TAG, "Main: refreshed deviceName=" + deviceName);
         }
-        if (tvVersion != null) {
-            tvVersion.setText(getVersionDisplayText());
-        }
-
-        // ✅ Refresh local videos count (async so UI doesn't hitch)
+        if (tvVersion != null) tvVersion.setText(getVersionDisplayText());
         refreshLocalVideoCountAsync();
     }
 
@@ -238,13 +225,9 @@ public class MainActivity extends AppCompatActivity {
             new Handler(Looper.getMainLooper()).post(() -> {
                 if (tvLocalVideos == null) return;
 
-                if (count <= 0) {
-                    tvLocalVideos.setText("No Local Videos");
-                } else if (count == 1) {
-                    tvLocalVideos.setText("Local Videos: 1");
-                } else {
-                    tvLocalVideos.setText("Local Videos: " + count);
-                }
+                if (count <= 0) tvLocalVideos.setText("No Local Videos");
+                else if (count == 1) tvLocalVideos.setText("Local Videos: 1");
+                else tvLocalVideos.setText("Local Videos: " + count);
             });
         }).start();
     }
@@ -268,13 +251,10 @@ public class MainActivity extends AppCompatActivity {
         int total = 0;
         for (File f : files) {
             if (f == null) continue;
-            if (f.isDirectory()) {
-                total += countMp4Recursive(f);
-            } else {
+            if (f.isDirectory()) total += countMp4Recursive(f);
+            else {
                 String name = f.getName();
-                if (name != null && name.toLowerCase().endsWith(".mp4")) {
-                    total++;
-                }
+                if (name != null && name.toLowerCase(Locale.US).endsWith(".mp4")) total++;
             }
         }
         return total;
@@ -282,7 +262,6 @@ public class MainActivity extends AppCompatActivity {
 
     // ===================== VERSION =====================
 
-    // ✅ show versionName + versionCode (supports all API levels)
     private String getVersionDisplayText() {
         try {
             PackageInfo pi = getPackageManager().getPackageInfo(getPackageName(), 0);
@@ -314,12 +293,10 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // ===== one-time kickoff guard =====
     private static void maybeStartInitialSync(android.content.Context appCtx) {
         if (sSyncStarted) return;
         sSyncStarted = true;
 
-        // Clean up any old chains that can leave new work BLOCKED
         WorkManager wm = WorkManager.getInstance(appCtx);
         wm.cancelUniqueWork("gt6_scan_serial");
         wm.cancelUniqueWork("gt6_content_watch");
@@ -327,28 +304,9 @@ public class MainActivity extends AppCompatActivity {
         wm.cancelAllWorkByTag("gt6_content_triggered");
         wm.pruneWork();
 
-        // Enqueue fresh
         com.example.gt6driver.sync.GT6MediaSync.enqueueImmediate(appCtx);
         com.example.gt6driver.sync.GT6MediaSync.enqueueContentTriggers(appCtx);
         Log.i(TAG, "Main: enqueued initial scan + content triggers.");
-
-        // Optional: quick debug dump to Logcat (tag: GT6-Worker)
-        new Thread(() -> {
-            try {
-                for (WorkInfo wi : WorkManager.getInstance(appCtx)
-                        .getWorkInfosForUniqueWork("gt6_scan_serial").get()) {
-                    Log.i(TAG, "POST-ENQUEUE WM gt6_scan_serial → " + wi.getId()
-                            + " state=" + wi.getState() + " tags=" + wi.getTags());
-                }
-                for (WorkInfo wi : WorkManager.getInstance(appCtx)
-                        .getWorkInfosForUniqueWork("gt6_content_watch").get()) {
-                    Log.i(TAG, "POST-ENQUEUE WM gt6_content_watch → " + wi.getId()
-                            + " state=" + wi.getState() + " tags=" + wi.getTags());
-                }
-            } catch (Exception e) {
-                Log.w(TAG, "WM debug fetch failed", e);
-            }
-        }).start();
     }
 
     @Override
@@ -380,6 +338,8 @@ public class MainActivity extends AppCompatActivity {
         btnSubmit.setEnabled(!loading && btnSubmit.isEnabled());
     }
 
+    // ===================== EVENTS (SORT BY DATE + FILTER ID 624) =====================
+
     private void loadEventsFromApi() {
         setLoading(true);
         LookupService svc = ApiClient.getMemberApi().create(LookupService.class);
@@ -410,12 +370,30 @@ public class MainActivity extends AppCompatActivity {
 
                                 String name = getStringOrNull(lu, "name");
                                 Integer id = getIntOrNull(lu, "id");
+
                                 if (name != null && !name.trim().isEmpty() && id != null && id > 0) {
-                                    fetched.add(new EventItem(id, capFirst(name.trim())));
+                                    // 🚫 Filter out auction id 624
+                                    if (id == 624) {
+                                        Log.i(TAG, "Skipping filtered auction id=624 (" + name + ")");
+                                        continue;
+                                    }
+
+                                    long sortMs = extractEventSortTimeMs(lu);
+                                    fetched.add(new EventItem(id, capFirst(name.trim()), sortMs));
                                 }
                             }
                         }
                     }
+
+                    fetched.sort((a, b) -> {
+                        boolean aHas = a.sortTimeMs > 0;
+                        boolean bHas = b.sortTimeMs > 0;
+
+                        if (aHas && bHas) return Long.compare(a.sortTimeMs, b.sortTimeMs);
+                        if (aHas) return -1;
+                        if (bHas) return 1;
+                        return a.name.compareToIgnoreCase(b.name);
+                    });
 
                     if (!fetched.isEmpty()) {
                         events.clear();
@@ -423,12 +401,10 @@ public class MainActivity extends AppCompatActivity {
 
                         eventButtonAdapter.setEvents(events);
 
-                        // Restore selection if we have one
                         if (pendingRestoreEventId > 0) {
                             eventButtonAdapter.selectById(pendingRestoreEventId);
                             pendingRestoreEventId = -1;
                         } else {
-                            // If nothing restored, keep selection cleared
                             selectedEvent = null;
                             eventButtonAdapter.clearSelection();
                         }
@@ -452,6 +428,209 @@ public class MainActivity extends AppCompatActivity {
             }
         });
     }
+
+    private long extractEventSortTimeMs(JsonObject lu) {
+        String[] keys = new String[]{"startDate", "eventStartDate", "start", "date", "beginDate", "startTime"};
+        for (String k : keys) {
+            String s = getStringOrNull(lu, k);
+            long t = parseDateToEpochMs(s);
+            if (t > 0) return t;
+        }
+
+        try {
+            if (lu.has("startDate") && lu.get("startDate").isJsonObject()) {
+                JsonObject o = lu.getAsJsonObject("startDate");
+                String s = getStringOrNull(o, "dateTime");
+                long t = parseDateToEpochMs(s);
+                if (t > 0) return t;
+            }
+        } catch (Exception ignored) {}
+
+        return 0L;
+    }
+
+    private long parseDateToEpochMs(String s) {
+        if (s == null) return 0L;
+        s = s.trim();
+        if (s.isEmpty()) return 0L;
+
+        try { return java.time.OffsetDateTime.parse(s).toInstant().toEpochMilli(); } catch (Exception ignored) {}
+        try {
+            return java.time.LocalDateTime.parse(s)
+                    .atZone(java.time.ZoneId.systemDefault())
+                    .toInstant().toEpochMilli();
+        } catch (Exception ignored) {}
+        try {
+            return java.time.LocalDate.parse(s)
+                    .atStartOfDay(java.time.ZoneId.systemDefault())
+                    .toInstant().toEpochMilli();
+        } catch (Exception ignored) {}
+        try {
+            java.time.format.DateTimeFormatter f = java.time.format.DateTimeFormatter.ofPattern("M/d/uuuu");
+            return java.time.LocalDate.parse(s, f)
+                    .atStartOfDay(java.time.ZoneId.systemDefault())
+                    .toInstant().toEpochMilli();
+        } catch (Exception ignored) {}
+
+        return 0L;
+    }
+
+    // ===================== DRIVERS (API + SORT firstName+lastName) =====================
+
+    private void initDriverSpinner() {
+        drivers.clear();
+        drivers.add(new DriverItem(-1, "Select Driver…"));
+
+        ArrayList<String> names = new ArrayList<>();
+        names.add("Select Driver…");
+
+        driverNamesAdapter = new ArrayAdapter<>(this, R.layout.spinner_item_black, names);
+        driverNamesAdapter.setDropDownViewResource(R.layout.spinner_item_black);
+        spinnerDriver.setAdapter(driverNamesAdapter);
+
+        // If cached directory entries exist, show them immediately while API refreshes
+        try {
+            List<DriverDirectory.Entry> cached = DriverDirectory.entries();
+            if (cached != null && !cached.isEmpty()) {
+                applyDriversToSpinnerFromDirectory(cached);
+            }
+        } catch (Exception ignored) {}
+    }
+
+    private void loadDriversFromApi() {
+        LookupService svc = ApiClient.getMemberApi().create(LookupService.class);
+
+        // ✅ IMPORTANT: this must return Call<List<MechanicDriverDto>>
+        svc.getMechanicDrivers().enqueue(new Callback<List<MechanicDriverDto>>() {
+            @Override
+            public void onResponse(Call<List<MechanicDriverDto>> call,
+                                   Response<List<MechanicDriverDto>> response) {
+
+                if (!response.isSuccessful() || response.body() == null) {
+                    Toast.makeText(MainActivity.this,
+                            "Failed to load drivers (" + response.code() + ")", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+
+                List<MechanicDriverDto> fetched = response.body();
+                if (fetched == null) fetched = new ArrayList<>();
+
+                // Preserve current selection (by driverNumber) if possible
+                int oldPos = spinnerDriver.getSelectedItemPosition();
+                int oldDriverNumber = -1;
+                if (oldPos >= 0 && oldPos < drivers.size()) {
+                    oldDriverNumber = drivers.get(oldPos).number;
+                }
+
+                List<DriverItem> mapped = new ArrayList<>();
+                for (MechanicDriverDto d : fetched) {
+                    if (d == null) continue;
+
+                    int num = d.driverNumber;
+                    if (num <= 0) continue;
+
+                    String first = (d.firstName == null) ? "" : d.firstName.trim();
+                    String last  = (d.lastName == null)  ? "" : d.lastName.trim();
+                    String display = (first + " " + last).trim();
+
+                    if (display.isEmpty()) continue;
+
+                    mapped.add(new DriverItem(num, display));
+                }
+
+                // ✅ Sort by firstName+lastName (display name), then by driverNumber
+                mapped.sort((a, b) -> {
+                    int cmp = a.name.compareToIgnoreCase(b.name);
+                    if (cmp != 0) return cmp;
+                    return Integer.compare(a.number, b.number);
+                });
+
+                // Apply to spinner
+                drivers.clear();
+                drivers.add(new DriverItem(-1, "Select Driver…"));
+                drivers.addAll(mapped);
+
+                ArrayList<String> names = new ArrayList<>(drivers.size());
+                for (DriverItem di : drivers) names.add(di.name);
+
+                driverNamesAdapter.clear();
+                driverNamesAdapter.addAll(names);
+                driverNamesAdapter.notifyDataSetChanged();
+
+                // Try to restore selection by driverNumber
+                int newPos = 0;
+                if (oldDriverNumber > 0) {
+                    for (int i = 0; i < drivers.size(); i++) {
+                        if (drivers.get(i).number == oldDriverNumber) {
+                            newPos = i;
+                            break;
+                        }
+                    }
+                }
+                spinnerDriver.setSelection(newPos);
+
+                updateSubmitEnabled();
+
+                Toast.makeText(MainActivity.this,
+                        "Loaded " + Math.max(0, drivers.size() - 1) + " drivers (API)", Toast.LENGTH_SHORT).show();
+
+                // Optional: if you want caching in DriverDirectory, do it there (don’t reference DriverRecord here)
+                // e.g. DriverDirectory.replaceAllFromDto(MainActivity.this, fetched);
+            }
+
+            @Override
+            public void onFailure(Call<List<MechanicDriverDto>> call, Throwable t) {
+                Toast.makeText(MainActivity.this, "Network error loading drivers.", Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+
+    private void applyDriversToSpinnerFromDirectory(List<DriverDirectory.Entry> list) {
+        int oldPos = spinnerDriver.getSelectedItemPosition();
+        int oldDriverNumber = -1;
+        if (oldPos >= 0 && oldPos < drivers.size()) oldDriverNumber = drivers.get(oldPos).number;
+
+        drivers.clear();
+        drivers.add(new DriverItem(-1, "Select Driver…"));
+
+        if (list != null) {
+            list.sort((a, b) -> {
+                String an = (a == null || a.name == null) ? "" : a.name.toLowerCase(Locale.US);
+                String bn = (b == null || b.name == null) ? "" : b.name.toLowerCase(Locale.US);
+                int cmp = an.compareTo(bn);
+                if (cmp != 0) return cmp;
+                int ai = (a == null) ? -1 : a.number;
+                int bi = (b == null) ? -1 : b.number;
+                return Integer.compare(ai, bi);
+            });
+
+            for (DriverDirectory.Entry e : list) {
+                if (e == null) continue;
+                if (e.number <= 0) continue;
+                if (e.name == null || e.name.trim().isEmpty()) continue;
+                drivers.add(new DriverItem(e.number, e.name.trim()));
+            }
+        }
+
+        ArrayList<String> names = new ArrayList<>(drivers.size());
+        for (DriverItem d : drivers) names.add(d.name);
+
+        driverNamesAdapter.clear();
+        driverNamesAdapter.addAll(names);
+        driverNamesAdapter.notifyDataSetChanged();
+
+        if (oldDriverNumber > 0) {
+            int newPos = 0;
+            for (int i = 0; i < drivers.size(); i++) {
+                if (drivers.get(i).number == oldDriverNumber) { newPos = i; break; }
+            }
+            spinnerDriver.setSelection(newPos);
+        }
+
+        updateSubmitEnabled();
+    }
+
+    // ===================== JSON HELPERS =====================
 
     private Integer getIntOrNull(JsonObject o, String key) {
         try {
@@ -477,32 +656,8 @@ public class MainActivity extends AppCompatActivity {
         return Math.round(getResources().getDisplayMetrics().density * dps);
     }
 
-    // ===================== DRIVER LOADING (from DriverDirectory) =====================
-    private void buildDriversFromDirectory() {
-        drivers.clear();
-
-        // Placeholder first
-        drivers.add(new DriverItem(-1, "Select Driver…"));
-
-        // Pull from shared directory
-        List<DriverDirectory.Entry> list = DriverDirectory.entries();
-        if (list != null) {
-
-            list.sort((a, b) -> {
-                if (a == null || a.name == null) return -1;
-                if (b == null || b.name == null) return 1;
-                return a.name.compareToIgnoreCase(b.name);
-            });
-
-            for (DriverDirectory.Entry e : list) {
-                drivers.add(new DriverItem(e.number, e.name));
-            }
-        }
-
-        Toast.makeText(this, "Loaded " + Math.max(0, drivers.size() - 1) + " drivers (directory)", Toast.LENGTH_SHORT).show();
-    }
-
     // ===================== MODELS =====================
+
     private static class DriverItem {
         final int number;
         final String name;
@@ -513,11 +668,17 @@ public class MainActivity extends AppCompatActivity {
     private static class EventItem {
         final int id;
         final String name;
-        EventItem(int id, String name) { this.id = id; this.name = name; }
+        final long sortTimeMs; // 0 if unknown
+        EventItem(int id, String name, long sortTimeMs) {
+            this.id = id;
+            this.name = name;
+            this.sortTimeMs = sortTimeMs;
+        }
         @Override public String toString() { return name; }
     }
 
     // ===================== EVENT GRID ADAPTER =====================
+
     private class EventButtonAdapter extends RecyclerView.Adapter<EventButtonAdapter.VH> {
 
         private final List<EventItem> data = new ArrayList<>();
@@ -564,7 +725,6 @@ public class MainActivity extends AppCompatActivity {
             boolean isSelected = (item.id == selectedId);
 
             if (isSelected) {
-                // ✅ SELECTED: white background, red text
                 h.btn.setBackgroundTintList(
                         ContextCompat.getColorStateList(h.btn.getContext(), android.R.color.white)
                 );
@@ -573,7 +733,6 @@ public class MainActivity extends AppCompatActivity {
                 );
                 h.btn.setAlpha(1f);
             } else {
-                // ⬜ UNSELECTED: red background, white text
                 h.btn.setBackgroundTintList(
                         ContextCompat.getColorStateList(h.btn.getContext(), R.color.redButton)
                 );
@@ -591,7 +750,6 @@ public class MainActivity extends AppCompatActivity {
             });
         }
 
-
         @Override
         public int getItemCount() {
             return data.size();
@@ -607,6 +765,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // ===================== PERMISSIONS / SERVICE =====================
+
     private void ensurePermissionsAndStartSync() {
         List<String> needed = new ArrayList<>();
         if (Build.VERSION.SDK_INT >= 33) {
@@ -630,10 +789,8 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        // Permissions ready → start the foreground watcher and kick one scan (once per process)
         startGT6SyncService();
 
-        // Clean up old work that can cause BLOCKED
         WorkManager wm = WorkManager.getInstance(getApplicationContext());
         wm.cancelUniqueWork("gt6_scan_serial");
         wm.cancelUniqueWork("gt6_content_watch");
@@ -642,8 +799,6 @@ public class MainActivity extends AppCompatActivity {
         wm.pruneWork();
 
         maybeStartInitialSync(getApplicationContext());
-
-        // Optional: dump WorkManager state after enqueues
         dumpWM("POST-ENQUEUE");
     }
 
@@ -654,7 +809,6 @@ public class MainActivity extends AppCompatActivity {
         Log.i(TAG, "Main: started GT6MediaSyncService.");
     }
 
-    // ----- Debug helper: dump your WorkManager jobs to Logcat -----
     private void dumpWM(String label) {
         try {
             ListenableFuture<List<WorkInfo>> f1 =
@@ -696,7 +850,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 }
-
 
 
 

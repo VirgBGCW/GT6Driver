@@ -135,6 +135,24 @@
             android:exported="false"
             android:screenOrientation="portrait" />
 
+        <!-- ✅ Property screen (explicit exported + orientation to match the rest) -->
+        <activity
+            android:name=".PropertyActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
+        <!-- ✅ Transport screen (already correct; leaving as-is) -->
+        <activity
+            android:name=".TransportActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
+        <activity
+            android:name=".ConfigActivity"
+            android:exported="false"
+            android:label="Configuration"
+            android:screenOrientation="portrait" />
+
         <!-- Launcher -->
         <activity
             android:name=".MainActivity"
@@ -146,12 +164,6 @@
             </intent-filter>
         </activity>
 
-        <activity android:name=".PropertyActivity" />
-
-        <activity
-            android:name=".ConfigActivity"
-            android:exported="false"
-            android:label="Configuration" />
     </application>
 </manifest>
 
