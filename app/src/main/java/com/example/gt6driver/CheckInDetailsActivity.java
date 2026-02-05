@@ -20,7 +20,6 @@ import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.InputMethodManager;
-import android.widget.CompoundButton;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.TextView;
@@ -29,6 +28,7 @@ import android.widget.Toast;
 import java.nio.charset.StandardCharsets;
 import java.io.File;
 
+import androidx.activity.OnBackPressedCallback;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
@@ -42,11 +42,9 @@ import com.example.gt6driver.util.DeviceInfo;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.checkbox.MaterialCheckBox;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.textfield.TextInputEditText;
 import com.google.android.material.textfield.TextInputLayout;
-import androidx.activity.OnBackPressedCallback;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
-
 
 public class CheckInDetailsActivity extends AppCompatActivity {
 
@@ -63,30 +61,12 @@ public class CheckInDetailsActivity extends AppCompatActivity {
     private static final String EXTRA_VEHICLE        = "vehicle";
     private static final String EXTRA_OPPORTUNITY_ID = "opportunityId";
 
-    // SIDE CAR STUFF
     private static final String TAG = "GT6Intake";
 
     private VehicleDetail vehicle;
 
     private TextView panelLot, panelDesc, panelVin;
     private ImageView ivVehicleThumb;
-
-    // VERIFY VIN
-    private MaterialCardView verifyVinPanel;
-    private View verifyVinHeader;
-    private View verifyActions;
-    private ImageView verifyIcon;
-    private MaterialButton btnVinMatch, btnVinNoMatch;
-    private Boolean vinMatched = null; // true = MATCH, false = DOES NOT MATCH, null = unset
-    private View noMatchGroup;
-    private TextInputLayout enterVinLayout;
-    private TextInputEditText enterVinInput;
-    private MaterialCheckBox cbVinNotified;
-    private MaterialButton btnVinUpdate;
-    private TextView verifyVinValue;
-    private ImageButton btnCamera;
-    private boolean vinExpanded = false;
-    private boolean vinNoMatchMode = false;
 
     // MILEAGE
     private MaterialCardView mileagePanel;
@@ -98,19 +78,6 @@ public class CheckInDetailsActivity extends AppCompatActivity {
     private ImageButton btnMileageCamera;
     private MaterialButton btnMileageUpdate;
     private boolean mileageExpanded = false;
-
-    // KEY CHECK
-    private MaterialCardView keyPanel;
-    private View keyHeader;
-    private View keyGroup;
-    private ImageView keyIcon;
-    private MaterialCheckBox cbFobs, cbNoKey;
-    private TextInputLayout enterKeyCountLayout;
-    private TextInputEditText enterKeyCountInput;
-    private ImageButton btnKeyCamera;
-    private MaterialButton btnKeyUpdate;
-    private boolean keyExpanded = false;
-    private boolean isChangingKeyState = false;
 
     // INTAKE VIDEO
     private MaterialCardView videoPanel;
@@ -147,8 +114,8 @@ public class CheckInDetailsActivity extends AppCompatActivity {
     private ActivityResultLauncher<String> requestWritePermissionLauncher;
     private ActivityResultLauncher<String> requestReadImagesPermissionLauncher;
 
-    // Full-res photo capture state
-    private String pendingPhotoLabel = null; // "vin" | "mileage" | "keycheck"
+    // Full-res photo capture state (NOW MILEAGE ONLY)
+    private String pendingPhotoLabel = null; // "mileage"
     private Uri pendingPhotoUri = null;
     private ActivityResultLauncher<Intent> takePictureLauncher;
 
@@ -162,13 +129,14 @@ public class CheckInDetailsActivity extends AppCompatActivity {
     private int eventId;
     private String thumbUrl;
 
-    // Completion flags
-    private boolean vinDone = false;
+    // Completion flags (VIN/KEY removed)
     private boolean mileageDone = false;
-    private boolean keyDone = false;
     private boolean videoDone = false;
     private boolean descDone = false;
     private boolean qualityDone = false;
+
+    // ✅ NEW: Must have loaded intake from API before we allow PUT
+    private boolean intakeLoaded = false;
 
     // Networking
     private DriverTaskRepository driverTaskRepo;
@@ -188,21 +156,6 @@ public class CheckInDetailsActivity extends AppCompatActivity {
         panelVin = findViewById(R.id.panelVin);
         ivVehicleThumb = findViewById(R.id.ivCheckInThumb);
 
-        // VERIFY VIN
-        verifyVinPanel = findViewById(R.id.verifyVinPanel);
-        verifyVinHeader = findViewById(R.id.verifyVinHeader);
-        verifyActions = findViewById(R.id.verifyActions);
-        verifyIcon = findViewById(R.id.verifyIcon);
-        btnVinMatch = findViewById(R.id.btnVinMatch);
-        btnVinNoMatch = findViewById(R.id.btnVinNoMatch);
-        verifyVinValue = findViewById(R.id.verifyVinValue);
-        noMatchGroup = findViewById(R.id.noMatchGroup);
-        enterVinLayout = findViewById(R.id.enterVinLayout);
-        enterVinInput = findViewById(R.id.enterVinInput);
-        cbVinNotified = findViewById(R.id.cbVinNotified);
-        btnVinUpdate = findViewById(R.id.btnVinUpdate);
-        btnCamera = findViewById(R.id.btnCamera);
-
         // MILEAGE
         mileagePanel = findViewById(R.id.mileagePanel);
         mileageHeader = findViewById(R.id.mileageHeader);
@@ -212,18 +165,6 @@ public class CheckInDetailsActivity extends AppCompatActivity {
         enterMileageInput = findViewById(R.id.enterMileageInput);
         btnMileageCamera = findViewById(R.id.btnMileageCamera);
         btnMileageUpdate = findViewById(R.id.btnMileageUpdate);
-
-        // KEY CHECK
-        keyPanel = findViewById(R.id.keyPanel);
-        keyHeader = findViewById(R.id.keyHeader);
-        keyGroup = findViewById(R.id.keyGroup);
-        keyIcon = findViewById(R.id.keyIcon);
-        cbFobs = findViewById(R.id.cbFobs);
-        cbNoKey = findViewById(R.id.cbNoKey);
-        enterKeyCountLayout = findViewById(R.id.enterKeyCountLayout);
-        enterKeyCountInput = findViewById(R.id.enterKeyCountInput);
-        btnKeyCamera = findViewById(R.id.btnKeyCamera);
-        btnKeyUpdate = findViewById(R.id.btnKeyUpdate);
 
         // INTAKE VIDEO (buttons only; recording happens in IntakeVideoActivity)
         videoPanel = findViewById(R.id.videoPanel);
@@ -263,27 +204,25 @@ public class CheckInDetailsActivity extends AppCompatActivity {
         cbTiresWheels = findViewById(R.id.cbTiresWheels);
         cbMechanical = findViewById(R.id.cbMechanical);
         cbServiceLights = findViewById(R.id.cbServiceLights);
-        // Back Button
-        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
-            @Override
-            public void handleOnBackPressed() {
 
+        // Back Button confirm
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override public void handleOnBackPressed() {
                 new MaterialAlertDialogBuilder(CheckInDetailsActivity.this)
                         .setTitle("Cancel Intake")
                         .setMessage("Are you sure you want to cancel?")
                         .setNegativeButton("NO", (dialog, which) -> dialog.dismiss())
                         .setPositiveButton("YES", (dialog, which) -> {
                             dialog.dismiss();
-                            finish(); // go back to previous screen
+                            finish();
                         })
                         .show();
             }
         });
 
-        // Confirm button
+        // Confirm button (START DISABLED until required panels done)
         btnConfirm = findViewById(R.id.btnConfirmIntake);
-        btnConfirm.setEnabled(true);
-        btnConfirm.setAlpha(1f);
+        setConfirmEnabled(false);
 
         // ===== Intent extras =====
         Intent in = getIntent();
@@ -345,7 +284,8 @@ public class CheckInDetailsActivity extends AppCompatActivity {
         if (descValue != null) {
             descValue.setText(!TextUtils.isEmpty(description) ? description : "No description available.");
         }
-        // ===== PHOTO launcher =====
+
+        // ===== PHOTO launcher (MILEAGE ONLY) =====
         takePictureLauncher = registerForActivityResult(
                 new ActivityResultContracts.StartActivityForResult(),
                 result -> {
@@ -370,14 +310,14 @@ public class CheckInDetailsActivity extends AppCompatActivity {
                             if (extra instanceof android.graphics.Bitmap) bmpFromExtras = (android.graphics.Bitmap) extra;
                         }
 
-                        // ---- Case A: camera wrote to our requested row ----
+                        // Case A: camera wrote to our requested row
                         if (requested != null && awaitNonZeroSize(requested)) {
                             try { getContentResolver().notifyChange(requested, null); } catch (Exception ignore) {}
                             finalizePhotoAndBind(requested, pendingPhotoLabel);
                             return;
                         }
 
-                        // ---- Case B: need to write data ourselves to requested row ----
+                        // Case B: need to write data ourselves to requested row
                         Uri dest = (requested != null) ? requested : createIntakePhotoUri(pendingPhotoLabel);
                         if (dest == null) {
                             Toast.makeText(this, "Failed to create GT6 photo row.", Toast.LENGTH_SHORT).show();
@@ -418,54 +358,47 @@ public class CheckInDetailsActivity extends AppCompatActivity {
         recordVideoLauncher = registerForActivityResult(
                 new ActivityResultContracts.StartActivityForResult(),
                 result -> {
-                    try {
-                        if (result.getResultCode() != RESULT_OK) {
-                            return; // canceled
-                        }
+                    if (result.getResultCode() != RESULT_OK) return;
 
-                        Intent data = result.getData();
-                        Uri finalDest = null;
+                    Intent data = result.getData();
+                    Uri finalDest = null;
 
-                        if (data != null) {
-                            try {
-                                finalDest = data.getParcelableExtra(IntakeVideoActivity.EXTRA_RESULT_VIDEO_URI);
-                            } catch (Throwable ignored) {}
-                            if (finalDest == null) finalDest = data.getData();
-                        }
-
-                        if (finalDest == null) {
-                            Toast.makeText(this, "No video returned.", Toast.LENGTH_SHORT).show();
-                            return;
-                        }
-
-                        lastCapturedVideoUri = finalDest;
-                        verifyDestAndReport(finalDest, "Video");
-
-                        // ✅ Write sidecar for intake video (Downloads/GT6/{id}/intake.meta.json)
-                        String createdAtUtc = isoUtcNow();
-                        String deviceName = DeviceInfo.getDeviceName(this);
-                        String driverName = resolveDriverName();
-                        if (TextUtils.isEmpty(driverName)) driverName = "Upload Agent";
-
-                        boolean sidecarOk = writeSidecarJsonToDownload(
-                                "intake",
-                                createdAtUtc,
-                                consignmentIdStr(),
-                                deviceName,
-                                driverName,
-                                (lot != null ? lot : "")
-                        );
-                        Log.i(TAG, "Sidecar write attempted for intake.meta.json ok=" + sidecarOk);
-
-                        // ✅ Auto-accept intake video (sets intakeModel.videoUrl)
-                        acceptIntakeVideoIfPresent();
-
-                        // ✅ Kick uploader immediately
-                        com.example.gt6driver.sync.GT6MediaSync.enqueueImmediate(this);
-
-                    } finally {
-                        // no-op
+                    if (data != null) {
+                        try {
+                            finalDest = data.getParcelableExtra(IntakeVideoActivity.EXTRA_RESULT_VIDEO_URI);
+                        } catch (Throwable ignored) {}
+                        if (finalDest == null) finalDest = data.getData();
                     }
+
+                    if (finalDest == null) {
+                        Toast.makeText(this, "No video returned.", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+
+                    lastCapturedVideoUri = finalDest;
+                    verifyDestAndReport(finalDest, "Video");
+
+                    // Sidecar
+                    String createdAtUtc = isoUtcNow();
+                    String deviceName = DeviceInfo.getDeviceName(this);
+                    String driverName = resolveDriverName();
+                    if (TextUtils.isEmpty(driverName)) driverName = "Upload Agent";
+
+                    boolean sidecarOk = writeSidecarJsonToDownload(
+                            "intake",
+                            createdAtUtc,
+                            consignmentIdStr(),
+                            deviceName,
+                            driverName,
+                            (lot != null ? lot : "")
+                    );
+                    Log.i(TAG, "Sidecar write attempted for intake.meta.json ok=" + sidecarOk);
+
+                    // Auto-accept intake video
+                    acceptIntakeVideoIfPresent();
+
+                    // Kick uploader immediately
+                    com.example.gt6driver.sync.GT6MediaSync.enqueueImmediate(this);
                 }
         );
 
@@ -474,19 +407,18 @@ public class CheckInDetailsActivity extends AppCompatActivity {
                 new ActivityResultContracts.RequestPermission(),
                 isGranted -> {
                     if (isGranted) {
-                        openCameraPhoto(pendingPhotoLabel != null ? pendingPhotoLabel : "vin");
+                        openCameraPhoto(pendingPhotoLabel != null ? pendingPhotoLabel : "mileage");
                     } else {
                         Toast.makeText(this, "Photos permission is required.", Toast.LENGTH_SHORT).show();
                     }
                 }
         );
 
-        // CAMERA permission (photos only)
         requestCameraPermissionLauncher = registerForActivityResult(
                 new ActivityResultContracts.RequestPermission(),
                 isGranted -> {
                     if (isGranted) {
-                        if (pendingPhotoLabel == null) pendingPhotoLabel = "vin";
+                        if (pendingPhotoLabel == null) pendingPhotoLabel = "mileage";
                         openCameraPhoto(pendingPhotoLabel);
                     } else {
                         Toast.makeText(this, "Camera permission is required.", Toast.LENGTH_SHORT).show();
@@ -494,12 +426,11 @@ public class CheckInDetailsActivity extends AppCompatActivity {
                 }
         );
 
-        // WRITE permission (API <= 28) — used for photo capture destinations
         requestWritePermissionLauncher = registerForActivityResult(
                 new ActivityResultContracts.RequestPermission(),
                 isGranted -> {
                     if (isGranted) {
-                        openCameraPhoto(pendingPhotoLabel != null ? pendingPhotoLabel : "vin");
+                        openCameraPhoto(pendingPhotoLabel != null ? pendingPhotoLabel : "mileage");
                     } else {
                         Toast.makeText(this, "Storage permission is required to save photos.", Toast.LENGTH_SHORT).show();
                     }
@@ -507,85 +438,6 @@ public class CheckInDetailsActivity extends AppCompatActivity {
         );
 
         // ===== Click listeners =====
-
-        // VIN: camera button
-        if (btnCamera != null) {
-            btnCamera.setOnClickListener(v -> {
-                vinNoMatchMode = true;
-                setVinExpanded(true);
-                hideKeyboard();
-                ensureCameraForPhoto("vin");
-            });
-        }
-
-        // VIN: panel toggle
-        if (verifyVinHeader != null) verifyVinHeader.setOnClickListener(v -> toggleVinPanel());
-
-        if (btnVinMatch != null) {
-            btnVinMatch.setOnClickListener(v -> {
-                vinMatched = true;
-
-                String curVin = currentVinForApi();
-                if (verifyVinValue != null) verifyVinValue.setText(curVin);
-
-                if (intakeModel == null) intakeModel = new VehicleTaskIntake();
-                if (intakeModel.vinVerify == null) intakeModel.vinVerify = new VehicleTaskIntake.VinVerify();
-                intakeModel.vinVerify.newVin = curVin;
-                intakeModel.vinVerify.isMatched = true;
-
-                setStatusIcon(verifyIcon, true);
-                vinNoMatchMode = false;
-                vinDone = true;
-                setVinExpanded(false);
-                refreshConfirmEnabled();
-            });
-        }
-
-        if (btnVinNoMatch != null) {
-            btnVinNoMatch.setOnClickListener(v -> {
-                vinMatched = false;
-                setStatusIcon(verifyIcon, false);
-                vinNoMatchMode = true;
-                vinDone = false;
-                setVinExpanded(true);
-                showKeyboardFor(enterVinInput);
-                refreshConfirmEnabled();
-            });
-        }
-
-        if (btnVinUpdate != null) {
-            btnVinUpdate.setOnClickListener(v -> {
-                String entered = safe(enterVinInput);
-                if (TextUtils.isEmpty(entered)) {
-                    if (enterVinInput != null) {
-                        enterVinInput.setError("VIN is required");
-                        enterVinInput.requestFocus();
-                    }
-                    return;
-                }
-                hideKeyboard();
-
-                if (intakeModel == null) intakeModel = new VehicleTaskIntake();
-                if (intakeModel.vinVerify == null) intakeModel.vinVerify = new VehicleTaskIntake.VinVerify();
-                intakeModel.vinVerify.newVin = entered;
-                intakeModel.vinVerify.isNotified = (cbVinNotified != null && cbVinNotified.isChecked());
-
-                if (verifyVinValue != null) verifyVinValue.setText(entered);
-
-                Toast.makeText(this, "VIN submitted: " + entered +
-                                (cbVinNotified != null && cbVinNotified.isChecked() ? " • Specialist notified" : ""),
-                        Toast.LENGTH_LONG).show();
-
-                if (enterVinInput != null) enterVinInput.setText("");
-
-                vinMatched = false;
-                vinDone = true;
-                vinNoMatchMode = false;
-                setStatusIcon(verifyIcon, true);
-                setVinExpanded(false);
-                refreshConfirmEnabled();
-            });
-        }
 
         // MILEAGE
         if (mileageHeader != null) mileageHeader.setOnClickListener(v -> toggleMileagePanel());
@@ -608,6 +460,13 @@ public class CheckInDetailsActivity extends AppCompatActivity {
                     }
                     return;
                 }
+
+                // Persist into model so server gets it
+                // NOTE: we still allow local edits before intakeLoaded, but CONFIRM won't allow PUT until loaded.
+                if (intakeModel == null) intakeModel = new VehicleTaskIntake();
+                if (intakeModel.mileage == null) intakeModel.mileage = new VehicleTaskIntake.Mileage();
+                try { intakeModel.mileage.odometer = Integer.parseInt(miles); } catch (NumberFormatException ignored) {}
+
                 hideKeyboard();
                 Toast.makeText(this, "Mileage saved: " + miles, Toast.LENGTH_SHORT).show();
                 setStatusIcon(mileageIcon, true);
@@ -617,80 +476,9 @@ public class CheckInDetailsActivity extends AppCompatActivity {
             });
         }
 
-        // KEY CHECK
-        if (keyHeader != null) keyHeader.setOnClickListener(v -> toggleKeyPanel());
-        if (btnKeyCamera != null) {
-            btnKeyCamera.setOnClickListener(v -> {
-                setKeyExpanded(true);
-                hideKeyboard();
-                ensureCameraForPhoto("keycheck");
-            });
-        }
-
-        if (btnKeyUpdate != null) {
-            btnKeyUpdate.setOnClickListener(v -> {
-                boolean hasFobs = cbFobs != null && cbFobs.isChecked();
-                boolean noKey   = cbNoKey != null && cbNoKey.isChecked();
-                if (!hasFobs && !noKey) {
-                    Toast.makeText(this, "Select FOB(s) or NO KEY.", Toast.LENGTH_SHORT).show();
-                    return;
-                }
-                if (hasFobs) {
-                    String count = safe(enterKeyCountInput);
-                    if (TextUtils.isEmpty(count)) {
-                        if (enterKeyCountInput != null) {
-                            enterKeyCountInput.setError("Enter number of keys");
-                            enterKeyCountInput.requestFocus();
-                        }
-                        return;
-                    }
-                    try {
-                        int c = Integer.parseInt(count);
-                        if (c <= 0) {
-                            enterKeyCountInput.setError("Must be at least 1");
-                            enterKeyCountInput.requestFocus();
-                            return;
-                        }
-                    } catch (NumberFormatException e) {
-                        if (enterKeyCountInput != null) {
-                            enterKeyCountInput.setError("Invalid number");
-                            enterKeyCountInput.requestFocus();
-                        }
-                        return;
-                    }
-                }
-                hideKeyboard();
-                Toast.makeText(this, "Key check saved.", Toast.LENGTH_SHORT).show();
-                setStatusIcon(keyIcon, true);
-                keyDone = true;
-                setKeyExpanded(false);
-                refreshConfirmEnabled();
-            });
-        }
-
-        if (cbFobs != null && cbNoKey != null) {
-            CompoundButton.OnCheckedChangeListener keyMutualListener = (buttonView, isChecked) -> {
-                if (isChangingKeyState) return;
-                isChangingKeyState = true;
-
-                if (buttonView == cbFobs && isChecked) {
-                    cbNoKey.setChecked(false);
-                } else if (buttonView == cbNoKey && isChecked) {
-                    cbFobs.setChecked(false);
-                }
-                updateKeyCountEnabled();
-
-                isChangingKeyState = false;
-            };
-            cbFobs.setOnCheckedChangeListener(keyMutualListener);
-            cbNoKey.setOnCheckedChangeListener(keyMutualListener);
-            updateKeyCountEnabled();
-        }
-
         // VIDEO section
         if (videoHeader != null) videoHeader.setOnClickListener(v -> toggleVideoPanel());
 
-        // RECORD button opens IntakeVideoActivity
         if (btnVideoRecord != null) {
             btnVideoRecord.setText("RECORD");
             btnVideoRecord.setOnClickListener(v -> {
@@ -705,8 +493,6 @@ public class CheckInDetailsActivity extends AppCompatActivity {
             });
         }
 
-        // ACCEPT button (we keep it, but this flow auto-accepts on return; button stays disabled)
-// RECORD VIDEO button launches IntakeVideoActivity (single path)
         if (btnVideoAccept != null) {
             btnVideoAccept.setText("RECORD VIDEO");
             btnVideoAccept.setEnabled(true);
@@ -726,9 +512,7 @@ public class CheckInDetailsActivity extends AppCompatActivity {
                 intent.putExtra(IntakeVideoActivity.EXTRA_ENABLE_AUDIO, true);
                 recordVideoLauncher.launch(intent);
             });
-
         }
-
 
         // DESCRIPTION
         if (descHeader != null) descHeader.setOnClickListener(v -> toggleDescPanel());
@@ -794,9 +578,21 @@ public class CheckInDetailsActivity extends AppCompatActivity {
         if (btnQualityNoConcerns != null) {
             btnQualityNoConcerns.setOnClickListener(v -> {
                 qualityHasConcerns = false;
+
+                if (intakeModel == null) intakeModel = new VehicleTaskIntake();
+                if (intakeModel.quality == null) intakeModel.quality = new VehicleTaskIntake.Quality();
+                intakeModel.quality.isConcerns = false;
+                intakeModel.quality.isExteriorDamage = false;
+                intakeModel.quality.isInteriorDamage = false;
+                intakeModel.quality.isTiresWheels = false;
+                intakeModel.quality.isServiceLights = false;
+                intakeModel.quality.isMechanical = false;
+
                 setStatusIcon(qualityIcon, true);
                 qualityDone = true;
                 setQualityExpanded(false);
+                if (qualityDetailsGroup != null) qualityDetailsGroup.setVisibility(View.GONE);
+                clearQualityChecks();
                 refreshConfirmEnabled();
             });
         }
@@ -824,6 +620,16 @@ public class CheckInDetailsActivity extends AppCompatActivity {
                                 (cbServiceLights!= null && cbServiceLights.isChecked());
 
                 qualityHasConcerns = true;
+
+                if (intakeModel == null) intakeModel = new VehicleTaskIntake();
+                if (intakeModel.quality == null) intakeModel.quality = new VehicleTaskIntake.Quality();
+                intakeModel.quality.isConcerns       = true;
+                intakeModel.quality.isExteriorDamage = cbExteriorDamage != null && cbExteriorDamage.isChecked();
+                intakeModel.quality.isInteriorDamage = cbInteriorDamage != null && cbInteriorDamage.isChecked();
+                intakeModel.quality.isTiresWheels    = cbTiresWheels  != null && cbTiresWheels.isChecked();
+                intakeModel.quality.isServiceLights  = cbServiceLights!= null && cbServiceLights.isChecked();
+                intakeModel.quality.isMechanical     = cbMechanical   != null && cbMechanical.isChecked();
+
                 setStatusIcon(qualityIcon, true);
                 qualityDone = true;
                 setQualityExpanded(false);
@@ -838,16 +644,31 @@ public class CheckInDetailsActivity extends AppCompatActivity {
         if (btnConfirm != null) {
             btnConfirm.setOnClickListener(v -> {
                 hideKeyboard();
+
+                // ✅ NEW: make the failure mode obvious (GET must have completed successfully)
+                if (!intakeLoaded || intakeModel == null) {
+                    Toast.makeText(this, "Intake record not loaded yet. Try again.", Toast.LENGTH_LONG).show();
+                    refreshConfirmEnabled();
+                    return;
+                }
+
+                if (!isConfirmReady()) {
+                    Toast.makeText(this, "Complete Mileage, Description, Quality, and Intake Video first.", Toast.LENGTH_LONG).show();
+                    refreshConfirmEnabled();
+                    return;
+                }
+
                 if (TextUtils.isEmpty(opportunityId)) {
                     Toast.makeText(this, "Missing opportunityId", Toast.LENGTH_LONG).show();
                     return;
                 }
+
                 VehicleTaskIntake body = buildIntakeFromUi();
+
                 btnConfirm.setEnabled(false);
                 btnConfirm.setAlpha(0.5f);
+
                 Toast.makeText(this, "Saving intake...", Toast.LENGTH_SHORT).show();
-                Log.i(TAG, "Saving intake: videoUrl=" +
-                        (intakeModel != null && intakeModel.video != null ? intakeModel.video.videoUrl : "null"));
 
                 driverTaskRepo.saveIntake(opportunityId, body, new DriverTaskRepository.SaveCallback() {
                     @Override public void onSaved() {
@@ -863,13 +684,11 @@ public class CheckInDetailsActivity extends AppCompatActivity {
                     }
                     @Override public void onError(Throwable t) {
                         Toast.makeText(CheckInDetailsActivity.this, "Save failed: " + t.getMessage(), Toast.LENGTH_LONG).show();
-                        btnConfirm.setEnabled(true);
-                        btnConfirm.setAlpha(1f);
+                        refreshConfirmEnabled();
                     }
                     @Override public void onHttpError(int code, String message) {
                         Toast.makeText(CheckInDetailsActivity.this, "Save HTTP " + code + ": " + message, Toast.LENGTH_LONG).show();
-                        btnConfirm.setEnabled(true);
-                        btnConfirm.setAlpha(1f);
+                        refreshConfirmEnabled();
                     }
                 });
             });
@@ -880,155 +699,21 @@ public class CheckInDetailsActivity extends AppCompatActivity {
         fetchIntakeAndBind();
     }
 
-    // UTC ISO timestamp helper
-    private String isoUtcNow() {
-        long now = System.currentTimeMillis();
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            return java.time.Instant.ofEpochMilli(now).toString();
-        }
-        java.text.SimpleDateFormat sdf =
-                new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US);
-        sdf.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
-        return sdf.format(new java.util.Date(now));
+    // ---------- Confirm gating ----------
+
+    private boolean isConfirmReady() {
+        // ✅ NEW: require intakeLoaded so we don't PUT a blank model and wipe other fields (e.g., Transport)
+        return intakeLoaded && mileageDone && descDone && qualityDone && videoDone;
     }
 
-    private boolean writeSidecarJsonToDownload(
-            String baseNameNoExt,   // "intake"
-            String createdAtUtc,
-            String consignmentId,
-            String tablet,
-            String driver,
-            String lot
-    ) {
-        final String sidecarName = baseNameNoExt + ".meta.json";
-
-        try {
-            final String relPath = Environment.DIRECTORY_DOWNLOADS + "/GT6/" + consignmentId + "/";
-
-            Uri collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI;
-
-            // Delete existing to avoid "(1)"
-            try {
-                String sel = MediaStore.MediaColumns.DISPLAY_NAME + "=? AND " +
-                        MediaStore.MediaColumns.RELATIVE_PATH + "=?";
-                int d = getContentResolver().delete(collection, sel, new String[]{ sidecarName, relPath });
-                Log.i(TAG, "Sidecar(Download): deleted existing rows d=" + d);
-            } catch (Exception e) {
-                Log.w(TAG, "Sidecar(Download): delete existing failed", e);
-            }
-
-            ContentValues cv = new ContentValues();
-            cv.put(MediaStore.MediaColumns.DISPLAY_NAME, sidecarName);
-            cv.put(MediaStore.MediaColumns.MIME_TYPE, "application/json");
-            cv.put(MediaStore.MediaColumns.RELATIVE_PATH, relPath);
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                cv.put(MediaStore.MediaColumns.IS_PENDING, 1);
-            }
-
-            Uri jsonUri = getContentResolver().insert(collection, cv);
-            if (jsonUri == null) {
-                Log.e(TAG, "Sidecar(Download): insert returned null relPath=" + relPath);
-                return false;
-            }
-
-            String json =
-                    "{"
-                            + "\"createdAt\":\"" + createdAtUtc + "\","
-                            + "\"consignmentId\":\"" + consignmentId + "\","
-                            + "\"tablet\":\"" + tablet + "\","
-                            + "\"driver\":\"" + driver + "\","
-                            + "\"lot\":\"" + lot + "\""
-                            + "}";
-
-            try (java.io.OutputStream out = getContentResolver().openOutputStream(jsonUri, "w")) {
-                if (out == null) {
-                    Log.e(TAG, "Sidecar(Download): openOutputStream null " + jsonUri);
-                    try { getContentResolver().delete(jsonUri, null, null); } catch (Exception ignored) {}
-                    return false;
-                }
-                out.write(json.getBytes(StandardCharsets.UTF_8));
-                out.flush();
-            }
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                ContentValues done = new ContentValues();
-                done.put(MediaStore.MediaColumns.IS_PENDING, 0);
-                getContentResolver().update(jsonUri, done, null, null);
-            }
-
-            long size = 0;
-            try (Cursor c = getContentResolver().query(
-                    jsonUri, new String[]{ MediaStore.MediaColumns.SIZE },
-                    null, null, null
-            )) {
-                if (c != null && c.moveToFirst()) size = c.getLong(0);
-            }
-
-            Log.i(TAG, "Sidecar(Download): wrote size=" + size + " uri=" + jsonUri);
-            return size > 0;
-
-        } catch (Exception e) {
-            Log.e(TAG, "Sidecar(Download): write failed", e);
-            return false;
-        }
+    private void setConfirmEnabled(boolean enabled) {
+        if (btnConfirm == null) return;
+        btnConfirm.setEnabled(enabled);
+        btnConfirm.setAlpha(enabled ? 1f : 0.5f);
     }
 
-    private static boolean isEmpty(String s) { return s == null || s.trim().isEmpty(); }
-    private static String firstNonEmpty(String a, String b) { return isEmpty(a) ? (b == null ? "" : b) : a; }
-
-    // Compressed Video Helper
-    private String compressedVideoUrl(String originalFileName) {
-        int dot = originalFileName.lastIndexOf('.');
-        String name = (dot > 0) ? originalFileName.substring(0, dot) : originalFileName;
-        String ext  = (dot > 0) ? originalFileName.substring(dot) : "";
-        return COMPRESSED_BASE + consignmentIdStr() + "/" + name + "_c" + ext;
-    }
-
-    @androidx.annotation.Nullable
-    private Uri preferResultUri(@androidx.annotation.Nullable Intent data,
-                                @androidx.annotation.Nullable Uri fallback) {
-        return (data != null && data.getData() != null) ? data.getData() : fallback;
-    }
-
-    private boolean awaitNonZeroSize(Uri uri) {
-        for (int i = 0; i < 8; i++) { // ~2 seconds
-            if (hasNonZeroSize(uri)) return true;
-            try { Thread.sleep(250); } catch (InterruptedException ignored) {}
-        }
-        return false;
-    }
-
-    private void toast(String msg) {
-        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show();
-    }
-
-    private boolean copyUri(Uri from, Uri to) {
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                ContentValues cv = new ContentValues();
-                cv.put(MediaStore.MediaColumns.IS_PENDING, 1);
-                getContentResolver().update(to, cv, null, null);
-            }
-
-            try (java.io.InputStream in = getContentResolver().openInputStream(from);
-                 java.io.OutputStream out = getContentResolver().openOutputStream(to, "w")) {
-                if (in == null || out == null) return false;
-                byte[] buf = new byte[8192];
-                int n;
-                while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
-                out.flush();
-            }
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                ContentValues done = new ContentValues();
-                done.put(MediaStore.MediaColumns.IS_PENDING, 0);
-                getContentResolver().update(to, done, null, null);
-            }
-
-            return hasNonZeroSize(to);
-        } catch (Exception e) {
-            return false;
-        }
+    private void refreshConfirmEnabled() {
+        setConfirmEnabled(isConfirmReady());
     }
 
     // ---------- Networking bind/load ----------
@@ -1038,34 +723,46 @@ public class CheckInDetailsActivity extends AppCompatActivity {
             Toast.makeText(this, "Missing opportunityId", Toast.LENGTH_LONG).show();
             return;
         }
+
+        // ✅ NEW: reset loaded state until GET succeeds
+        intakeLoaded = false;
+        refreshConfirmEnabled();
+
         setPanelsEnabled(false);
         driverTaskRepo.fetchIntake(opportunityId, new DriverTaskRepository.IntakeCallback() {
             @Override public void onSuccess(VehicleTaskIntake it) {
-                intakeModel = (it != null ? it : new VehicleTaskIntake());
+                setPanelsEnabled(true);
+
                 if (it == null) {
+                    // ✅ IMPORTANT: do NOT create a blank object and allow PUT
+                    intakeModel = new VehicleTaskIntake();
+                    intakeLoaded = false;
                     Toast.makeText(CheckInDetailsActivity.this, "No intake data found.", Toast.LENGTH_SHORT).show();
-                    setPanelsEnabled(true);
+                    refreshConfirmEnabled();
                     return;
                 }
+
+                intakeModel = it;
+                intakeLoaded = true;
+
                 bindIntakeToUi(it);
-                setPanelsEnabled(true);
+                refreshConfirmEnabled();
             }
+
             @Override public void onError(Throwable t) {
+                setPanelsEnabled(true);
+                intakeLoaded = false;
                 Toast.makeText(CheckInDetailsActivity.this, "Network error: " + t.getMessage(), Toast.LENGTH_LONG).show();
-                setPanelsEnabled(true);
+                refreshConfirmEnabled();
             }
+
             @Override public void onHttpError(int code, String message) {
-                Toast.makeText(CheckInDetailsActivity.this, "HTTP " + code + ": " + message, Toast.LENGTH_LONG).show();
                 setPanelsEnabled(true);
+                intakeLoaded = false;
+                Toast.makeText(CheckInDetailsActivity.this, "HTTP " + code + ": " + message, Toast.LENGTH_LONG).show();
+                refreshConfirmEnabled();
             }
         });
-    }
-
-    private String getDisplayVin() {
-        String fromModel = (intakeModel != null && intakeModel.vinVerify != null)
-                ? safeStr(intakeModel.vinVerify.newVin) : "";
-        if (!TextUtils.isEmpty(fromModel)) return fromModel;
-        return vin != null ? vin : "";
     }
 
     // Keep the persisted Description state in your working model
@@ -1076,38 +773,6 @@ public class CheckInDetailsActivity extends AppCompatActivity {
     }
 
     private void bindIntakeToUi(VehicleTaskIntake it) {
-        // VIN verify
-        if (it.vinVerify != null) {
-            vinMatched = it.vinVerify.isMatched;
-
-            String newVin = safeStr(it.vinVerify.newVin);
-            if (verifyVinValue != null) {
-                String displayVin = !TextUtils.isEmpty(newVin) ? newVin : (vin != null ? vin : "");
-                verifyVinValue.setText(displayVin);
-            }
-            if (cbVinNotified != null) {
-                cbVinNotified.setChecked(Boolean.TRUE.equals(it.vinVerify.isNotified));
-            }
-
-            if (Boolean.TRUE.equals(vinMatched)) {
-                setStatusIcon(verifyIcon, true);
-                vinDone = true;
-                vinNoMatchMode = false;
-                setVinExpanded(false);
-            } else {
-                if (!TextUtils.isEmpty(newVin)) {
-                    setStatusIcon(verifyIcon, true);
-                    vinDone = true;
-                    vinNoMatchMode = true;
-                    setVinExpanded(false);
-                } else {
-                    setStatusIcon(verifyIcon, false);
-                    vinDone = false;
-                    vinNoMatchMode = true;
-                }
-            }
-        }
-
         // Mileage
         if (it.mileage != null) {
             Integer odo = it.mileage.odometer;
@@ -1118,31 +783,9 @@ public class CheckInDetailsActivity extends AppCompatActivity {
                 setStatusIcon(mileageIcon, true);
                 mileageDone = true;
             }
-        }
-
-        // Key check
-        if (it.keyCheck != null) {
-            Boolean hasKey = it.keyCheck.hasKey;
-            Integer num    = it.keyCheck.numberOfKeys;
-
-            if (cbFobs != null && cbNoKey != null) {
-                if (Boolean.TRUE.equals(hasKey)) {
-                    cbFobs.setChecked(true);
-                    cbNoKey.setChecked(false);
-                    if (enterKeyCountInput != null && num != null) {
-                        enterKeyCountInput.setText(String.valueOf(num));
-                    }
-                } else if (Boolean.FALSE.equals(hasKey)) {
-                    cbFobs.setChecked(false);
-                    cbNoKey.setChecked(true);
-                    if (enterKeyCountInput != null) enterKeyCountInput.setText(null);
-                }
-            }
-            if (hasKey != null) {
-                setStatusIcon(keyIcon, true);
-                keyDone = true;
-            }
-            updateKeyCountEnabled();
+        } else {
+            setStatusIcon(mileageIcon, false);
+            mileageDone = false;
         }
 
         // Description
@@ -1176,6 +819,9 @@ public class CheckInDetailsActivity extends AppCompatActivity {
                 if (descIncorrectGroup != null) descIncorrectGroup.setVisibility(View.VISIBLE);
                 setDescExpanded(true);
             }
+        } else {
+            setStatusIcon(descIcon, false);
+            descDone = false;
         }
 
         // Quality
@@ -1189,7 +835,8 @@ public class CheckInDetailsActivity extends AppCompatActivity {
                 if (qualityDetailsGroup != null) qualityDetailsGroup.setVisibility(View.GONE);
                 clearQualityChecks();
             } else if (Boolean.TRUE.equals(it.quality.isConcerns)) {
-                setStatusIcon(qualityIcon, false);
+                // Consider quality "done" if server has a state for it
+                setStatusIcon(qualityIcon, true);
                 qualityDone = true;
                 setQualityExpanded(false);
                 if (qualityDetailsGroup != null) qualityDetailsGroup.setVisibility(View.GONE);
@@ -1199,14 +846,17 @@ public class CheckInDetailsActivity extends AppCompatActivity {
                 if (cbTiresWheels   != null) cbTiresWheels.setChecked(Boolean.TRUE.equals(it.quality.isTiresWheels));
                 if (cbMechanical    != null) cbMechanical.setChecked(Boolean.TRUE.equals(it.quality.isMechanical));
                 if (cbServiceLights != null) cbServiceLights.setChecked(Boolean.TRUE.equals(it.quality.isServiceLights));
+            } else {
+                setStatusIcon(qualityIcon, false);
+                qualityDone = false;
             }
+        } else {
+            setStatusIcon(qualityIcon, false);
+            qualityDone = false;
         }
 
         // Video (server state)
-// Video
-// Video (server state)
         String acceptedUrl = (it.video != null) ? safeStr(it.video.videoUrl) : "";
-
         if (!TextUtils.isEmpty(acceptedUrl)) {
             setStatusIcon(videoIcon, true);
             videoDone = true;
@@ -1236,96 +886,27 @@ public class CheckInDetailsActivity extends AppCompatActivity {
             }
         }
 
-
-        if (it.video != null) {
-            String url = safeStr(it.video.videoUrl);
-            if (!TextUtils.isEmpty(url)) {
-                setStatusIcon(videoIcon, true);
-                videoDone = true;
-
-                if (btnVideoAccept != null) {
-                    btnVideoAccept.setEnabled(false);
-                    btnVideoAccept.setAlpha(0.5f);
-                    btnVideoAccept.setText("ACCEPTED");
-                }
-            } else {
-                // no accepted URL yet
-                setStatusIcon(videoIcon, false);
-                videoDone = false;
-            }
-        } else {
-            // no video object at all yet
-            setStatusIcon(videoIcon, false);
-            videoDone = false;
-        }
-
-
         refreshConfirmEnabled();
     }
 
     // ---------- Build body for PUT ----------
 
     private VehicleTaskIntake buildIntakeFromUi() {
-        VehicleTaskIntake body = (intakeModel != null ? intakeModel : new VehicleTaskIntake());
+        // ✅ IMPORTANT: always start from the latest GET model to preserve fields TransportActivity owns
+        VehicleTaskIntake body = intakeModel;
         body.opportunityId = opportunityId;
-
-        // ---------------- VIN ----------------
-        if (body.vinVerify == null) body.vinVerify = new VehicleTaskIntake.VinVerify();
-        body.vinVerify.isMatched = Boolean.TRUE.equals(vinMatched);
-
-        String currentVinShown = currentVinForApi();
-        body.vinVerify.newVin = TextUtils.isEmpty(currentVinShown) ? "" : currentVinShown;
-
-        body.vinVerify.isNotified = (cbVinNotified != null && cbVinNotified.isChecked());
-
-        if (TextUtils.isEmpty(body.vinVerify.photoUrl)) {
-            String capturedVinUrl = (intakeModel != null && intakeModel.vinVerify != null)
-                    ? intakeModel.vinVerify.photoUrl : null;
-            body.vinVerify.photoUrl = TextUtils.isEmpty(capturedVinUrl) ? "" : capturedVinUrl;
-        }
 
         // ---------------- MILEAGE ----------------
         if (body.mileage == null) body.mileage = new VehicleTaskIntake.Mileage();
-
         String milesTxt = safe(enterMileageInput);
         if (!TextUtils.isEmpty(milesTxt)) {
             try { body.mileage.odometer = Integer.parseInt(milesTxt); }
             catch (NumberFormatException ignore) {}
         }
-
-        if (TextUtils.isEmpty(body.mileage.photoUrl)) {
-            String capturedMileageUrl = (intakeModel != null && intakeModel.mileage != null)
-                    ? intakeModel.mileage.photoUrl : null;
-            body.mileage.photoUrl = TextUtils.isEmpty(capturedMileageUrl) ? "" : capturedMileageUrl;
-        }
-
-        // ---------------- KEY CHECK ----------------
-        if (body.keyCheck == null) body.keyCheck = new VehicleTaskIntake.KeyCheck();
-
-        Boolean hasFobs = cbFobs != null && cbFobs.isChecked();
-        Boolean noKey   = cbNoKey != null && cbNoKey.isChecked();
-        if (Boolean.TRUE.equals(hasFobs)) {
-            body.keyCheck.hasKey = true;
-            String keyCount = safe(enterKeyCountInput);
-            try {
-                body.keyCheck.numberOfKeys = TextUtils.isEmpty(keyCount) ? null : Integer.valueOf(keyCount);
-            } catch (NumberFormatException ignore) {
-                body.keyCheck.numberOfKeys = null;
-            }
-        } else if (Boolean.TRUE.equals(noKey)) {
-            body.keyCheck.hasKey = false;
-            body.keyCheck.numberOfKeys = null;
-        }
-
-        if (TextUtils.isEmpty(body.keyCheck.photoUrl)) {
-            String capturedKeyUrl = (intakeModel != null && intakeModel.keyCheck != null)
-                    ? intakeModel.keyCheck.photoUrl : null;
-            body.keyCheck.photoUrl = TextUtils.isEmpty(capturedKeyUrl) ? "" : capturedKeyUrl;
-        }
+        // Preserve photoUrl if already captured into intakeModel.mileage.photoUrl
 
         // ---------------- DESCRIPTION ----------------
         if (body.description == null) body.description = new VehicleTaskIntake.Description();
-
         if (intakeModel != null && intakeModel.description != null) {
             VehicleTaskIntake.Description src = intakeModel.description;
             body.description.isCorrect           = Boolean.TRUE.equals(src.isCorrect);
@@ -1333,12 +914,6 @@ public class CheckInDetailsActivity extends AppCompatActivity {
             body.description.isInCorrectVin      = Boolean.TRUE.equals(src.isInCorrectVin);
             body.description.isIncorrectSpelling = Boolean.TRUE.equals(src.isIncorrectSpelling);
             body.description.isIncorrectDetails  = Boolean.TRUE.equals(src.isIncorrectDetails);
-        } else {
-            body.description.isCorrect           = true;
-            body.description.isIncorrectMileage  = false;
-            body.description.isInCorrectVin      = false;
-            body.description.isIncorrectSpelling = false;
-            body.description.isIncorrectDetails  = false;
         }
 
         // ---------------- QUALITY ----------------
@@ -1393,27 +968,10 @@ public class CheckInDetailsActivity extends AppCompatActivity {
         }
     }
 
-    private void toggleVinPanel() { setVinExpanded(!vinExpanded); }
-    private void setVinExpanded(boolean expanded) {
-        vinExpanded = expanded;
-        if (verifyVinValue != null) {
-            verifyVinValue.setText(getDisplayVin());
-            verifyVinValue.setVisibility(expanded ? View.VISIBLE : View.GONE);
-        }
-        if (verifyActions != null) verifyActions.setVisibility(expanded ? View.VISIBLE : View.GONE);
-        if (noMatchGroup != null) noMatchGroup.setVisibility(expanded && vinNoMatchMode ? View.VISIBLE : View.GONE);
-    }
-
     private void toggleMileagePanel() { setMileageExpanded(!mileageExpanded); }
     private void setMileageExpanded(boolean expanded) {
         mileageExpanded = expanded;
         if (mileageGroup != null) mileageGroup.setVisibility(expanded ? View.VISIBLE : View.GONE);
-    }
-
-    private void toggleKeyPanel() { setKeyExpanded(!keyExpanded); }
-    private void setKeyExpanded(boolean expanded) {
-        keyExpanded = expanded;
-        if (keyGroup != null) keyGroup.setVisibility(expanded ? View.VISIBLE : View.GONE);
     }
 
     private void toggleVideoPanel() { setVideoExpanded(!videoExpanded); }
@@ -1449,18 +1007,6 @@ public class CheckInDetailsActivity extends AppCompatActivity {
         }
     }
 
-    private void updateKeyCountEnabled() {
-        boolean enable = cbFobs != null && cbFobs.isChecked();
-        if (enterKeyCountLayout != null) {
-            enterKeyCountLayout.setEnabled(enable);
-            enterKeyCountLayout.setAlpha(enable ? 1f : 0.6f);
-        }
-        if (enterKeyCountInput != null) {
-            enterKeyCountInput.setEnabled(enable);
-            if (!enable) enterKeyCountInput.setText(null);
-        }
-    }
-
     private void clearDescIncorrectChecks() {
         if (cbIncorrectMileage != null)  cbIncorrectMileage.setChecked(false);
         if (cbIncorrectVin != null)      cbIncorrectVin.setChecked(false);
@@ -1476,8 +1022,11 @@ public class CheckInDetailsActivity extends AppCompatActivity {
         if (cbServiceLights!= null) cbServiceLights.setChecked(false);
     }
 
+    // ---------- Permissions / Camera ----------
+
     private void ensureCameraForPhoto(String label) {
-        pendingPhotoLabel = label;
+        // mileage only
+        pendingPhotoLabel = "mileage";
 
         boolean cameraOk = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
                 == PackageManager.PERMISSION_GRANTED;
@@ -1502,14 +1051,14 @@ public class CheckInDetailsActivity extends AppCompatActivity {
             }
         }
 
-        openCameraPhoto(label);
+        openCameraPhoto("mileage");
     }
 
-    // Single canonical version of openCameraPhoto
+    // Single canonical version of openCameraPhoto (mileage only)
     private void openCameraPhoto(String label) {
-        pendingPhotoLabel = (label == null || label.trim().isEmpty()) ? "vin" : label.trim();
+        pendingPhotoLabel = "mileage";
 
-        Uri dest = createPhotoUriForExternalCapture(pendingPhotoLabel);
+        Uri dest = createPhotoUriForExternalCapture("mileage");
         if (dest == null) {
             Toast.makeText(this, "Failed to create photo destination.", Toast.LENGTH_SHORT).show();
             pendingPhotoLabel = null;
@@ -1518,7 +1067,6 @@ public class CheckInDetailsActivity extends AppCompatActivity {
         pendingPhotoUri = dest;
 
         Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-
         intent.putExtra(MediaStore.EXTRA_OUTPUT, dest);
         intent.setClipData(android.content.ClipData.newRawUri("image", dest));
         intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
@@ -1531,6 +1079,25 @@ public class CheckInDetailsActivity extends AppCompatActivity {
             pendingPhotoLabel = null;
             pendingPhotoUri = null;
         }
+    }
+
+    private void grantOutputUriToCamera(Intent intent, Uri uri) {
+        if (uri == null) return;
+        intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        for (ResolveInfo ri : getPackageManager().queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)) {
+            grantUriPermission(ri.activityInfo.packageName, uri,
+                    Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        }
+    }
+
+    // ---------- Media helpers ----------
+
+    private boolean awaitNonZeroSize(Uri uri) {
+        for (int i = 0; i < 8; i++) { // ~2 seconds
+            if (hasNonZeroSize(uri)) return true;
+            try { Thread.sleep(250); } catch (InterruptedException ignored) {}
+        }
+        return false;
     }
 
     private boolean hasNonZeroSize(Uri uri) {
@@ -1547,75 +1114,55 @@ public class CheckInDetailsActivity extends AppCompatActivity {
         return false;
     }
 
-    private String resolveDriverName() {
-        String fromIntent = driver;
-        if (fromIntent != null && !fromIntent.trim().isEmpty()) return fromIntent.trim();
-
-        try {
-            String fromSession = com.example.gt6driver.session.CurrentSelection.get().getDriverName();
-            if (fromSession != null && !fromSession.trim().isEmpty()) return fromSession.trim();
-        } catch (Throwable ignored) {}
-
-        return "";
+    @androidx.annotation.Nullable
+    private Uri preferResultUri(@androidx.annotation.Nullable Intent data,
+                                @androidx.annotation.Nullable Uri fallback) {
+        return (data != null && data.getData() != null) ? data.getData() : fallback;
     }
 
-    private void verifyDestAndReport(Uri dest, String mediaKind) {
-        Cursor c = null;
-        String name = "unknown";
-        String rel = "";
+    private boolean copyUri(Uri from, Uri to) {
         try {
-            String[] cols = {
-                    MediaStore.MediaColumns.DISPLAY_NAME,
-                    MediaStore.MediaColumns.RELATIVE_PATH,
-                    MediaStore.MediaColumns.SIZE
-            };
-            c = getContentResolver().query(dest, cols, null, null, null);
-            if (c != null && c.moveToFirst()) {
-                name = safeStr(c.getString(0));
-                rel  = safeStr(c.getString(1));
-                long sz = c.getLong(2);
-                Log.i("GT6-COPY", mediaKind + " saved → RELATIVE_PATH=" + rel + " name=" + name + " size=" + sz);
-            } else {
-                Log.w("GT6-COPY", "Could not query dest row: " + dest);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                ContentValues cv = new ContentValues();
+                cv.put(MediaStore.MediaColumns.IS_PENDING, 1);
+                getContentResolver().update(to, cv, null, null);
             }
+
+            try (java.io.InputStream in = getContentResolver().openInputStream(from);
+                 java.io.OutputStream out = getContentResolver().openOutputStream(to, "w")) {
+                if (in == null || out == null) return false;
+                byte[] buf = new byte[8192];
+                int n;
+                while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+                out.flush();
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                ContentValues done = new ContentValues();
+                done.put(MediaStore.MediaColumns.IS_PENDING, 0);
+                getContentResolver().update(to, done, null, null);
+            }
+
+            return hasNonZeroSize(to);
         } catch (Exception e) {
-            Log.e("GT6-COPY", "Query dest failed: " + dest, e);
-        } finally {
-            if (c != null) c.close();
+            return false;
         }
-        String where = (rel.isEmpty() ? "(no RELATIVE_PATH)" : (rel + name));
-        Toast.makeText(this, mediaKind + " saved: " + where, Toast.LENGTH_LONG).show();
     }
 
-    private boolean anyTrue(Boolean... arr) {
-        if (arr == null) return false;
-        for (Boolean b : arr) if (Boolean.TRUE.equals(b)) return true;
-        return false;
-    }
-
-    private String consignmentIdStr() {
-        if (vehicle != null && vehicle.consignmentid != null) {
-            return String.valueOf(vehicle.consignmentid);
-        }
-        return "unknown";
-    }
-
-    private void grantOutputUriToCamera(Intent intent, Uri uri) {
-        if (uri == null) return;
-        intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        for (ResolveInfo ri : getPackageManager().queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)) {
-            grantUriPermission(ri.activityInfo.packageName, uri,
-                    Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+    private boolean saveBitmapToUriAsJpeg(android.graphics.Bitmap bmp, Uri dest, int quality) {
+        try (java.io.OutputStream out = getContentResolver().openOutputStream(dest, "w")) {
+            if (out == null) return false;
+            boolean ok = bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, quality, out);
+            out.flush();
+            return ok;
+        } catch (Exception e) {
+            return false;
         }
     }
 
     private Uri createIntakePhotoUri(String label) {
-        String baseName;
-        if ("keycheck".equalsIgnoreCase(label)) baseName = "keycheck_intake";
-        else if ("mileage".equalsIgnoreCase(label)) baseName = "mileage_intake";
-        else baseName = (label == null || label.trim().isEmpty()) ? "photo" : label.trim();
-
-        final String fileName = baseName + ".jpg";
+        // mileage only
+        final String fileName = "mileage_intake.jpg";
         final String relPath = Environment.DIRECTORY_PICTURES + "/GT6/" + consignmentIdStr();
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -1639,91 +1186,9 @@ public class CheckInDetailsActivity extends AppCompatActivity {
         }
     }
 
-    private void refreshConfirmEnabled() {
-        if (btnConfirm == null) return;
-        btnConfirm.setEnabled(true);
-        btnConfirm.setAlpha(1f);
-    }
-
-    private void hideKeyboard() {
-        View view = getCurrentFocus();
-        if (view == null) view = new View(this);
-        InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
-        if (imm != null) imm.hideSoftInputFromWindow(view.getWindowToken(), 0);
-    }
-
-    private void showKeyboardFor(View view) {
-        if (view == null) return;
-        view.requestFocus();
-        InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
-        if (imm != null) imm.showSoftInput(view, InputMethodManager.SHOW_IMPLICIT);
-    }
-
-    private String mediaUrl(String fileName) {
-        return BLOB_BASE + consignmentIdStr() + "/" + fileName;
-    }
-
-    private String safeStr(String s) { return s == null ? "" : s; }
-
-    private String safe(TextInputEditText et) {
-        return et == null || et.getText() == null ? "" : et.getText().toString().trim();
-    }
-
-    private String currentVinForApi() {
-        String ui = (verifyVinValue != null && verifyVinValue.getText() != null)
-                ? verifyVinValue.getText().toString().trim()
-                : "";
-        if (!TextUtils.isEmpty(ui)) return ui;
-        return (vin != null ? vin.trim() : "");
-    }
-
-    private void setPanelsEnabled(boolean enabled) {
-        float alpha = enabled ? 1f : 0.6f;
-
-        if (verifyVinPanel != null) verifyVinPanel.setAlpha(alpha);
-        if (mileagePanel  != null)  mileagePanel.setAlpha(alpha);
-        if (keyPanel      != null)  keyPanel.setAlpha(alpha);
-        if (videoPanel    != null)  videoPanel.setAlpha(alpha);
-        if (descPanel     != null)  descPanel.setAlpha(alpha);
-        if (qualityPanel  != null)  qualityPanel.setAlpha(alpha);
-
-        setGroupEnabled(verifyVinPanel, enabled);
-        setGroupEnabled(mileagePanel, enabled);
-        setGroupEnabled(keyPanel, enabled);
-        setGroupEnabled(videoPanel, enabled);
-        setGroupEnabled(descPanel, enabled);
-        setGroupEnabled(qualityPanel, enabled);
-    }
-
-    private void setGroupEnabled(View v, boolean enabled) {
-        if (v == null) return;
-        v.setEnabled(enabled);
-        if (v instanceof ViewGroup) {
-            ViewGroup vg = (ViewGroup) v;
-            for (int i = 0; i < vg.getChildCount(); i++) {
-                setGroupEnabled(vg.getChildAt(i), enabled);
-            }
-        }
-    }
-
-    private boolean saveBitmapToUriAsJpeg(android.graphics.Bitmap bmp, Uri dest, int quality) {
-        try (java.io.OutputStream out = getContentResolver().openOutputStream(dest, "w")) {
-            if (out == null) return false;
-            boolean ok = bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, quality, out);
-            out.flush();
-            return ok;
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
     private Uri createPhotoUriForExternalCapture(String label) {
-        String baseName;
-        if ("keycheck".equalsIgnoreCase(label)) baseName = "keycheck_intake";
-        else if ("mileage".equalsIgnoreCase(label)) baseName = "mileage_intake";
-        else baseName = (label == null || label.trim().isEmpty()) ? "photo" : label.trim();
-
-        final String fileName = baseName + ".jpg";
+        // mileage only
+        final String fileName = "mileage_intake.jpg";
         final String relPath  = Environment.DIRECTORY_PICTURES + "/GT6/" + consignmentIdStr();
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -1748,24 +1213,18 @@ public class CheckInDetailsActivity extends AppCompatActivity {
 
     private void finalizePhotoAndBind(Uri dest, String label) {
         if (intakeModel == null) intakeModel = new VehicleTaskIntake();
-        String fileName;
-        if ("keycheck".equalsIgnoreCase(label)) {
-            fileName = "keycheck_intake.jpg";
-            if (intakeModel.keyCheck == null) intakeModel.keyCheck = new VehicleTaskIntake.KeyCheck();
-            intakeModel.keyCheck.photoUrl = mediaUrl(fileName);
-        } else if ("mileage".equalsIgnoreCase(label)) {
-            fileName = "mileage_intake.jpg";
-            if (intakeModel.mileage == null) intakeModel.mileage = new VehicleTaskIntake.Mileage();
-            intakeModel.mileage.photoUrl = mediaUrl(fileName);
-        } else {
-            fileName = "vin.jpg";
-            if (intakeModel.vinVerify == null) intakeModel.vinVerify = new VehicleTaskIntake.VinVerify();
-            intakeModel.vinVerify.photoUrl = mediaUrl(fileName);
-        }
+
+        // mileage only
+        String fileName = "mileage_intake.jpg";
+        if (intakeModel.mileage == null) intakeModel.mileage = new VehicleTaskIntake.Mileage();
+        intakeModel.mileage.photoUrl = mediaUrl(fileName);
+
         verifyDestAndReport(dest, "Image");
     }
 
-// ✅ Auto-accept intake video so user can’t lose it by forgetting to tap Accept
+    // ---------- Video helpers ----------
+
+    // ✅ Auto-accept intake video so user can’t lose it by forgetting to tap Accept
     private void acceptIntakeVideoIfPresent() {
         if (lastCapturedVideoUri == null) return;
 
@@ -1778,7 +1237,6 @@ public class CheckInDetailsActivity extends AppCompatActivity {
         videoDone = true;
         setStatusIcon(videoIcon, true);
 
-        // ✅ No re-record option
         if (btnVideoAccept != null) {
             btnVideoAccept.setEnabled(false);
             btnVideoAccept.setAlpha(0.5f);
@@ -1789,15 +1247,200 @@ public class CheckInDetailsActivity extends AppCompatActivity {
             btnVideoRecord.setAlpha(0.5f);
         }
 
-        // Kick uploader
         com.example.gt6driver.sync.GT6MediaSync.enqueueImmediate(this);
-
         refreshConfirmEnabled();
-
     }
 
+    // Compressed Video Helper
+    private String compressedVideoUrl(String originalFileName) {
+        int dot = originalFileName.lastIndexOf('.');
+        String name = (dot > 0) ? originalFileName.substring(0, dot) : originalFileName;
+        String ext  = (dot > 0) ? originalFileName.substring(dot) : "";
+        return COMPRESSED_BASE + consignmentIdStr() + "/" + name + "_c" + ext;
+    }
 
+    // ---------- Sidecar + misc helpers ----------
 
+    private String isoUtcNow() {
+        long now = System.currentTimeMillis();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            return java.time.Instant.ofEpochMilli(now).toString();
+        }
+        java.text.SimpleDateFormat sdf =
+                new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US);
+        sdf.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+        return sdf.format(new java.util.Date(now));
+    }
+
+    private boolean writeSidecarJsonToDownload(
+            String baseNameNoExt,
+            String createdAtUtc,
+            String consignmentId,
+            String tablet,
+            String driver,
+            String lot
+    ) {
+        final String sidecarName = baseNameNoExt + ".meta.json";
+
+        try {
+            final String relPath = Environment.DIRECTORY_DOWNLOADS + "/GT6/" + consignmentId + "/";
+
+            Uri collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI;
+
+            // Delete existing to avoid "(1)"
+            try {
+                String sel = MediaStore.MediaColumns.DISPLAY_NAME + "=? AND " +
+                        MediaStore.MediaColumns.RELATIVE_PATH + "=?";
+                getContentResolver().delete(collection, sel, new String[]{ sidecarName, relPath });
+            } catch (Exception e) {
+                Log.w(TAG, "Sidecar(Download): delete existing failed", e);
+            }
+
+            ContentValues cv = new ContentValues();
+            cv.put(MediaStore.MediaColumns.DISPLAY_NAME, sidecarName);
+            cv.put(MediaStore.MediaColumns.MIME_TYPE, "application/json");
+            cv.put(MediaStore.MediaColumns.RELATIVE_PATH, relPath);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                cv.put(MediaStore.MediaColumns.IS_PENDING, 1);
+            }
+
+            Uri jsonUri = getContentResolver().insert(collection, cv);
+            if (jsonUri == null) return false;
+
+            String json =
+                    "{"
+                            + "\"createdAt\":\"" + createdAtUtc + "\","
+                            + "\"consignmentId\":\"" + consignmentId + "\","
+                            + "\"tablet\":\"" + tablet + "\","
+                            + "\"driver\":\"" + driver + "\","
+                            + "\"lot\":\"" + lot + "\""
+                            + "}";
+
+            try (java.io.OutputStream out = getContentResolver().openOutputStream(jsonUri, "w")) {
+                if (out == null) {
+                    try { getContentResolver().delete(jsonUri, null, null); } catch (Exception ignored) {}
+                    return false;
+                }
+                out.write(json.getBytes(StandardCharsets.UTF_8));
+                out.flush();
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                ContentValues done = new ContentValues();
+                done.put(MediaStore.MediaColumns.IS_PENDING, 0);
+                getContentResolver().update(jsonUri, done, null, null);
+            }
+
+            long size = 0;
+            try (Cursor c = getContentResolver().query(
+                    jsonUri, new String[]{ MediaStore.MediaColumns.SIZE },
+                    null, null, null
+            )) {
+                if (c != null && c.moveToFirst()) size = c.getLong(0);
+            }
+
+            return size > 0;
+
+        } catch (Exception e) {
+            Log.e(TAG, "Sidecar(Download): write failed", e);
+            return false;
+        }
+    }
+
+    private void verifyDestAndReport(Uri dest, String mediaKind) {
+        Cursor c = null;
+        String name = "unknown";
+        String rel = "";
+        try {
+            String[] cols = {
+                    MediaStore.MediaColumns.DISPLAY_NAME,
+                    MediaStore.MediaColumns.RELATIVE_PATH,
+                    MediaStore.MediaColumns.SIZE
+            };
+            c = getContentResolver().query(dest, cols, null, null, null);
+            if (c != null && c.moveToFirst()) {
+                name = safeStr(c.getString(0));
+                rel  = safeStr(c.getString(1));
+                long sz = c.getLong(2);
+                Log.i("GT6-COPY", mediaKind + " saved → RELATIVE_PATH=" + rel + " name=" + name + " size=" + sz);
+            }
+        } catch (Exception e) {
+            Log.e("GT6-COPY", "Query dest failed: " + dest, e);
+        } finally {
+            if (c != null) c.close();
+        }
+        String where = (rel.isEmpty() ? "(no RELATIVE_PATH)" : (rel + name));
+        Toast.makeText(this, mediaKind + " saved: " + where, Toast.LENGTH_LONG).show();
+    }
+
+    private boolean anyTrue(Boolean... arr) {
+        if (arr == null) return false;
+        for (Boolean b : arr) if (Boolean.TRUE.equals(b)) return true;
+        return false;
+    }
+
+    private String resolveDriverName() {
+        String fromIntent = driver;
+        if (fromIntent != null && !fromIntent.trim().isEmpty()) return fromIntent.trim();
+
+        try {
+            String fromSession = com.example.gt6driver.session.CurrentSelection.get().getDriverName();
+            if (fromSession != null && !fromSession.trim().isEmpty()) return fromSession.trim();
+        } catch (Throwable ignored) {}
+
+        return "";
+    }
+
+    private String consignmentIdStr() {
+        if (vehicle != null && vehicle.consignmentid != null) {
+            return String.valueOf(vehicle.consignmentid);
+        }
+        return "unknown";
+    }
+
+    private String mediaUrl(String fileName) {
+        return BLOB_BASE + consignmentIdStr() + "/" + fileName;
+    }
+
+    private static boolean isEmpty(String s) { return s == null || s.trim().isEmpty(); }
+    private static String firstNonEmpty(String a, String b) { return isEmpty(a) ? (b == null ? "" : b) : a; }
+    private String safeStr(String s) { return s == null ? "" : s; }
+
+    private String safe(TextInputEditText et) {
+        return et == null || et.getText() == null ? "" : et.getText().toString().trim();
+    }
+
+    private void hideKeyboard() {
+        View view = getCurrentFocus();
+        if (view == null) view = new View(this);
+        InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+        if (imm != null) imm.hideSoftInputFromWindow(view.getWindowToken(), 0);
+    }
+
+    private void setPanelsEnabled(boolean enabled) {
+        float alpha = enabled ? 1f : 0.6f;
+
+        if (mileagePanel  != null)  mileagePanel.setAlpha(alpha);
+        if (videoPanel    != null)  videoPanel.setAlpha(alpha);
+        if (descPanel     != null)  descPanel.setAlpha(alpha);
+        if (qualityPanel  != null)  qualityPanel.setAlpha(alpha);
+
+        setGroupEnabled(mileagePanel, enabled);
+        setGroupEnabled(videoPanel, enabled);
+        setGroupEnabled(descPanel, enabled);
+        setGroupEnabled(qualityPanel, enabled);
+    }
+
+    private void setGroupEnabled(View v, boolean enabled) {
+        if (v == null) return;
+        v.setEnabled(enabled);
+        if (v instanceof ViewGroup) {
+            ViewGroup vg = (ViewGroup) v;
+            for (int i = 0; i < vg.getChildCount(); i++) {
+                setGroupEnabled(vg.getChildAt(i), enabled);
+            }
+        }
+    }
 
     @androidx.annotation.Nullable
     private Uri findLatestCapturedImage(long notBeforeMillis) {

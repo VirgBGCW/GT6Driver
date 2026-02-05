@@ -111,9 +111,9 @@
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toBottomOf="@id/vehiclePanel" />
 
-            <!-- VERIFY VIN PANEL -->
+            <!-- CHECK IN MILEAGE PANEL -->
             <com.google.android.material.card.MaterialCardView
-                android:id="@+id/verifyVinPanel"
+                android:id="@+id/mileagePanel"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:clickable="true"
@@ -125,181 +125,6 @@
                 app:cardCornerRadius="12dp"
                 app:cardElevation="1dp"
                 app:layout_constraintTop_toBottomOf="@id/checkInLabel"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintEnd_toEndOf="parent">
-
-                <androidx.constraintlayout.widget.ConstraintLayout
-                    android:id="@+id/verifyVinHeader"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:paddingHorizontal="16dp"
-                    android:paddingTop="14dp"
-                    android:paddingBottom="14dp"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:background="?attr/selectableItemBackground">
-
-                    <ImageView
-                        android:id="@+id/verifyIcon"
-                        android:layout_width="24dp"
-                        android:layout_height="24dp"
-                        android:src="@drawable/ic_close_24"
-                        android:tint="#D32F2F"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toTopOf="parent" />
-
-                    <TextView
-                        android:id="@+id/verifyTitle"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:text="VERIFY VIN"
-                        android:textStyle="bold"
-                        android:textSize="16sp"
-                        android:textColor="@android:color/black"
-                        android:gravity="center"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintTop_toTopOf="@id/verifyIcon"
-                        app:layout_constraintBottom_toBottomOf="@id/verifyIcon" />
-
-                    <TextView
-                        android:id="@+id/verifyVinValue"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:text=""
-                        android:textStyle="bold"
-                        android:textSize="28sp"
-                        android:textColor="@android:color/black"
-                        android:gravity="center"
-                        android:visibility="gone"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintTop_toBottomOf="@id/verifyTitle" />
-
-                    <LinearLayout
-                        android:id="@+id/verifyActions"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:visibility="gone"
-                        android:layout_marginTop="12dp"
-                        app:layout_constraintTop_toBottomOf="@id/verifyVinValue"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintEnd_toEndOf="parent">
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/btnVinMatch"
-                            android:layout_width="0dp"
-                            android:layout_height="48dp"
-                            android:layout_weight="1"
-                            android:text="MATCH"
-                            android:backgroundTint="#E8F5E9"
-                            android:textColor="#1B5E20"
-                            android:textStyle="bold"
-                            app:cornerRadius="12dp" />
-
-                        <Space
-                            android:layout_width="12dp"
-                            android:layout_height="wrap_content" />
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/btnVinNoMatch"
-                            android:layout_width="0dp"
-                            android:layout_height="48dp"
-                            android:layout_weight="1"
-                            android:text="DOES NOT MATCH"
-                            android:backgroundTint="#FFEBEE"
-                            android:textColor="#B71C1C"
-                            android:textStyle="bold"
-                            app:cornerRadius="12dp" />
-                    </LinearLayout>
-
-                    <LinearLayout
-                        android:id="@+id/noMatchGroup"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical"
-                        android:visibility="gone"
-                        android:layout_marginTop="12dp"
-                        app:layout_constraintTop_toBottomOf="@id/verifyActions"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintEnd_toEndOf="parent">
-
-                        <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="horizontal"
-                            android:gravity="center_vertical">
-
-                            <com.google.android.material.textfield.TextInputLayout
-                                android:id="@+id/enterVinLayout"
-                                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:hint="ENTER VIN"
-                                app:boxBackgroundMode="outline">
-
-                                <com.google.android.material.textfield.TextInputEditText
-                                    android:id="@+id/enterVinInput"
-                                    android:layout_width="match_parent"
-                                    android:layout_height="wrap_content"
-                                    android:inputType="textCapCharacters"
-                                    android:maxLength="17"
-                                    android:textColor="@android:color/black"
-                                    android:hint="ENTER VIN" />
-                            </com.google.android.material.textfield.TextInputLayout>
-
-                            <ImageButton
-                                android:id="@+id/btnCamera"
-                                android:layout_width="48dp"
-                                android:layout_height="48dp"
-                                android:layout_marginStart="8dp"
-                                android:background="?attr/selectableItemBackgroundBorderless"
-                                android:contentDescription="Open camera"
-                                android:scaleType="centerInside"
-                                android:padding="8dp"
-                                android:tint="@android:color/black"
-                                android:src="@android:drawable/ic_menu_camera" />
-                        </LinearLayout>
-
-                        <com.google.android.material.checkbox.MaterialCheckBox
-                            android:id="@+id/cbVinNotified"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:text="VIN SPECIALIST HAS BEEN NOTIFIED"
-                            android:textColor="@android:color/black"
-                            android:layout_marginTop="10dp" />
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/btnVinUpdate"
-                            android:layout_width="match_parent"
-                            android:layout_height="48dp"
-                            android:text="UPDATE"
-                            android:backgroundTint="#D32F2F"
-                            android:textColor="@android:color/white"
-                            android:textStyle="bold"
-                            app:cornerRadius="12dp"
-                            android:layout_marginTop="10dp" />
-                    </LinearLayout>
-
-                </androidx.constraintlayout.widget.ConstraintLayout>
-            </com.google.android.material.card.MaterialCardView>
-
-            <!-- CHECK IN MILEAGE PANEL -->
-            <com.google.android.material.card.MaterialCardView
-                android:id="@+id/mileagePanel"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:clickable="true"
-                android:focusable="true"
-                android:layout_marginTop="12dp"
-                android:layout_marginStart="16dp"
-                android:layout_marginEnd="16dp"
-                app:cardBackgroundColor="@android:color/white"
-                app:cardCornerRadius="12dp"
-                app:cardElevation="1dp"
-                app:layout_constraintTop_toBottomOf="@id/verifyVinPanel"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintEnd_toEndOf="parent">
 
@@ -399,285 +224,6 @@
                 </androidx.constraintlayout.widget.ConstraintLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- KEY CHECK PANEL -->
-            <com.google.android.material.card.MaterialCardView
-                android:id="@+id/keyPanel"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:clickable="true"
-                android:focusable="true"
-                android:layout_marginTop="12dp"
-                android:layout_marginStart="16dp"
-                android:layout_marginEnd="16dp"
-                app:cardBackgroundColor="@android:color/white"
-                app:cardCornerRadius="12dp"
-                app:cardElevation="1dp"
-                app:layout_constraintTop_toBottomOf="@+id/mileagePanel"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintEnd_toEndOf="parent">
-
-                <androidx.constraintlayout.widget.ConstraintLayout
-                    android:id="@+id/keyHeader"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:paddingHorizontal="16dp"
-                    android:paddingTop="14dp"
-                    android:paddingBottom="14dp"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:background="?attr/selectableItemBackground">
-
-                    <ImageView
-                        android:id="@+id/keyIcon"
-                        android:layout_width="24dp"
-                        android:layout_height="24dp"
-                        android:src="@drawable/ic_close_24"
-                        android:tint="#D32F2F"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toTopOf="parent" />
-
-                    <TextView
-                        android:id="@+id/keyTitle"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:text="KEY CHECK"
-                        android:textStyle="bold"
-                        android:textSize="16sp"
-                        android:textColor="@android:color/black"
-                        android:gravity="center"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintTop_toTopOf="@id/keyIcon"
-                        app:layout_constraintBottom_toBottomOf="@id/keyIcon" />
-
-                    <LinearLayout
-                        android:id="@+id/keyGroup"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical"
-                        android:visibility="gone"
-                        android:layout_marginTop="12dp"
-                        app:layout_constraintTop_toBottomOf="@id/keyIcon"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintEnd_toEndOf="parent">
-
-                        <androidx.constraintlayout.widget.ConstraintLayout
-                            android:id="@+id/keyRow"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content">
-
-                            <com.google.android.material.checkbox.MaterialCheckBox
-                                android:id="@+id/cbFobs"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="FOB(s)"
-                                android:textColor="@android:color/black"
-                                app:layout_constraintStart_toStartOf="parent"
-                                app:layout_constraintTop_toTopOf="parent" />
-
-                            <com.google.android.material.checkbox.MaterialCheckBox
-                                android:id="@+id/cbNoKey"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="NO KEY"
-                                android:textColor="@android:color/black"
-                                android:layout_marginStart="16dp"
-                                app:layout_constraintStart_toEndOf="@id/cbFobs"
-                                app:layout_constraintTop_toTopOf="@id/cbFobs"
-                                app:layout_constraintBottom_toBottomOf="@id/cbFobs"
-                                app:layout_constraintEnd_toStartOf="@id/btnKeyCamera" />
-
-                            <ImageButton
-                                android:id="@+id/btnKeyCamera"
-                                android:layout_width="48dp"
-                                android:layout_height="48dp"
-                                android:layout_marginStart="12dp"
-                                android:background="?attr/selectableItemBackgroundBorderless"
-                                android:contentDescription="Open camera"
-                                android:scaleType="centerInside"
-                                android:padding="8dp"
-                                android:tint="@android:color/black"
-                                android:src="@android:drawable/ic_menu_camera"
-                                app:layout_constraintEnd_toEndOf="parent"
-                                app:layout_constraintTop_toTopOf="@id/cbFobs"
-                                app:layout_constraintBottom_toBottomOf="@id/cbFobs" />
-                        </androidx.constraintlayout.widget.ConstraintLayout>
-
-                        <com.google.android.material.textfield.TextInputLayout
-                            android:id="@+id/enterKeyCountLayout"
-                            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="8dp"
-                            android:enabled="false"
-                            android:alpha="0.6"
-                            android:hint="NUMBER OF KEYS"
-                            app:boxBackgroundMode="outline">
-
-                            <com.google.android.material.textfield.TextInputEditText
-                                android:id="@+id/enterKeyCountInput"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:inputType="number"
-                                android:enabled="false"
-                                android:hint="NUMBER OF KEYS"
-                                android:textColor="@android:color/black" />
-                        </com.google.android.material.textfield.TextInputLayout>
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/btnKeyUpdate"
-                            android:layout_width="match_parent"
-                            android:layout_height="48dp"
-                            android:text="UPDATE"
-                            android:textStyle="bold"
-                            android:textColor="@android:color/white"
-                            android:backgroundTint="#D32F2F"
-                            app:cornerRadius="12dp"
-                            android:layout_marginTop="10dp" />
-                    </LinearLayout>
-                </androidx.constraintlayout.widget.ConstraintLayout>
-            </com.google.android.material.card.MaterialCardView>
-
-            <!-- INTAKE VIDEO PANEL (updated to match RELEASE VIDEO panel) -->
-            <com.google.android.material.card.MaterialCardView
-                android:id="@+id/videoPanel"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:layout_marginStart="16dp"
-                android:layout_marginEnd="16dp"
-                app:layout_constraintTop_toBottomOf="@id/keyPanel"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintEnd_toEndOf="parent"
-                app:cardBackgroundColor="@android:color/white"
-                app:cardCornerRadius="12dp"
-                app:cardElevation="1dp">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:padding="16dp"
-                    android:orientation="vertical">
-
-                    <!-- header row -->
-                    <androidx.constraintlayout.widget.ConstraintLayout
-                        android:id="@+id/videoHeader"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:background="?attr/selectableItemBackground">
-
-                        <ImageView
-                            android:id="@+id/videoIcon"
-                            android:layout_width="24dp"
-                            android:layout_height="24dp"
-                            android:src="@drawable/ic_close_24"
-                            android:tint="#D32F2F"
-                            app:layout_constraintStart_toStartOf="parent"
-                            app:layout_constraintTop_toTopOf="parent"
-                            app:layout_constraintBottom_toBottomOf="parent" />
-
-                        <TextView
-                            android:id="@+id/videoTitle"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="INTAKE VIDEO"
-                            android:textStyle="bold"
-                            android:textSize="16sp"
-                            android:textColor="@android:color/black"
-                            android:gravity="center"
-                            app:layout_constraintTop_toTopOf="parent"
-                            app:layout_constraintBottom_toBottomOf="parent"
-                            app:layout_constraintStart_toStartOf="parent"
-                            app:layout_constraintEnd_toEndOf="parent" />
-                    </androidx.constraintlayout.widget.ConstraintLayout>
-
-                    <!-- expanded group -->
-                    <LinearLayout
-                        android:id="@+id/videoGroup"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical"
-                        android:paddingTop="12dp"
-                        android:visibility="gone">
-
-                        <!-- Keep these hidden so existing CheckInDetailsActivity code that looks them up won't crash -->
-                        <TextView
-                            android:id="@+id/videoPrompt"
-                            android:layout_width="1dp"
-                            android:layout_height="1dp"
-                            android:visibility="gone" />
-
-                        <ImageView
-                            android:id="@+id/videoPromptIcon"
-                            android:layout_width="1dp"
-                            android:layout_height="1dp"
-                            android:visibility="gone" />
-
-                        <!-- ✅ CameraX Preview (hidden until recording UI is active) -->
-                        <androidx.camera.view.PreviewView
-                            android:id="@+id/intakePreviewView"
-                            android:layout_width="match_parent"
-                            android:layout_height="220dp"
-                            android:layout_marginTop="10dp"
-                            android:visibility="gone"
-                            android:background="@android:color/black"
-                            app:implementationMode="performance"
-                            app:scaleType="fitCenter" />
-
-                        <!-- ✅ Record/Stop row -->
-                        <LinearLayout
-                            android:id="@+id/videoRecordControls"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="horizontal"
-                            android:layout_marginTop="10dp"
-                            android:visibility="gone">
-
-                            <com.google.android.material.button.MaterialButton
-                                android:id="@+id/btnVideoRecord"
-                                android:layout_width="0dp"
-                                android:layout_height="48dp"
-                                android:layout_weight="1"
-                                android:text="RECORD"
-                                android:textStyle="bold"
-                                android:textColor="@android:color/white"
-                                android:backgroundTint="#D32F2F"
-                                app:cornerRadius="12dp" />
-
-                            <Space
-                                android:layout_width="12dp"
-                                android:layout_height="wrap_content" />
-
-                            <com.google.android.material.button.MaterialButton
-                                android:id="@+id/btnVideoStop"
-                                android:layout_width="0dp"
-                                android:layout_height="48dp"
-                                android:layout_weight="1"
-                                android:text="STOP"
-                                android:textStyle="bold"
-                                android:textColor="@android:color/white"
-                                android:backgroundTint="#444444"
-                                app:cornerRadius="12dp"
-                                android:enabled="false"
-                                android:alpha="0.6" />
-                        </LinearLayout>
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/btnVideoAccept"
-                            android:layout_width="match_parent"
-                            android:layout_height="48dp"
-                            android:text="RECORD"
-                            android:textStyle="bold"
-                            android:textColor="@android:color/white"
-                            android:backgroundTint="#D32F2F"
-                            app:cornerRadius="12dp"
-                            android:layout_marginTop="10dp" />
-                    </LinearLayout>
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
-
             <!-- DESCRIPTION PANEL -->
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/descPanel"
@@ -686,7 +232,7 @@
                 android:layout_marginTop="12dp"
                 android:layout_marginStart="16dp"
                 android:layout_marginEnd="16dp"
-                app:layout_constraintTop_toBottomOf="@id/videoPanel"
+                app:layout_constraintTop_toBottomOf="@id/mileagePanel"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:cardBackgroundColor="@android:color/white"
@@ -1048,11 +594,147 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
+            <!-- INTAKE VIDEO PANEL (MOVED BELOW QUALITY) -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/videoPanel"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:layout_marginStart="16dp"
+                android:layout_marginEnd="16dp"
+                app:layout_constraintTop_toBottomOf="@id/qualityPanel"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:cardBackgroundColor="@android:color/white"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:padding="16dp"
+                    android:orientation="vertical">
+
+                    <androidx.constraintlayout.widget.ConstraintLayout
+                        android:id="@+id/videoHeader"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:background="?attr/selectableItemBackground">
+
+                        <ImageView
+                            android:id="@+id/videoIcon"
+                            android:layout_width="24dp"
+                            android:layout_height="24dp"
+                            android:src="@drawable/ic_close_24"
+                            android:tint="#D32F2F"
+                            app:layout_constraintStart_toStartOf="parent"
+                            app:layout_constraintTop_toTopOf="parent"
+                            app:layout_constraintBottom_toBottomOf="parent" />
+
+                        <TextView
+                            android:id="@+id/videoTitle"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="INTAKE VIDEO"
+                            android:textStyle="bold"
+                            android:textSize="16sp"
+                            android:textColor="@android:color/black"
+                            android:gravity="center"
+                            app:layout_constraintTop_toTopOf="parent"
+                            app:layout_constraintBottom_toBottomOf="parent"
+                            app:layout_constraintStart_toStartOf="parent"
+                            app:layout_constraintEnd_toEndOf="parent" />
+                    </androidx.constraintlayout.widget.ConstraintLayout>
+
+                    <LinearLayout
+                        android:id="@+id/videoGroup"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:paddingTop="12dp"
+                        android:visibility="gone">
+
+                        <!-- Keep these hidden so existing CheckInDetailsActivity code that looks them up won't crash -->
+                        <TextView
+                            android:id="@+id/videoPrompt"
+                            android:layout_width="1dp"
+                            android:layout_height="1dp"
+                            android:visibility="gone" />
+
+                        <ImageView
+                            android:id="@+id/videoPromptIcon"
+                            android:layout_width="1dp"
+                            android:layout_height="1dp"
+                            android:visibility="gone" />
+
+                        <androidx.camera.view.PreviewView
+                            android:id="@+id/intakePreviewView"
+                            android:layout_width="match_parent"
+                            android:layout_height="220dp"
+                            android:layout_marginTop="10dp"
+                            android:visibility="gone"
+                            android:background="@android:color/black"
+                            app:implementationMode="performance"
+                            app:scaleType="fitCenter" />
+
+                        <LinearLayout
+                            android:id="@+id/videoRecordControls"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:layout_marginTop="10dp"
+                            android:visibility="gone">
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnVideoRecord"
+                                android:layout_width="0dp"
+                                android:layout_height="48dp"
+                                android:layout_weight="1"
+                                android:text="RECORD"
+                                android:textStyle="bold"
+                                android:textColor="@android:color/white"
+                                android:backgroundTint="#D32F2F"
+                                app:cornerRadius="12dp" />
+
+                            <Space
+                                android:layout_width="12dp"
+                                android:layout_height="wrap_content" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnVideoStop"
+                                android:layout_width="0dp"
+                                android:layout_height="48dp"
+                                android:layout_weight="1"
+                                android:text="STOP"
+                                android:textStyle="bold"
+                                android:textColor="@android:color/white"
+                                android:backgroundTint="#444444"
+                                app:cornerRadius="12dp"
+                                android:enabled="false"
+                                android:alpha="0.6" />
+                        </LinearLayout>
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnVideoAccept"
+                            android:layout_width="match_parent"
+                            android:layout_height="48dp"
+                            android:text="RECORD"
+                            android:textStyle="bold"
+                            android:textColor="@android:color/white"
+                            android:backgroundTint="#D32F2F"
+                            app:cornerRadius="12dp"
+                            android:layout_marginTop="10dp" />
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
             <Space
                 android:id="@+id/pageBottomSpacer"
                 android:layout_width="0dp"
                 android:layout_height="24dp"
-                app:layout_constraintTop_toBottomOf="@id/qualityPanel"
+                app:layout_constraintTop_toBottomOf="@id/videoPanel"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintEnd_toEndOf="parent" />
 
@@ -1077,6 +759,9 @@
         app:layout_constraintBottom_toBottomOf="parent" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>
+
+
+
 
 
 
