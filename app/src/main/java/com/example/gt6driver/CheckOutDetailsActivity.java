@@ -597,7 +597,7 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
             hideKeyboard();
             setConfirmBusy(true);
 
-            postConsignmentReleasedUpdate();
+            //postConsignmentReleasedUpdate();
 
             ReleasePayload p = buildReleaseFromUi();
 
