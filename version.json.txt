@@ -1,0 +1,4 @@
+{
+  "version": "vPB2026 (21)",
+  "apk": "app-release.apk"
+}
