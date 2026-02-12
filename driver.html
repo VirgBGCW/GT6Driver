@@ -34,8 +34,17 @@
     }
     h1 {
       text-align: center;
-      margin-bottom: 10px;
+      margin-bottom: 8px;
       color: #58a6ff;
+    }
+    .driver-logo {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 16px;
+    }
+    .driver-logo img {
+      width: 120px;
+      height: auto;
     }
     p {
       text-align: center;
@@ -45,7 +54,7 @@
     a.button {
       display: block;
       text-align: center;
-      background: #d62828; /* Red background */
+      background: #d62828;
       color: white;
       text-decoration: none;
       padding: 14px;
@@ -54,12 +63,13 @@
       transition: background 0.2s;
     }
     a.button:hover {
-      background: #b91c1c; /* darker red on hover */
+      background: #b91c1c;
     }
     .note {
       font-size: 0.9em;
       margin-top: 18px;
       color: #9da7b2;
+      text-align: center;
     }
     footer {
       margin-top: 30px;
@@ -76,10 +86,18 @@
     </div>
 
     <h1>Driver App</h1>
+
+    <!-- Driver logo under title -->
+    <div class="driver-logo">
+      <img src="driverLogo.png" alt="Driver App Logo">
+    </div>
+
     <p>Tap below to download and install the latest internal build.</p>
 
-    <!-- APK download link -->
-    <a href="app-release.apk" class="button" download>Download & Install APK - vPB2026 (20)</a>
+    <!-- APK download link (version injected via version.json) -->
+    <a id="downloadBtn" class="button" download>
+      Download & Install APK
+    </a>
 
     <div class="note">
       If your device blocks the install, go to<br>
@@ -89,6 +107,24 @@
   </div>
 
   <footer>© 2025 Barrett-Jackson – Internal Use Only</footer>
+
+  <script>
+    fetch('version.json', { cache: 'no-store' })
+      .then(response => {
+        if (!response.ok) {
+          throw new Error('version.json not found');
+        }
+        return response.json();
+      })
+      .then(data => {
+        const btn = document.getElementById('downloadBtn');
+        btn.href = data.apk;
+        btn.textContent = `Download & Install APK - ${data.version}`;
+      })
+      .catch(err => {
+        console.error(err);
+      });
+  </script>
 </body>
 </html>
 
