@@ -20,8 +20,10 @@ public interface LookupService {
     );
 
     // ===================== MECHANIC DRIVERS =====================
-    // /api/v1/Lookup/Driver/Property/Key/Mechanic/Driver
+    // /api/v1/Lookup/Driver/Property/Key/Mechanic/Driver?eventId=ID
     @GET("api/v1/Lookup/Driver/Property/Key/Mechanic/Driver")
-    Call<List<MechanicDriverDto>> getMechanicDrivers();
+    Call<List<MechanicDriverDto>> getMechanicDrivers(
+            @Query("eventId") int eventId
+    );
 }
 

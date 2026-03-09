@@ -970,6 +970,12 @@ public class ActionActivity extends AppCompatActivity {
 
     // ===== Assign Driver dialog (NO NFC) =====
     private void showAssignDriverDialog() {
+        try {
+            DriverDirectory.initFromCache(this);
+        } catch (Exception e) {
+            Log.w(LOG_TAG, "Failed to initialize DriverDirectory from cache", e);
+        }
+
         View view = getLayoutInflater().inflate(R.layout.dialog_assign_driver, null, false);
 
         final TextInputLayout tilDriver = view.findViewById(R.id.tilDriver);

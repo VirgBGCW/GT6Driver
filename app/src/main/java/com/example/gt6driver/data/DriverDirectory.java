@@ -6,6 +6,7 @@ import android.util.SparseArray;
 
 import androidx.annotation.Nullable;
 
+import com.example.gt6driver.model.MechanicDriverDto;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 
@@ -14,7 +15,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -27,11 +27,16 @@ public final class DriverDirectory {
     public static class Entry {
         public final int number;
         public final String name;
+
         public Entry(int number, String name) {
             this.number = number;
             this.name = name;
         }
-        @Override public String toString() { return name; }
+
+        @Override
+        public String toString() {
+            return name;
+        }
     }
 
     // Runtime map
@@ -60,12 +65,12 @@ public final class DriverDirectory {
             List<CachedDriver> list = new Gson().fromJson(json, t);
             if (list == null || list.isEmpty()) return;
 
-            replaceAllInternal(list, /*save*/ false, ctx);
+            replaceAllInternal(list, false, ctx);
         } catch (Exception ignored) {
         }
     }
 
-    /** Replace directory contents from API results (also updates cache). */
+    /** Replace directory contents from old DriverRecord API results (also updates cache). */
     public static synchronized void replaceAll(Context ctx, List<DriverRecord> apiDrivers) {
         if (apiDrivers == null) apiDrivers = new ArrayList<>();
         List<CachedDriver> list = new ArrayList<>(apiDrivers.size());
@@ -81,13 +86,37 @@ public final class DriverDirectory {
             list.add(new CachedDriver(d.driverNumber, fullName));
         }
 
-        replaceAllInternal(list, /*save*/ true, ctx);
+        replaceAllInternal(list, true, ctx);
     }
 
-    // ---- Compatibility methods (same as your old class) ----
+    /**
+     * Replace directory contents from MechanicDriverDto API results
+     * (used by MainActivity event-filtered driver loading).
+     */
+    public static synchronized void replaceAllFromDto(Context ctx, List<MechanicDriverDto> apiDrivers) {
+        if (apiDrivers == null) apiDrivers = new ArrayList<>();
+        List<CachedDriver> list = new ArrayList<>(apiDrivers.size());
+
+        for (MechanicDriverDto d : apiDrivers) {
+            if (d == null) continue;
+            if (d.driverNumber <= 0) continue;
+
+            String fullName = buildFullName(d.firstName, d.lastName);
+            if (fullName.trim().isEmpty()) {
+                fullName = "Driver " + d.driverNumber;
+            }
+
+            list.add(new CachedDriver(d.driverNumber, fullName));
+        }
+
+        replaceAllInternal(list, true, ctx);
+    }
+
+    // ---- Compatibility methods ----
 
     /** Returns the driver name for an id, or null if unknown. */
-    @Nullable public static synchronized String nameFor(int id) {
+    @Nullable
+    public static synchronized String nameFor(int id) {
         return MAP.get(id);
     }
 
@@ -114,7 +143,9 @@ public final class DriverDirectory {
     /** Convenience: just the names (unordered). */
     public static synchronized List<String> names() {
         List<String> out = new ArrayList<>(MAP.size());
-        for (int i = 0; i < MAP.size(); i++) out.add(MAP.valueAt(i));
+        for (int i = 0; i < MAP.size(); i++) {
+            out.add(MAP.valueAt(i));
+        }
         return out;
     }
 
@@ -124,14 +155,12 @@ public final class DriverDirectory {
         String f = (first == null) ? "" : first.trim();
         String l = (last == null) ? "" : last.trim();
         String full = (f + " " + l).trim();
-        // Normalize spacing
         return full.replaceAll("\\s+", " ");
     }
 
     private static void replaceAllInternal(List<CachedDriver> list, boolean save, Context ctx) {
         MAP.clear();
 
-        // fill MAP
         for (CachedDriver d : list) {
             if (d == null) continue;
             if (d.number <= 0) continue;
@@ -139,7 +168,6 @@ public final class DriverDirectory {
             MAP.put(d.number, d.name.trim());
         }
 
-        // build UNMODIFIABLE snapshot
         Map<Integer, String> tmp = new HashMap<>(MAP.size());
         for (int i = 0; i < MAP.size(); i++) {
             int key = MAP.keyAt(i);
@@ -147,7 +175,6 @@ public final class DriverDirectory {
         }
         UNMODIFIABLE = Collections.unmodifiableMap(tmp);
 
-        // cache
         if (save && ctx != null) {
             try {
                 String json = new Gson().toJson(list);
@@ -156,7 +183,8 @@ public final class DriverDirectory {
                         .edit()
                         .putString(KEY_JSON, json)
                         .apply();
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
         }
     }
 
@@ -164,12 +192,15 @@ public final class DriverDirectory {
     private static class CachedDriver {
         final int number;
         final String name;
-        CachedDriver(int number, String name) { this.number = number; this.name = name; }
+
+        CachedDriver(int number, String name) {
+            this.number = number;
+            this.name = name;
+        }
     }
 
     /**
-     * API-facing record (you can also make this a top-level model if you prefer).
-     * Matches your JSON sample.
+     * Legacy API-facing record.
      */
     public static class DriverRecord {
         public int driverNumber;
@@ -179,4 +210,3 @@ public final class DriverDirectory {
         public String mobilePhone;
     }
 }
-
