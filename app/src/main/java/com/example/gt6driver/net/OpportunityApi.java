@@ -15,8 +15,7 @@ public interface OpportunityApi {
     @GET("api/v1/Opportunity/{opportunityId}/Property")
     Call<List<PropertyItem>> getOpportunityProperty(@Path("opportunityId") String opportunityId);
 
-    // ✅ Add Property
-    @POST("api/v1/Opportunity/{opportunityId}/Property")
+    @POST("api/v1/Opportunity/Consignment/{opportunityId}/Property")
     Call<Void> addOpportunityProperty(
             @Path("opportunityId") String opportunityId,
             @Body PropertyCreateRequest body

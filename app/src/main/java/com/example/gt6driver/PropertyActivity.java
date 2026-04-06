@@ -86,7 +86,9 @@ public class PropertyActivity extends AppCompatActivity {
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        try { setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT); } catch (Throwable ignored) {}
+        try {
+            setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+        } catch (Throwable ignored) {}
 
         setContentView(R.layout.activity_property);
 
@@ -106,7 +108,9 @@ public class PropertyActivity extends AppCompatActivity {
         setupRecycler();
         loadProperty(opportunityId.trim());
 
-        btnCloseProperty.setOnClickListener(v -> finish());
+        if (btnCloseProperty != null) {
+            btnCloseProperty.setOnClickListener(v -> finish());
+        }
 
         if (btnAddProperty != null) {
             btnAddProperty.setOnClickListener(v -> showAddPropertyDialog());
@@ -114,7 +118,6 @@ public class PropertyActivity extends AppCompatActivity {
     }
 
     private void bindViews() {
-        // Vehicle panel
         panelImage = findViewById(R.id.panelImage);
         panelLot = findViewById(R.id.panelLot);
         panelDesc = findViewById(R.id.panelDesc);
@@ -125,14 +128,11 @@ public class PropertyActivity extends AppCompatActivity {
         panelLocationName = safeFindText(R.id.panelLocationName);
         panelRowCol = safeFindText(R.id.panelRowCol);
 
-        // RecyclerView
         rvProperty = findViewById(R.id.rvProperty);
 
-        // Buttons
         btnCloseProperty = findViewById(R.id.btnCloseProperty);
         btnAddProperty = findViewById(R.id.btnAddProperty);
 
-        // Empty state card
         propertyEmptyState = findViewById(R.id.propertyEmptyState);
     }
 
@@ -182,7 +182,9 @@ public class PropertyActivity extends AppCompatActivity {
         if (panelVinValue != null) panelVinValue.setText(vinStr);
         if (panelVin != null) panelVin.setText(vinStr);
 
-        if (panelLocationName != null && vehicle != null) panelLocationName.setText(safe(vehicle.tentid));
+        if (panelLocationName != null && vehicle != null) {
+            panelLocationName.setText(safe(vehicle.tentid));
+        }
 
         if (panelRowCol != null && vehicle != null) {
             String row = safe(vehicle.row);
@@ -217,13 +219,13 @@ public class PropertyActivity extends AppCompatActivity {
         OpportunityApi api = ApiClient.getMemberApi().create(OpportunityApi.class);
         Call<List<PropertyItem>> call = api.getOpportunityProperty(oppId);
 
-        try { Log.i(HTTP_LOG_TAG, call.request().method() + " " + call.request().url()); }
-        catch (Throwable ignored) {}
+        try {
+            Log.i(HTTP_LOG_TAG, call.request().method() + " " + call.request().url());
+        } catch (Throwable ignored) {}
 
         call.enqueue(new Callback<List<PropertyItem>>() {
             @Override
             public void onResponse(Call<List<PropertyItem>> call, Response<List<PropertyItem>> response) {
-
                 if (response.isSuccessful()) {
                     List<PropertyItem> list = response.body();
 
@@ -241,6 +243,9 @@ public class PropertyActivity extends AppCompatActivity {
                     if (propertyEmptyState != null) propertyEmptyState.setVisibility(View.VISIBLE);
 
                 } else {
+                    String errorText = readErrorBody(response);
+                    Log.e(HTTP_LOG_TAG, "Failed to load property (" + response.code() + "): " + errorText);
+
                     Toast.makeText(
                             PropertyActivity.this,
                             "Failed to load property (" + response.code() + ")",
@@ -252,29 +257,27 @@ public class PropertyActivity extends AppCompatActivity {
             @Override
             public void onFailure(Call<List<PropertyItem>> call, Throwable t) {
                 Log.e(HTTP_LOG_TAG, "Property GET network error", t);
-                Toast.makeText(PropertyActivity.this,
+                Toast.makeText(
+                        PropertyActivity.this,
                         "Network error loading property",
-                        Toast.LENGTH_LONG).show();
+                        Toast.LENGTH_LONG
+                ).show();
             }
         });
     }
 
-    // ✅ MODAL: Add Property (updated for new dialog UI)
     private void showAddPropertyDialog() {
         View view = LayoutInflater.from(this).inflate(R.layout.dialog_add_property, null, false);
 
         TextInputLayout tilType = view.findViewById(R.id.tilPropertyType);
         MaterialAutoCompleteTextView actType = view.findViewById(R.id.actPropertyType);
 
-        // NEW UI: Description (single line)
         TextInputLayout tilDescription = view.findViewById(R.id.tilDescription);
         TextInputEditText etDescription = view.findViewById(R.id.etDescription);
 
-        // NEW UI: Notes (multi-line)
         TextInputLayout tilNotes = view.findViewById(R.id.tilNotes);
         TextInputEditText etNotes = view.findViewById(R.id.etNotes);
 
-        // Left in Vehicle + Qty controls
         MaterialCheckBox chkLeftInVehicle = view.findViewById(R.id.chkLeftInVehicle);
         MaterialButton btnQtyMinus = view.findViewById(R.id.btnQtyMinus);
         MaterialButton btnQtyPlus = view.findViewById(R.id.btnQtyPlus);
@@ -283,8 +286,7 @@ public class PropertyActivity extends AppCompatActivity {
         MaterialButton btnCancel = view.findViewById(R.id.btnCancel);
         MaterialButton btnAdd = view.findViewById(R.id.btnAdd);
 
-        // Default qty = 1
-        final int[] qty = new int[] { 1 };
+        final int[] qty = new int[] {1};
         if (tvQtyValue != null) tvQtyValue.setText(String.valueOf(qty[0]));
 
         if (btnQtyMinus != null) {
@@ -301,9 +303,10 @@ public class PropertyActivity extends AppCompatActivity {
             });
         }
 
-        // Dropdown adapter: show Names
         List<String> typeNames = new ArrayList<>();
-        for (PropertyTypeOption opt : PROPERTY_TYPES) typeNames.add(opt.name);
+        for (PropertyTypeOption opt : PROPERTY_TYPES) {
+            typeNames.add(opt.name);
+        }
 
         ArrayAdapter<String> typeAdapter = new ArrayAdapter<>(
                 this,
@@ -319,94 +322,109 @@ public class PropertyActivity extends AppCompatActivity {
                         .setCancelable(false)
                         .create();
 
-        btnCancel.setOnClickListener(v -> dialog.dismiss());
+        if (btnCancel != null) {
+            btnCancel.setOnClickListener(v -> dialog.dismiss());
+        }
 
-        btnAdd.setOnClickListener(v -> {
-            String typeName = (actType.getText() == null) ? "" : actType.getText().toString().trim();
+        if (btnAdd != null) {
+            btnAdd.setOnClickListener(v -> {
+                String typeName = (actType.getText() == null) ? "" : actType.getText().toString().trim();
+                String description = (etDescription.getText() == null) ? "" : etDescription.getText().toString().trim();
+                String notes = (etNotes.getText() == null) ? "" : etNotes.getText().toString().trim();
+                boolean leftInVehicle = chkLeftInVehicle != null && chkLeftInVehicle.isChecked();
 
-            // NEW: Description required
-            String description = (etDescription.getText() == null) ? "" : etDescription.getText().toString().trim();
+                boolean ok = true;
 
-            // NEW: Notes optional (<= 80)
-            String notes = (etNotes.getText() == null) ? "" : etNotes.getText().toString().trim();
+                if (typeName.isEmpty()) {
+                    tilType.setError("Select a type");
+                    ok = false;
+                } else {
+                    tilType.setError(null);
+                }
 
-            boolean leftInVehicle = (chkLeftInVehicle != null) && chkLeftInVehicle.isChecked();
+                if (description.isEmpty()) {
+                    tilDescription.setError("Description is required");
+                    ok = false;
+                } else {
+                    tilDescription.setError(null);
+                }
 
-            boolean ok = true;
+                if (notes.length() > 80) {
+                    tilNotes.setError("Max 80 characters");
+                    ok = false;
+                } else {
+                    tilNotes.setError(null);
+                }
 
-            if (typeName.isEmpty()) { tilType.setError("Select a type"); ok = false; }
-            else tilType.setError(null);
+                int propertyTypeId = resolvePropertyTypeIdByName(typeName);
+                if (propertyTypeId <= 0) {
+                    tilType.setError("Invalid type");
+                    ok = false;
+                }
 
-            if (description.isEmpty()) { tilDescription.setError("Description is required"); ok = false; }
-            else tilDescription.setError(null);
+                if (!ok) return;
 
-            if (notes.length() > 80) { tilNotes.setError("Max 80 characters"); ok = false; }
-            else tilNotes.setError(null);
+                btnAdd.setEnabled(false);
+                btnAdd.setAlpha(0.6f);
+                if (btnCancel != null) {
+                    btnCancel.setEnabled(false);
+                    btnCancel.setAlpha(0.6f);
+                }
 
-            int propertyTypeId = resolvePropertyTypeIdByName(typeName);
-            if (propertyTypeId <= 0) {
-                tilType.setError("Invalid type");
-                ok = false;
-            }
-
-            if (!ok) return;
-
-            // Non-breaking: encode qty + leftInVehicle into Notes so API/model doesn't change.
-            // Keep it <= 80 chars.
-            String finalNotes = buildNotesWithFlags(notes, qty[0], leftInVehicle);
-
-            // Disable while saving
-            btnAdd.setEnabled(false);
-            btnAdd.setAlpha(0.6f);
-
-            // API contract unchanged:
-            // - type = property type ID
-            // - property = Description field
-            // - description = Notes field (with encoded flags)
-            createProperty(String.valueOf(propertyTypeId), description, finalNotes,
-                    () -> dialog.dismiss(),
-                    () -> {
-                        btnAdd.setEnabled(true);
-                        btnAdd.setAlpha(1f);
-                    });
-        });
+                createProperty(
+                        propertyTypeId,
+                        description,
+                        notes,
+                        qty[0],
+                        leftInVehicle,
+                        dialog::dismiss,
+                        () -> {
+                            btnAdd.setEnabled(true);
+                            btnAdd.setAlpha(1f);
+                            if (btnCancel != null) {
+                                btnCancel.setEnabled(true);
+                                btnCancel.setAlpha(1f);
+                            }
+                        }
+                );
+            });
+        }
 
         dialog.show();
     }
 
-    /**
-     * Packs Qty + LeftInVehicle into the Notes string, without changing the API contract.
-     * Ensures max 80 chars.
-     */
-    private String buildNotesWithFlags(String notes, int qty, boolean leftInVehicle) {
-        String n = (notes == null) ? "" : notes.trim();
-
-        // Example format:
-        // "Qty:2 | LIV:Y | <notes...>"
-        String prefix = "Qty:" + qty + " | LIV:" + (leftInVehicle ? "Y" : "N");
-        String combined;
-
-        if (n.isEmpty()) combined = prefix;
-        else combined = prefix + " | " + n;
-
-        if (combined.length() <= 80) return combined;
-        return combined.substring(0, 80);
-    }
-
-    // ✅ POST to add, then refresh list
-    private void createProperty(String type, String property, String description,
+    private void createProperty(int propertyItemTypeId,
+                                String propertyDescription,
+                                String notes,
+                                int quantity,
+                                boolean isLeftInCar,
                                 Runnable onSuccessDismiss,
                                 Runnable onFailureReenable) {
 
         OpportunityApi api = ApiClient.getMemberApi().create(OpportunityApi.class);
 
-        // NOTE: type is the Property ID string
-        PropertyCreateRequest body = new PropertyCreateRequest(type, property, description);
+        PropertyCreateRequest body = new PropertyCreateRequest(
+                propertyItemTypeId,
+                propertyDescription,
+                notes,
+                quantity,
+                isLeftInCar
+        );
 
         Call<Void> call = api.addOpportunityProperty(opportunityId.trim(), body);
 
-        try { Log.i(HTTP_LOG_TAG, call.request().method() + " " + call.request().url()); }
-        catch (Throwable ignored) {}
+        try {
+            Log.i(HTTP_LOG_TAG, call.request().method() + " " + call.request().url());
+            Log.d(
+                    HTTP_LOG_TAG,
+                    "POST body: {propertyItemTypeId=" + propertyItemTypeId
+                            + ", propertyDescription='" + propertyDescription + "'"
+                            + ", notes='" + notes + "'"
+                            + ", quantity=" + quantity
+                            + ", isLeftInCar=" + isLeftInCar
+                            + "}"
+            );
+        } catch (Throwable ignored) {}
 
         Toast.makeText(this, "Adding property...", Toast.LENGTH_SHORT).show();
 
@@ -416,14 +434,22 @@ public class PropertyActivity extends AppCompatActivity {
                 if (response.isSuccessful()) {
                     Toast.makeText(PropertyActivity.this, "Property added", Toast.LENGTH_SHORT).show();
 
-                    // Refresh list
+                    if (propertyEmptyState != null) propertyEmptyState.setVisibility(View.GONE);
+                    rvProperty.setVisibility(View.VISIBLE);
+
                     loadProperty(opportunityId.trim());
 
                     if (onSuccessDismiss != null) onSuccessDismiss.run();
                 } else {
-                    Toast.makeText(PropertyActivity.this,
+                    String errorText = readErrorBody(response);
+                    Log.e(HTTP_LOG_TAG, "Add failed (" + response.code() + "): " + errorText);
+
+                    Toast.makeText(
+                            PropertyActivity.this,
                             "Add failed (" + response.code() + ")",
-                            Toast.LENGTH_LONG).show();
+                            Toast.LENGTH_LONG
+                    ).show();
+
                     if (onFailureReenable != null) onFailureReenable.run();
                 }
             }
@@ -431,17 +457,28 @@ public class PropertyActivity extends AppCompatActivity {
             @Override
             public void onFailure(Call<Void> call, Throwable t) {
                 Log.e(HTTP_LOG_TAG, "Property POST network error", t);
-                Toast.makeText(PropertyActivity.this,
+                Toast.makeText(
+                        PropertyActivity.this,
                         "Network error adding property",
-                        Toast.LENGTH_LONG).show();
+                        Toast.LENGTH_LONG
+                ).show();
+
                 if (onFailureReenable != null) onFailureReenable.run();
             }
         });
     }
 
-    /**
-     * Unified resolver for OpportunityId. Matches your ActionActivity behavior.
-     */
+    private String readErrorBody(Response<?> response) {
+        try {
+            if (response != null && response.errorBody() != null) {
+                return response.errorBody().string();
+            }
+        } catch (Exception e) {
+            Log.e(HTTP_LOG_TAG, "Unable to read error body", e);
+        }
+        return "";
+    }
+
     private String resolveOpportunityId(Intent intent) {
         String id = coalesce(
                 safe(intent.getStringExtra(Nav.EXTRA_OPPORTUNITY_ID)),
@@ -463,7 +500,9 @@ public class PropertyActivity extends AppCompatActivity {
 
     private static String coalesce(String... vals) {
         if (vals == null) return "";
-        for (String s : vals) if (s != null && !s.trim().isEmpty()) return s.trim();
+        for (String s : vals) {
+            if (s != null && !s.trim().isEmpty()) return s.trim();
+        }
         return "";
     }
 
@@ -475,10 +514,6 @@ public class PropertyActivity extends AppCompatActivity {
         return (v != null && !v.trim().isEmpty()) ? v : d;
     }
 
-    // -----------------------------
-    // Property Type helpers/models
-    // -----------------------------
-
     private static class PropertyTypeOption {
         final int id;
         final String name;
@@ -488,48 +523,67 @@ public class PropertyActivity extends AppCompatActivity {
             this.name = name;
         }
     }
-
     private static List<PropertyTypeOption> buildPropertyTypesSorted() {
         List<PropertyTypeOption> list = new ArrayList<>();
 
-        // From proptypes.csv (Property ID, Name) sorted by Name
         list.add(new PropertyTypeOption(1, "Award / Trophy"));
         list.add(new PropertyTypeOption(2, "Binder(s) of Documents"));
         list.add(new PropertyTypeOption(3, "Broadcast Sheet"));
         list.add(new PropertyTypeOption(4, "Build Sheet"));
-        list.add(new PropertyTypeOption(34, "Car Cover"));
+        list.add(new PropertyTypeOption(5, "Car Cover"));
         list.add(new PropertyTypeOption(6, "Certificate of Authenticity"));
-        list.add(new PropertyTypeOption(40, "Cleaning Supplies"));
-        list.add(new PropertyTypeOption(41, "Key/Key Fobs"));
-        list.add(new PropertyTypeOption(8, "License Plate"));
-        list.add(new PropertyTypeOption(37, "Magazine(s)"));
-        list.add(new PropertyTypeOption(31, "Manual(s)"));
-        list.add(new PropertyTypeOption(9, "Marti Report"));
-        list.add(new PropertyTypeOption(24, "Misc Docs"));
-        list.add(new PropertyTypeOption(35, "NCRS Docs"));
-        list.add(new PropertyTypeOption(21, "No Property"));
-        list.add(new PropertyTypeOption(22, "No Property - Block End"));
-        list.add(new PropertyTypeOption(20, "Other"));
-        list.add(new PropertyTypeOption(10, "Owner's Manual"));
-        list.add(new PropertyTypeOption(36, "PHS Docs"));
-        list.add(new PropertyTypeOption(29, "Photos"));
-        list.add(new PropertyTypeOption(11, "Protect-O-Plate"));
-        list.add(new PropertyTypeOption(12, "Registration"));
-        list.add(new PropertyTypeOption(25, "Remote"));
-        list.add(new PropertyTypeOption(13, "Service Records"));
-        list.add(new PropertyTypeOption(26, "Spare / Misc Parts"));
-        list.add(new PropertyTypeOption(14, "Stereo / Radio Manual"));
-        list.add(new PropertyTypeOption(15, "Story Board"));
-        list.add(new PropertyTypeOption(28, "Tank Sticker"));
-        list.add(new PropertyTypeOption(33, "Tires"));
+        list.add(new PropertyTypeOption(7, "Cleaning Supplies"));
+        list.add(new PropertyTypeOption(8, "Dealer Invoices"));
+        list.add(new PropertyTypeOption(9, "EV/Charging Cables"));
+        list.add(new PropertyTypeOption(10, "Spare Keys/Fobs"));
+        list.add(new PropertyTypeOption(11, "License Plate"));
+        list.add(new PropertyTypeOption(12, "Magazine"));
+        list.add(new PropertyTypeOption(13, "Manuals (shop/parts)"));
+        list.add(new PropertyTypeOption(14, "Marti Report"));
+        list.add(new PropertyTypeOption(15, "Misc Documents"));
+        list.add(new PropertyTypeOption(16, "NCRS Documents"));
         list.add(new PropertyTypeOption(16, "Title"));
-        list.add(new PropertyTypeOption(17, "Tool Kit"));
-        list.add(new PropertyTypeOption(27, "Top"));
-        list.add(new PropertyTypeOption(18, "Trophy"));
-        list.add(new PropertyTypeOption(19, "Warranty Book"));
-        list.add(new PropertyTypeOption(32, "Wheel Lock(s)"));
-        list.add(new PropertyTypeOption(38, "Winch Controller"));
-        list.add(new PropertyTypeOption(23, "Window Sticker"));
+        list.add(new PropertyTypeOption(17, "No Property"));
+        list.add(new PropertyTypeOption(18, "Other"));
+        list.add(new PropertyTypeOption(19, "Owner's Manual"));
+        list.add(new PropertyTypeOption(20, "Photos"));
+        list.add(new PropertyTypeOption(21, "PHS Docs"));
+        list.add(new PropertyTypeOption(22, "Protect-O-Plate"));
+        list.add(new PropertyTypeOption(23, "Remote"));
+        list.add(new PropertyTypeOption(24, "Service Records"));
+        list.add(new PropertyTypeOption(25, "Spare/Misc Parts"));
+        list.add(new PropertyTypeOption(26, "Spare Tire"));
+        list.add(new PropertyTypeOption(27, "Stereo/Radio Manual"));
+        list.add(new PropertyTypeOption(28, "Story Board"));
+        list.add(new PropertyTypeOption(29, "Tank Sticker"));
+        list.add(new PropertyTypeOption(30, "Tires"));
+        list.add(new PropertyTypeOption(31, "Manual(s)"));
+        list.add(new PropertyTypeOption(31, "Tool Kit"));
+        list.add(new PropertyTypeOption(32, "Top/T-Tops"));
+        list.add(new PropertyTypeOption(33, "Warranty Book"));
+        list.add(new PropertyTypeOption(34, "Wheel Lock(s)"));
+        list.add(new PropertyTypeOption(35, "Window Sticker"));
+        list.add(new PropertyTypeOption(36, "Jack"));
+        list.add(new PropertyTypeOption(37, "Engine Tuner"));
+        list.add(new PropertyTypeOption(38, "Trickle Charger"));
+        list.add(new PropertyTypeOption(39, "Battery Charger"));
+        list.add(new PropertyTypeOption(40, "Battery Tender"));
+        list.add(new PropertyTypeOption(41, "Receipts"));
+        list.add(new PropertyTypeOption(42, "Key/Key Fobs"));
+        list.add(new PropertyTypeOption(42, "Umbrella (s)"));
+        list.add(new PropertyTypeOption(43, "Literature"));
+        list.add(new PropertyTypeOption(44, "Books"));
+        list.add(new PropertyTypeOption(45, "Bill of Sale"));
+        list.add(new PropertyTypeOption(46, "Floor Mats"));
+        list.add(new PropertyTypeOption(47, "Air Pumps"));
+        list.add(new PropertyTypeOption(48, "Brochure"));
+        list.add(new PropertyTypeOption(49, "Luggage"));
+        list.add(new PropertyTypeOption(50, "Posters"));
+        list.add(new PropertyTypeOption(51, "manufacturer’s literature."));
+        list.add(new PropertyTypeOption(52, "Windows"));
+        list.add(new PropertyTypeOption(53, "Carfax"));
+        list.add(new PropertyTypeOption(54, "Copy of title"));
+        list.add(new PropertyTypeOption(55, "First-aid kit"));
 
         Collections.sort(list, new Comparator<PropertyTypeOption>() {
             @Override
@@ -541,17 +595,16 @@ public class PropertyActivity extends AppCompatActivity {
         return list;
     }
 
+
     private int resolvePropertyTypeIdByName(String name) {
         if (name == null) return -1;
-        String n = name.trim();
+        String target = name.trim();
         for (PropertyTypeOption opt : PROPERTY_TYPES) {
-            if (opt.name.equalsIgnoreCase(n)) return opt.id;
+            if (opt.name.equalsIgnoreCase(target)) return opt.id;
         }
         return -1;
     }
 }
-
-
 
 
 

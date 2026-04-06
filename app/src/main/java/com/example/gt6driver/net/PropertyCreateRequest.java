@@ -4,19 +4,30 @@ import com.google.gson.annotations.SerializedName;
 
 public class PropertyCreateRequest {
 
-    @SerializedName("propertyType")
-    public String propertyType;
+    @SerializedName("propertyItemTypeId")
+    public int propertyItemTypeId;
 
-    @SerializedName("property")
-    public String property;
+    @SerializedName("propertyDescription")
+    public String propertyDescription;
 
-    @SerializedName("description")
-    public String description;
+    @SerializedName("notes")
+    public String notes;
 
-    public PropertyCreateRequest(String propertyType, String property, String description) {
-        this.propertyType = propertyType;
-        this.property = property;
-        this.description = description;
+    @SerializedName("quantity")
+    public int quantity;
+
+    @SerializedName("isLeftInCar")
+    public boolean isLeftInCar;
+
+    public PropertyCreateRequest(int propertyItemTypeId,
+                                 String propertyDescription,
+                                 String notes,
+                                 int quantity,
+                                 boolean isLeftInCar) {
+        this.propertyItemTypeId = propertyItemTypeId;
+        this.propertyDescription = propertyDescription;
+        this.notes = notes;
+        this.quantity = quantity;
+        this.isLeftInCar = isLeftInCar;
     }
 }
-
