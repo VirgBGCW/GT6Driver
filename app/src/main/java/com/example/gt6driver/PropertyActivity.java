@@ -32,7 +32,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.textfield.MaterialAutoCompleteTextView;
 import com.google.android.material.textfield.TextInputEditText;
 import com.google.android.material.textfield.TextInputLayout;
-
+import com.example.gt6driver.net.PropertyCheckinTypeUpdateRequest;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -158,12 +158,74 @@ public class PropertyActivity extends AppCompatActivity {
     }
 
     private void setupRecycler() {
-        adapter = new PropertyAdapter();
+        adapter = new PropertyAdapter(this::updatePropertyCheckInType);
         rvProperty.setLayoutManager(new LinearLayoutManager(this));
         rvProperty.setAdapter(adapter);
         rvProperty.setItemAnimator(null);
     }
+    private void updatePropertyCheckInType(@NonNull PropertyItem item, int position, @NonNull String newCheckInType) {
+        String propertyId = item.getPropertyIdForApi();
+        if (propertyId.isEmpty()) {
+            Toast.makeText(this, "Unable to update property status", Toast.LENGTH_LONG).show();
+            adapter.notifyItemChanged(position);
+            return;
+        }
 
+        String previousType = normalizePropertyCheckInType(item.checkInType);
+        String targetType = normalizePropertyCheckInType(newCheckInType);
+        if (targetType.equals(previousType)) return;
+
+        item.checkInType = targetType;
+        item.isUpdatingCheckInType = true;
+        adapter.notifyItemChanged(position);
+
+        OpportunityApi api = ApiClient.getMemberApi().create(OpportunityApi.class);
+        PropertyCheckinTypeUpdateRequest body = new PropertyCheckinTypeUpdateRequest(targetType);
+        Call<Void> call = api.updateConsignmentPropertyCheckinType(propertyId, body);
+
+        try {
+            Log.i(HTTP_LOG_TAG, call.request().method() + " " + call.request().url());
+            Log.d(HTTP_LOG_TAG, "PUT body: {propertyItemCheckinType='" + targetType + "'}");
+        } catch (Throwable ignored) {}
+
+        call.enqueue(new Callback<Void>() {
+            @Override
+            public void onResponse(Call<Void> call, Response<Void> response) {
+                item.isUpdatingCheckInType = false;
+
+                if (response.isSuccessful()) {
+                    item.checkInType = targetType;
+                    adapter.notifyItemChanged(position);
+                    Toast.makeText(PropertyActivity.this, "Property status updated", Toast.LENGTH_SHORT).show();
+                } else {
+                    item.checkInType = previousType;
+                    adapter.notifyItemChanged(position);
+
+                    String errorText = readErrorBody(response);
+                    Log.e(HTTP_LOG_TAG, "Property PUT failed (" + response.code() + "): " + errorText);
+                    Toast.makeText(
+                            PropertyActivity.this,
+                            "Failed to update property status (" + response.code() + ")",
+                            Toast.LENGTH_LONG
+                    ).show();
+                }
+            }
+
+            @Override
+            public void onFailure(Call<Void> call, Throwable t) {
+                item.isUpdatingCheckInType = false;
+                item.checkInType = previousType;
+                adapter.notifyItemChanged(position);
+
+                Log.e(HTTP_LOG_TAG, "Property PUT network error", t);
+                Toast.makeText(
+                        PropertyActivity.this,
+                        "Network error updating property status",
+                        Toast.LENGTH_LONG
+                ).show();
+            }
+        });
+    }
     private void populateVehiclePanel() {
         String lotStr = (vehicle != null && vehicle.lotnumber != null)
                 ? String.valueOf(vehicle.lotnumber)
@@ -265,7 +327,20 @@ public class PropertyActivity extends AppCompatActivity {
             }
         });
     }
+    private String normalizePropertyCheckInType(String value) {
+        if (value == null) return "AwaitingArrival";
 
+        String normalized = value.trim()
+                .replace(" ", "")
+                .replace("-", "")
+                .replace("_", "");
+
+        if (normalized.equalsIgnoreCase("Removed")) return "Removed";
+        if (normalized.equalsIgnoreCase("LeftInCar") || normalized.equalsIgnoreCase("LeftInVehicle")) {
+            return "LeftInCar";
+        }
+        return "AwaitingArrival";
+    }
     private void showAddPropertyDialog() {
         View view = LayoutInflater.from(this).inflate(R.layout.dialog_add_property, null, false);
 

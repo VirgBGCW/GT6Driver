@@ -8,6 +8,7 @@ import retrofit2.Call;
 import retrofit2.http.Body;
 import retrofit2.http.GET;
 import retrofit2.http.POST;
+import retrofit2.http.PUT;
 import retrofit2.http.Path;
 
 public interface OpportunityApi {
@@ -20,4 +21,11 @@ public interface OpportunityApi {
             @Path("opportunityId") String opportunityId,
             @Body PropertyCreateRequest body
     );
+
+    @PUT("api/v1/Opportunity/Consignment/Property/{propertyId}")
+    Call<Void> updateConsignmentPropertyCheckinType(
+            @Path("propertyId") String propertyId,
+            @Body PropertyCheckinTypeUpdateRequest body
+    );
+
 }

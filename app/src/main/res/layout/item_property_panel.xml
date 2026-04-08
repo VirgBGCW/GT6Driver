@@ -14,7 +14,6 @@
         android:layout_height="wrap_content"
         android:padding="14dp">
 
-        <!-- PropertyType (left) -->
         <TextView
             android:id="@+id/tvType"
             android:layout_width="0dp"
@@ -29,7 +28,6 @@
             app:layout_constraintEnd_toStartOf="@id/tvQty"
             app:layout_constraintTop_toTopOf="parent" />
 
-        <!-- Quantity (right) -->
         <TextView
             android:id="@+id/tvQty"
             android:layout_width="wrap_content"
@@ -41,7 +39,6 @@
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="@id/tvType" />
 
-        <!-- Description -->
         <TextView
             android:id="@+id/tvDesc"
             android:layout_width="0dp"
@@ -54,7 +51,6 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent" />
 
-        <!-- Notes -->
         <TextView
             android:id="@+id/tvNotes"
             android:layout_width="0dp"
@@ -66,6 +62,78 @@
             app:layout_constraintTop_toBottomOf="@id/tvDesc"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent" />
+
+        <TextView
+            android:id="@+id/tvCheckInLabel"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="Property Status"
+            android:textColor="@android:color/black"
+            android:textStyle="bold"
+            android:textSize="13sp"
+            app:layout_constraintTop_toBottomOf="@id/tvNotes"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/progressCheckIn" />
+
+        <ProgressBar
+            android:id="@+id/progressCheckIn"
+            style="?android:attr/progressBarStyleSmall"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:visibility="gone"
+            app:layout_constraintTop_toTopOf="@id/tvCheckInLabel"
+            app:layout_constraintBottom_toBottomOf="@id/tvCheckInLabel"
+            app:layout_constraintEnd_toEndOf="parent" />
+
+        <com.google.android.material.button.MaterialButtonToggleGroup
+            android:id="@+id/checkInGroup"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            app:singleSelection="true"
+            app:selectionRequired="true"
+            app:layout_constraintTop_toBottomOf="@id/tvCheckInLabel"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnAwaitingArrival"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="40dp"
+                android:layout_weight="1"
+                android:minWidth="0dp"
+                android:text="Awaiting"
+                android:textAllCaps="false"
+                android:insetTop="0dp"
+                android:insetBottom="0dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnRemoved"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="40dp"
+                android:layout_weight="1"
+                android:minWidth="0dp"
+                android:text="Remove"
+                android:textAllCaps="false"
+                android:insetTop="0dp"
+                android:insetBottom="0dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnLeftInCar"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="40dp"
+                android:layout_weight="1"
+                android:minWidth="0dp"
+                android:text="In Car"
+                android:textAllCaps="false"
+                android:insetTop="0dp"
+                android:insetBottom="0dp" />
+
+        </com.google.android.material.button.MaterialButtonToggleGroup>
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 

@@ -11,7 +11,7 @@
       "type": "SINGLE",
       "filters": [],
       "attributes": [],
-      "versionCode": 22,
+      "versionCode": 25,
       "versionName": "PB2026",
       "outputFile": "app-release.apk"
     }
