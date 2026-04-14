@@ -4,6 +4,7 @@ import android.content.ContentResolver;
 import android.content.ContentUris;
 import android.content.Context;
 import android.database.Cursor;
+import android.media.MediaMetadataRetriever;
 import android.net.Uri;
 import android.provider.MediaStore;
 import android.text.TextUtils;
@@ -37,7 +38,6 @@ public class MediaUploadWorker extends Worker {
     private static final String FG_CHANNEL = "gt6_uploads";
     private static final String TAG = "GT6-Worker";
 
-    // === Keys expected from GT6MediaSync ===
     public static final String KEY_SAS = "sasQuery";
     public static final String KEY_CONTAINER_URL = "containerUrl";
     public static final String KEY_RECURSIVE = "recursive";
@@ -46,6 +46,8 @@ public class MediaUploadWorker extends Worker {
     private static final String DEFAULT_CONTAINER_BASE = "https://stgt6driverappprod.blob.core.windows.net";
     private static final String DEFAULT_CONTAINER_NAME = "driver";
     private static final String DEFAULT_PREFIX = "";
+
+    private static final long MIN_VIDEO_MS = 60_000L;
 
     private static final ConcurrentHashMap<String, Object> LOCKS = new ConcurrentHashMap<>();
     private static Object lockFor(String key) { return LOCKS.computeIfAbsent(key, k -> new Object()); }
@@ -88,7 +90,6 @@ public class MediaUploadWorker extends Worker {
         try {
             Uri u = Uri.parse(containerUrl);
             String host = (u != null) ? u.getHost() : "<?>";
-
             Log.i(TAG, "Worker cfg: host=" + host +
                     " containerUrl=" + containerUrl +
                     " sasHints=" + (sasRaw.contains("si=") ? "storedPolicy" : "adhoc"));
@@ -209,20 +210,29 @@ public class MediaUploadWorker extends Worker {
         Object lock = lockFor(blobPath);
         synchronized (lock) {
 
-            // ----- Build metadata -----
+            // Validate video duration before upload
+            if (isVideo) {
+                long durationMs = getVideoDurationMs(cr, itemUri);
+                Log.i(TAG, "[VIDEO] durationMs=" + durationMs + " name=" + name + " uri=" + itemUri);
+
+                if (durationMs > 0 && durationMs < MIN_VIDEO_MS) {
+                    Log.w(TAG, "[VIDEO] skip upload; too short (" + durationMs + " ms): " + itemUri);
+                    return true;
+                }
+            }
+
             HashMap<String, String> meta = buildDefaultMeta(consignmentId, name, relPath);
 
-            // ✅ If this is a video, attempt to read sidecar: {base}.meta.json
             Uri sidecarUri = null;
             if (isVideo) {
-                String base = baseNameNoExt(name); // "release" from "release.mp4"
+                String base = baseNameNoExt(name);
                 String sidecarName = base + ".meta.json";
 
                 sidecarUri = findSidecarInDownloads(cr, sidecarName, consignmentId);
                 if (sidecarUri != null) {
                     HashMap<String, String> sidecarMeta = readSidecarJson(cr, sidecarUri);
                     if (sidecarMeta != null && !sidecarMeta.isEmpty()) {
-                        meta.putAll(sidecarMeta); // sidecar overrides defaults
+                        meta.putAll(sidecarMeta);
                         Log.i(TAG, "Sidecar found; metadata overridden from " + sidecarName);
                     } else {
                         Log.w(TAG, "Sidecar found but empty/unreadable: " + sidecarUri);
@@ -235,22 +245,6 @@ public class MediaUploadWorker extends Worker {
             Log.i(TAG, "Uploading → " + containerUrl + "/" + blobPath +
                     " (mime=" + mime + ", size=" + size + ")");
 
-            try {
-                if (azureBlobExistsReflect(uploader, containerUrl, blobPath)) {
-                    Log.i(TAG, "Skip upload; blob already exists: " + containerUrl + "/" + blobPath);
-
-                    // Cleanup local media anyway
-                    tryDelete(getApplicationContext(), cr, itemUri);
-
-                    // If we found a sidecar, clean it too
-                    if (sidecarUri != null) tryDelete(getApplicationContext(), cr, sidecarUri);
-
-                    return true;
-                }
-            } catch (Exception checkEx) {
-                Log.w(TAG, "HEAD check failed (will try upload anyway): " + checkEx.getMessage());
-            }
-
             try (InputStream in = cr.openInputStream(itemUri)) {
                 if (in == null) {
                     Log.w(TAG, "InputStream null for " + itemUri);
@@ -259,13 +253,11 @@ public class MediaUploadWorker extends Worker {
 
                 long contentLen = size > 0 ? size : guessLength(cr, itemUri);
 
-                // ✅ Upload WITH metadata (this is what Azure Properties will show)
+                // Always upload latest version; do not skip just because blob exists
                 uploader.putBlobAuto(containerUrl, blobPath, mime, contentLen, in, meta);
 
-                // Delete local media after success
                 tryDelete(getApplicationContext(), cr, itemUri);
 
-                // Delete sidecar too after success (best-effort)
                 if (sidecarUri != null) tryDelete(getApplicationContext(), cr, sidecarUri);
 
                 Log.i(TAG, "Uploaded; delete attempted: " + itemUri +
@@ -282,12 +274,9 @@ public class MediaUploadWorker extends Worker {
         }
     }
 
-    // ---------------- Sidecar helpers ----------------
-
-    /** Defaults used when sidecar isn't present. */
     private HashMap<String, String> buildDefaultMeta(String consignmentId, String filename, String relPath) {
         HashMap<String, String> meta = new HashMap<>();
-        meta.put("createdat", java.time.Instant.now().toString()); // ISO-8601
+        meta.put("createdat", java.time.Instant.now().toString());
         meta.put("driver", "Upload Agent");
         meta.put("device", DeviceInfo.getDeviceName(getApplicationContext()));
         meta.put("consignmentid", consignmentId);
@@ -296,11 +285,7 @@ public class MediaUploadWorker extends Worker {
         return meta;
     }
 
-    /** Find sidecar in Downloads (recommended storage location for JSON sidecars on scoped storage). */
     private Uri findSidecarInDownloads(ContentResolver cr, String sidecarName, String consignmentId) {
-        // We look for:
-        // DISPLAY_NAME = "release.meta.json"
-        // and RELATIVE_PATH contains "/GT6/{consignmentId}/" or just "/GT6/" (in case you don't nest by id)
         Uri table = MediaStore.Downloads.EXTERNAL_CONTENT_URI;
 
         String[] proj = new String[] {
@@ -330,7 +315,6 @@ public class MediaUploadWorker extends Worker {
         return null;
     }
 
-    /** Read sidecar JSON and convert into metadata map; unknown keys are ignored. */
     private HashMap<String, String> readSidecarJson(ContentResolver cr, Uri sidecarUri) {
         try (InputStream in = cr.openInputStream(sidecarUri)) {
             if (in == null) return null;
@@ -343,17 +327,12 @@ public class MediaUploadWorker extends Worker {
             JSONObject o = new JSONObject(sb.toString());
             HashMap<String, String> meta = new HashMap<>();
 
-            // Accept either your keys or normalized keys
             putIfPresent(meta, "createdat", o.optString("createdAt", null));
             putIfPresent(meta, "createdat", o.optString("createdat", null));
-
             putIfPresent(meta, "consignmentid", o.optString("consignmentId", null));
             putIfPresent(meta, "consignmentid", o.optString("consignmentid", null));
-
             putIfPresent(meta, "device", o.optString("device", null));
-
             putIfPresent(meta, "driver", o.optString("driver", null));
-
             putIfPresent(meta, "lot", o.optString("lot", null));
 
             return meta;
@@ -379,7 +358,20 @@ public class MediaUploadWorker extends Worker {
         return (dot > 0) ? filename.substring(0, dot) : filename;
     }
 
-    // ---------------- Existing helpers ----------------
+    private long getVideoDurationMs(ContentResolver cr, Uri uri) {
+        MediaMetadataRetriever mmr = new MediaMetadataRetriever();
+        try {
+            mmr.setDataSource(getApplicationContext(), uri);
+            String dur = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);
+            if (dur == null || dur.trim().isEmpty()) return -1L;
+            return Long.parseLong(dur);
+        } catch (Exception e) {
+            Log.w(TAG, "Could not read video duration for uri=" + uri, e);
+            return -1L;
+        } finally {
+            try { mmr.release(); } catch (Exception ignored) {}
+        }
+    }
 
     private static boolean azureBlobExistsReflect(AzureUploader uploader, String containerUrl, String blobPath) throws Exception {
         try {
@@ -491,9 +483,6 @@ public class MediaUploadWorker extends Worker {
         return url.replaceAll("/+$", "");
     }
 }
-
-
-
 
 
 

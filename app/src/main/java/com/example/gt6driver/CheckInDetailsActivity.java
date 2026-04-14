@@ -1,4 +1,3 @@
-// app/src/main/java/com/example/gt6driver/CheckInDetailsActivity.java
 package com.example.gt6driver;
 
 import android.Manifest;
@@ -135,7 +134,7 @@ public class CheckInDetailsActivity extends AppCompatActivity {
     private boolean descDone = false;
     private boolean qualityDone = false;
 
-    // ✅ NEW: Must have loaded intake from API before we allow PUT
+    // Must have loaded intake from API before we allow PUT
     private boolean intakeLoaded = false;
 
     // Networking
@@ -166,7 +165,7 @@ public class CheckInDetailsActivity extends AppCompatActivity {
         btnMileageCamera = findViewById(R.id.btnMileageCamera);
         btnMileageUpdate = findViewById(R.id.btnMileageUpdate);
 
-        // INTAKE VIDEO (buttons only; recording happens in IntakeVideoActivity)
+        // INTAKE VIDEO
         videoPanel = findViewById(R.id.videoPanel);
         videoHeader = findViewById(R.id.videoHeader);
         videoGroup = findViewById(R.id.videoGroup);
@@ -220,17 +219,13 @@ public class CheckInDetailsActivity extends AppCompatActivity {
             }
         });
 
-        // Confirm button (START DISABLED until required panels done)
         btnConfirm = findViewById(R.id.btnConfirmIntake);
         setConfirmEnabled(false);
 
-        // ===== Intent extras =====
         Intent in = getIntent();
 
-        // Preferred path: full vehicle model
         vehicle = in.getParcelableExtra(EXTRA_VEHICLE);
 
-        // Legacy fields (fallbacks if vehicle is null)
         lot = in.getStringExtra(Nav.EXTRA_LOT);
         description = in.getStringExtra(Nav.EXTRA_DESC);
         shortDescription = in.getStringExtra("shortdesc");
@@ -248,7 +243,6 @@ public class CheckInDetailsActivity extends AppCompatActivity {
         vin = in.getStringExtra(Nav.EXTRA_VIN);
         thumbUrl = in.getStringExtra(Nav.EXTRA_THUMB);
 
-        // Opportunity Id (first from intent, else from vehicle)
         opportunityId = in.getStringExtra(EXTRA_OPPORTUNITY_ID);
         if ((opportunityId == null || opportunityId.trim().isEmpty()) && vehicle != null) {
             if (vehicle.opportunityId != null && !vehicle.opportunityId.isEmpty()) {
@@ -258,7 +252,6 @@ public class CheckInDetailsActivity extends AppCompatActivity {
             }
         }
 
-        // If we have a vehicle, prefer its values for header UI
         if (vehicle != null) {
             String vLot = vehicle.lotnumber != null ? vehicle.lotnumber : "";
             String vDesc = safeStr(vehicle.marketingdescription);
@@ -273,19 +266,16 @@ public class CheckInDetailsActivity extends AppCompatActivity {
             thumbUrl = firstNonEmpty(vThumb, thumbUrl);
         }
 
-        // Vehicle header
         panelLot.setText("LOT # " + (lot != null ? lot : ""));
         panelDesc.setText(description != null ? description : "");
         if (panelVin != null) panelVin.setText("VIN: " + (vin != null ? vin : ""));
 
-        // Load vehicle thumbnail
         loadThumbIntoHeader();
 
         if (descValue != null) {
             descValue.setText(!TextUtils.isEmpty(description) ? description : "No description available.");
         }
 
-        // ===== PHOTO launcher (MILEAGE ONLY) =====
         takePictureLauncher = registerForActivityResult(
                 new ActivityResultContracts.StartActivityForResult(),
                 result -> {
@@ -310,14 +300,12 @@ public class CheckInDetailsActivity extends AppCompatActivity {
                             if (extra instanceof android.graphics.Bitmap) bmpFromExtras = (android.graphics.Bitmap) extra;
                         }
 
-                        // Case A: camera wrote to our requested row
                         if (requested != null && awaitNonZeroSize(requested)) {
                             try { getContentResolver().notifyChange(requested, null); } catch (Exception ignore) {}
                             finalizePhotoAndBind(requested, pendingPhotoLabel);
                             return;
                         }
 
-                        // Case B: need to write data ourselves to requested row
                         Uri dest = (requested != null) ? requested : createIntakePhotoUri(pendingPhotoLabel);
                         if (dest == null) {
                             Toast.makeText(this, "Failed to create GT6 photo row.", Toast.LENGTH_SHORT).show();
@@ -354,7 +342,6 @@ public class CheckInDetailsActivity extends AppCompatActivity {
                 }
         );
 
-        // ===== VIDEO launcher (IntakeVideoActivity) =====
         recordVideoLauncher = registerForActivityResult(
                 new ActivityResultContracts.StartActivityForResult(),
                 result -> {
@@ -378,7 +365,6 @@ public class CheckInDetailsActivity extends AppCompatActivity {
                     lastCapturedVideoUri = finalDest;
                     verifyDestAndReport(finalDest, "Video");
 
-                    // Sidecar
                     String createdAtUtc = isoUtcNow();
                     String deviceName = DeviceInfo.getDeviceName(this);
                     String driverName = resolveDriverName();
@@ -394,15 +380,12 @@ public class CheckInDetailsActivity extends AppCompatActivity {
                     );
                     Log.i(TAG, "Sidecar write attempted for intake.meta.json ok=" + sidecarOk);
 
-                    // Auto-accept intake video
                     acceptIntakeVideoIfPresent();
 
-                    // Kick uploader immediately
                     com.example.gt6driver.sync.GT6MediaSync.enqueueImmediate(this);
                 }
         );
 
-        // ===== Permission launchers =====
         requestReadImagesPermissionLauncher = registerForActivityResult(
                 new ActivityResultContracts.RequestPermission(),
                 isGranted -> {
@@ -437,8 +420,6 @@ public class CheckInDetailsActivity extends AppCompatActivity {
                 }
         );
 
-        // ===== Click listeners =====
-
         // MILEAGE
         if (mileageHeader != null) mileageHeader.setOnClickListener(v -> toggleMileagePanel());
 
@@ -461,8 +442,6 @@ public class CheckInDetailsActivity extends AppCompatActivity {
                     return;
                 }
 
-                // Persist into model so server gets it
-                // NOTE: we still allow local edits before intakeLoaded, but CONFIRM won't allow PUT until loaded.
                 if (intakeModel == null) intakeModel = new VehicleTaskIntake();
                 if (intakeModel.mileage == null) intakeModel.mileage = new VehicleTaskIntake.Mileage();
                 try { intakeModel.mileage.odometer = Integer.parseInt(miles); } catch (NumberFormatException ignored) {}
@@ -476,7 +455,7 @@ public class CheckInDetailsActivity extends AppCompatActivity {
             });
         }
 
-        // VIDEO section
+        // VIDEO
         if (videoHeader != null) videoHeader.setOnClickListener(v -> toggleVideoPanel());
 
         if (btnVideoRecord != null) {
@@ -485,11 +464,18 @@ public class CheckInDetailsActivity extends AppCompatActivity {
                 setVideoExpanded(true);
                 hideKeyboard();
 
-                Intent intent = new Intent(CheckInDetailsActivity.this, IntakeVideoActivity.class);
-                intent.putExtra(IntakeVideoActivity.EXTRA_CONSIGNMENT_ID, consignmentIdStr());
-                intent.putExtra(IntakeVideoActivity.EXTRA_ENABLE_AUDIO, true);
+                if (intakeModel != null && intakeModel.video != null
+                        && !TextUtils.isEmpty(safeStr(intakeModel.video.videoUrl))) {
+                    new MaterialAlertDialogBuilder(CheckInDetailsActivity.this)
+                            .setTitle("Overwrite Intake Video")
+                            .setMessage("This will overwrite the previous Intake Video, do you wish to proceed")
+                            .setNegativeButton("NO", (dialog, which) -> dialog.dismiss())
+                            .setPositiveButton("YES", (dialog, which) -> launchIntakeVideoRecording())
+                            .show();
+                    return;
+                }
 
-                recordVideoLauncher.launch(intent);
+                launchIntakeVideoRecording();
             });
         }
 
@@ -498,19 +484,22 @@ public class CheckInDetailsActivity extends AppCompatActivity {
             btnVideoAccept.setEnabled(true);
 
             btnVideoAccept.setOnClickListener(v -> {
-                // If already accepted, do nothing
-                if (intakeModel != null && intakeModel.video != null
-                        && !TextUtils.isEmpty(safeStr(intakeModel.video.videoUrl))) {
-                    return;
-                }
-
                 setVideoExpanded(true);
                 hideKeyboard();
 
-                Intent intent = new Intent(CheckInDetailsActivity.this, IntakeVideoActivity.class);
-                intent.putExtra(IntakeVideoActivity.EXTRA_CONSIGNMENT_ID, consignmentIdStr());
-                intent.putExtra(IntakeVideoActivity.EXTRA_ENABLE_AUDIO, true);
-                recordVideoLauncher.launch(intent);
+                if (intakeModel != null && intakeModel.video != null
+                        && !TextUtils.isEmpty(safeStr(intakeModel.video.videoUrl))) {
+
+                    new MaterialAlertDialogBuilder(CheckInDetailsActivity.this)
+                            .setTitle("Overwrite Intake Video")
+                            .setMessage("This will overwrite the previous Intake Video, do you wish to proceed")
+                            .setNegativeButton("NO", (dialog, which) -> dialog.dismiss())
+                            .setPositiveButton("YES", (dialog, which) -> launchIntakeVideoRecording())
+                            .show();
+                    return;
+                }
+
+                launchIntakeVideoRecording();
             });
         }
 
@@ -640,12 +629,11 @@ public class CheckInDetailsActivity extends AppCompatActivity {
             });
         }
 
-        // CONFIRM -> PUT save
+        // CONFIRM
         if (btnConfirm != null) {
             btnConfirm.setOnClickListener(v -> {
                 hideKeyboard();
 
-                // ✅ NEW: make the failure mode obvious (GET must have completed successfully)
                 if (!intakeLoaded || intakeModel == null) {
                     Toast.makeText(this, "Intake record not loaded yet. Try again.", Toast.LENGTH_LONG).show();
                     refreshConfirmEnabled();
@@ -682,27 +670,44 @@ public class CheckInDetailsActivity extends AppCompatActivity {
                         startActivity(back);
                         finish();
                     }
-                    @Override public void onError(Throwable t) {
-                        Toast.makeText(CheckInDetailsActivity.this, "Save failed: " + t.getMessage(), Toast.LENGTH_LONG).show();
+                    @Override
+                    public void onError(Throwable t) {
+                        String detail = (t != null && t.getMessage() != null && !t.getMessage().trim().isEmpty())
+                                ? t.getMessage().trim()
+                                : "Unknown network error";
+
+                        new MaterialAlertDialogBuilder(CheckInDetailsActivity.this)
+                                .setTitle("Intake Save Failed")
+                                .setMessage(detail)
+                                .setPositiveButton("OK", (dialog, which) -> dialog.dismiss())
+                                .show();
+
                         refreshConfirmEnabled();
                     }
-                    @Override public void onHttpError(int code, String message) {
-                        Toast.makeText(CheckInDetailsActivity.this, "Save HTTP " + code + ": " + message, Toast.LENGTH_LONG).show();
+
+                    @Override
+                    public void onHttpError(int code, String message) {
+                        String detail = (message != null && !message.trim().isEmpty())
+                                ? message.trim()
+                                : "HTTP " + code + " with no additional error details.";
+
+                        new MaterialAlertDialogBuilder(CheckInDetailsActivity.this)
+                                .setTitle("Intake Save Failed")
+                                .setMessage("HTTP " + code + "\n\n" + detail)
+                                .setPositiveButton("OK", (dialog, which) -> dialog.dismiss())
+                                .show();
+
                         refreshConfirmEnabled();
                     }
                 });
             });
         }
 
-        // Fire API load once UI is ready
         driverTaskRepo = new DriverTaskRepository();
         fetchIntakeAndBind();
     }
 
-    // ---------- Confirm gating ----------
-
     private boolean isConfirmReady() {
-        // ✅ NEW: require intakeLoaded so we don't PUT a blank model and wipe other fields (e.g., Transport)
         return intakeLoaded && mileageDone && descDone && qualityDone && videoDone;
     }
 
@@ -716,15 +721,12 @@ public class CheckInDetailsActivity extends AppCompatActivity {
         setConfirmEnabled(isConfirmReady());
     }
 
-    // ---------- Networking bind/load ----------
-
     private void fetchIntakeAndBind() {
         if (TextUtils.isEmpty(opportunityId)) {
             Toast.makeText(this, "Missing opportunityId", Toast.LENGTH_LONG).show();
             return;
         }
 
-        // ✅ NEW: reset loaded state until GET succeeds
         intakeLoaded = false;
         refreshConfirmEnabled();
 
@@ -734,7 +736,6 @@ public class CheckInDetailsActivity extends AppCompatActivity {
                 setPanelsEnabled(true);
 
                 if (it == null) {
-                    // ✅ IMPORTANT: do NOT create a blank object and allow PUT
                     intakeModel = new VehicleTaskIntake();
                     intakeLoaded = false;
                     Toast.makeText(CheckInDetailsActivity.this, "No intake data found.", Toast.LENGTH_SHORT).show();
@@ -743,8 +744,15 @@ public class CheckInDetailsActivity extends AppCompatActivity {
                 }
 
                 intakeModel = it;
-                intakeLoaded = true;
 
+// Block Intake if Transport is required first
+                if (shouldBlockIntakeForVinVerify(it)) {
+                    intakeLoaded = false;
+                    showTransportRequiredModalAndExit();
+                    return;
+                }
+
+                intakeLoaded = true;
                 bindIntakeToUi(it);
                 refreshConfirmEnabled();
             }
@@ -765,7 +773,6 @@ public class CheckInDetailsActivity extends AppCompatActivity {
         });
     }
 
-    // Keep the persisted Description state in your working model
     private VehicleTaskIntake.Description descModel() {
         if (intakeModel == null) intakeModel = new VehicleTaskIntake();
         if (intakeModel.description == null) intakeModel.description = new VehicleTaskIntake.Description();
@@ -835,7 +842,6 @@ public class CheckInDetailsActivity extends AppCompatActivity {
                 if (qualityDetailsGroup != null) qualityDetailsGroup.setVisibility(View.GONE);
                 clearQualityChecks();
             } else if (Boolean.TRUE.equals(it.quality.isConcerns)) {
-                // Consider quality "done" if server has a state for it
                 setStatusIcon(qualityIcon, true);
                 qualityDone = true;
                 setQualityExpanded(false);
@@ -855,20 +861,21 @@ public class CheckInDetailsActivity extends AppCompatActivity {
             qualityDone = false;
         }
 
-        // Video (server state)
+        // Video
         String acceptedUrl = (it.video != null) ? safeStr(it.video.videoUrl) : "";
         if (!TextUtils.isEmpty(acceptedUrl)) {
             setStatusIcon(videoIcon, true);
             videoDone = true;
 
             if (btnVideoAccept != null) {
-                btnVideoAccept.setEnabled(false);
-                btnVideoAccept.setAlpha(0.5f);
-                btnVideoAccept.setText("ACCEPTED");
+                btnVideoAccept.setEnabled(true);
+                btnVideoAccept.setAlpha(1f);
+                btnVideoAccept.setText("RECORD VIDEO");
             }
             if (btnVideoRecord != null) {
-                btnVideoRecord.setEnabled(false);
-                btnVideoRecord.setAlpha(0.5f);
+                btnVideoRecord.setEnabled(true);
+                btnVideoRecord.setAlpha(1f);
+                btnVideoRecord.setText("RECORD");
             }
         } else {
             setStatusIcon(videoIcon, false);
@@ -889,34 +896,39 @@ public class CheckInDetailsActivity extends AppCompatActivity {
         refreshConfirmEnabled();
     }
 
-    // ---------- Build body for PUT ----------
-
     private VehicleTaskIntake buildIntakeFromUi() {
-        // ✅ IMPORTANT: always start from the latest GET model to preserve fields TransportActivity owns
         VehicleTaskIntake body = intakeModel;
+        if (body == null) body = new VehicleTaskIntake();
+
         body.opportunityId = opportunityId;
 
-        // ---------------- MILEAGE ----------------
+        // Preserve non-UI fields required by the API
+        if (intakeModel != null) {
+            body.activityId = intakeModel.activityId;
+            body.keyCheck = intakeModel.keyCheck;
+            body.vinVerify = intakeModel.vinVerify;
+        }
+
+        // Mileage
         if (body.mileage == null) body.mileage = new VehicleTaskIntake.Mileage();
         String milesTxt = safe(enterMileageInput);
         if (!TextUtils.isEmpty(milesTxt)) {
             try { body.mileage.odometer = Integer.parseInt(milesTxt); }
             catch (NumberFormatException ignore) {}
         }
-        // Preserve photoUrl if already captured into intakeModel.mileage.photoUrl
 
-        // ---------------- DESCRIPTION ----------------
+        // Description
         if (body.description == null) body.description = new VehicleTaskIntake.Description();
         if (intakeModel != null && intakeModel.description != null) {
             VehicleTaskIntake.Description src = intakeModel.description;
-            body.description.isCorrect           = Boolean.TRUE.equals(src.isCorrect);
-            body.description.isIncorrectMileage  = Boolean.TRUE.equals(src.isIncorrectMileage);
-            body.description.isInCorrectVin      = Boolean.TRUE.equals(src.isInCorrectVin);
-            body.description.isIncorrectSpelling = Boolean.TRUE.equals(src.isIncorrectSpelling);
-            body.description.isIncorrectDetails  = Boolean.TRUE.equals(src.isIncorrectDetails);
+            body.description.isCorrect           = src.isCorrect;
+            body.description.isIncorrectMileage  = src.isIncorrectMileage;
+            body.description.isInCorrectVin      = src.isInCorrectVin;
+            body.description.isIncorrectSpelling = src.isIncorrectSpelling;
+            body.description.isIncorrectDetails  = src.isIncorrectDetails;
         }
 
-        // ---------------- QUALITY ----------------
+        // Quality
         if (body.quality == null) body.quality = new VehicleTaskIntake.Quality();
         if (Boolean.TRUE.equals(qualityHasConcerns)) {
             body.quality.isConcerns       = true;
@@ -934,7 +946,7 @@ public class CheckInDetailsActivity extends AppCompatActivity {
             body.quality.isMechanical     = false;
         }
 
-        // ---------------- VIDEO ----------------
+        // Video
         if (body.video == null) body.video = new VehicleTaskIntake.VideoInfo();
         if (TextUtils.isEmpty(body.video.videoUrl)) {
             String capturedVideoUrl = (intakeModel != null && intakeModel.video != null)
@@ -942,14 +954,12 @@ public class CheckInDetailsActivity extends AppCompatActivity {
             body.video.videoUrl = TextUtils.isEmpty(capturedVideoUrl) ? "" : capturedVideoUrl;
         }
 
-        // ---------------- CHECK-IN BY (required for API) ----------------
+        // Check-in by
         String checkInBy = resolveDriverName();
         body.checkInBy = (checkInBy == null) ? "" : checkInBy;
 
         return body;
     }
-
-    // ---------- UI helpers ----------
 
     private void loadThumbIntoHeader() {
         if (ivVehicleThumb == null) return;
@@ -1022,10 +1032,7 @@ public class CheckInDetailsActivity extends AppCompatActivity {
         if (cbServiceLights!= null) cbServiceLights.setChecked(false);
     }
 
-    // ---------- Permissions / Camera ----------
-
     private void ensureCameraForPhoto(String label) {
-        // mileage only
         pendingPhotoLabel = "mileage";
 
         boolean cameraOk = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
@@ -1054,7 +1061,6 @@ public class CheckInDetailsActivity extends AppCompatActivity {
         openCameraPhoto("mileage");
     }
 
-    // Single canonical version of openCameraPhoto (mileage only)
     private void openCameraPhoto(String label) {
         pendingPhotoLabel = "mileage";
 
@@ -1090,10 +1096,8 @@ public class CheckInDetailsActivity extends AppCompatActivity {
         }
     }
 
-    // ---------- Media helpers ----------
-
     private boolean awaitNonZeroSize(Uri uri) {
-        for (int i = 0; i < 8; i++) { // ~2 seconds
+        for (int i = 0; i < 8; i++) {
             if (hasNonZeroSize(uri)) return true;
             try { Thread.sleep(250); } catch (InterruptedException ignored) {}
         }
@@ -1161,7 +1165,6 @@ public class CheckInDetailsActivity extends AppCompatActivity {
     }
 
     private Uri createIntakePhotoUri(String label) {
-        // mileage only
         final String fileName = "mileage_intake.jpg";
         final String relPath = Environment.DIRECTORY_PICTURES + "/GT6/" + consignmentIdStr();
 
@@ -1187,7 +1190,6 @@ public class CheckInDetailsActivity extends AppCompatActivity {
     }
 
     private Uri createPhotoUriForExternalCapture(String label) {
-        // mileage only
         final String fileName = "mileage_intake.jpg";
         final String relPath  = Environment.DIRECTORY_PICTURES + "/GT6/" + consignmentIdStr();
 
@@ -1214,7 +1216,6 @@ public class CheckInDetailsActivity extends AppCompatActivity {
     private void finalizePhotoAndBind(Uri dest, String label) {
         if (intakeModel == null) intakeModel = new VehicleTaskIntake();
 
-        // mileage only
         String fileName = "mileage_intake.jpg";
         if (intakeModel.mileage == null) intakeModel.mileage = new VehicleTaskIntake.Mileage();
         intakeModel.mileage.photoUrl = mediaUrl(fileName);
@@ -1222,44 +1223,45 @@ public class CheckInDetailsActivity extends AppCompatActivity {
         verifyDestAndReport(dest, "Image");
     }
 
-    // ---------- Video helpers ----------
+    private void launchIntakeVideoRecording() {
+        Intent intent = new Intent(CheckInDetailsActivity.this, IntakeVideoActivity.class);
+        intent.putExtra(IntakeVideoActivity.EXTRA_CONSIGNMENT_ID, consignmentIdStr());
+        intent.putExtra(IntakeVideoActivity.EXTRA_ENABLE_AUDIO, true);
+        recordVideoLauncher.launch(intent);
+    }
 
-    // ✅ Auto-accept intake video so user can’t lose it by forgetting to tap Accept
     private void acceptIntakeVideoIfPresent() {
         if (lastCapturedVideoUri == null) return;
 
         if (intakeModel == null) intakeModel = new VehicleTaskIntake();
         if (intakeModel.video == null) intakeModel.video = new VehicleTaskIntake.VideoInfo();
 
-        // Store the URL your API expects (your existing naming convention)
         intakeModel.video.videoUrl = compressedVideoUrl("intake.mp4");
 
         videoDone = true;
         setStatusIcon(videoIcon, true);
 
         if (btnVideoAccept != null) {
-            btnVideoAccept.setEnabled(false);
-            btnVideoAccept.setAlpha(0.5f);
-            btnVideoAccept.setText("ACCEPTED");
+            btnVideoAccept.setEnabled(true);
+            btnVideoAccept.setAlpha(1f);
+            btnVideoAccept.setText("RECORD VIDEO");
         }
         if (btnVideoRecord != null) {
-            btnVideoRecord.setEnabled(false);
-            btnVideoRecord.setAlpha(0.5f);
+            btnVideoRecord.setEnabled(true);
+            btnVideoRecord.setAlpha(1f);
+            btnVideoRecord.setText("RECORD");
         }
 
         com.example.gt6driver.sync.GT6MediaSync.enqueueImmediate(this);
         refreshConfirmEnabled();
     }
 
-    // Compressed Video Helper
     private String compressedVideoUrl(String originalFileName) {
         int dot = originalFileName.lastIndexOf('.');
         String name = (dot > 0) ? originalFileName.substring(0, dot) : originalFileName;
         String ext  = (dot > 0) ? originalFileName.substring(dot) : "";
         return COMPRESSED_BASE + consignmentIdStr() + "/" + name + "_c" + ext;
     }
-
-    // ---------- Sidecar + misc helpers ----------
 
     private String isoUtcNow() {
         long now = System.currentTimeMillis();
@@ -1287,7 +1289,6 @@ public class CheckInDetailsActivity extends AppCompatActivity {
 
             Uri collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI;
 
-            // Delete existing to avoid "(1)"
             try {
                 String sel = MediaStore.MediaColumns.DISPLAY_NAME + "=? AND " +
                         MediaStore.MediaColumns.RELATIVE_PATH + "=?";
@@ -1441,7 +1442,24 @@ public class CheckInDetailsActivity extends AppCompatActivity {
             }
         }
     }
+    private boolean shouldBlockIntakeForVinVerify(VehicleTaskIntake it) {
+        if (it == null || it.vinVerify == null) return true; // block if missing entirely
 
+        String newVin = safeStr(it.vinVerify.newVin);
+        return TextUtils.isEmpty(newVin); // 🔥 BLOCK when EMPTY
+    }
+
+    private void showTransportRequiredModalAndExit() {
+        new MaterialAlertDialogBuilder(CheckInDetailsActivity.this)
+                .setTitle("Transport Required")
+                .setMessage("Vehilce must complete Transport before Intake")
+                .setCancelable(false)
+                .setPositiveButton("OK", (dialog, which) -> {
+                    dialog.dismiss();
+                    finish();
+                })
+                .show();
+    }
     @androidx.annotation.Nullable
     private Uri findLatestCapturedImage(long notBeforeMillis) {
         Cursor c = null;

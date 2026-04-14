@@ -1,20 +1,20 @@
-// app/src/main/java/com/example/gt6driver/IntakeVideoActivity.java
 package com.example.gt6driver;
 
 import android.Manifest;
 import android.content.ContentValues;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.media.MediaMetadataRetriever;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
+import android.provider.MediaStore;
 import android.util.Log;
 import android.util.TypedValue;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageButton;
 import android.widget.Toast;
-import android.provider.MediaStore;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
@@ -38,6 +38,7 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
 import com.google.android.material.button.MaterialButton;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.common.util.concurrent.ListenableFuture;
 
 import java.util.concurrent.Executor;
@@ -48,11 +49,12 @@ public class IntakeVideoActivity extends AppCompatActivity {
     public static final String EXTRA_CONSIGNMENT_ID = "consignmentId";
     public static final String EXTRA_ENABLE_AUDIO   = "enableAudio";
 
-    // Outputs (match your existing pattern)
-    public static final String EXTRA_RESULT_VIDEO_URI = "extra_video_uri";      // Parcelable Uri
-    public static final String EXTRA_RESULT_CANCELED  = "extra_video_canceled"; // boolean
+    // Outputs
+    public static final String EXTRA_RESULT_VIDEO_URI = "extra_video_uri";
+    public static final String EXTRA_RESULT_CANCELED  = "extra_video_canceled";
 
     private static final String TAG = "GT6-IntakeVideo";
+    private static final long MIN_VALID_VIDEO_MS = 60_000L; // 1 minute minimum
 
     private PreviewView previewView;
     private MaterialButton btnRecordStop;
@@ -75,9 +77,8 @@ public class IntakeVideoActivity extends AppCompatActivity {
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_release_video); // ✅ reuse same layout, or create activity_intake_video
+        setContentView(R.layout.activity_release_video);
 
-        // If you reuse the same layout IDs, no XML changes required:
         previewView   = findViewById(R.id.releasePreviewView);
         btnRecordStop = findViewById(R.id.btnRecordStop);
         btnClose      = findViewById(R.id.btnClose);
@@ -235,9 +236,11 @@ public class IntakeVideoActivity extends AppCompatActivity {
             if (event instanceof VideoRecordEvent.Start) {
                 isRecording = true;
                 btnRecordStop.setText("STOP");
+                btnClose.setEnabled(false);
             } else if (event instanceof VideoRecordEvent.Finalize) {
                 isRecording = false;
                 btnRecordStop.setText("RECORD");
+                btnClose.setEnabled(true);
 
                 VideoRecordEvent.Finalize fin = (VideoRecordEvent.Finalize) event;
 
@@ -265,6 +268,15 @@ public class IntakeVideoActivity extends AppCompatActivity {
                     return;
                 }
 
+                long durationMs = getVideoDurationMs(savedUri);
+                Log.i(TAG, "Saved intake video durationMs=" + durationMs + " uri=" + savedUri);
+
+                if (durationMs > 0 && durationMs < MIN_VALID_VIDEO_MS) {
+                    deleteUriQuietly(savedUri);
+                    showTooShortVideoDialog(durationMs);
+                    return;
+                }
+
                 Intent data = new Intent();
                 data.putExtra(EXTRA_RESULT_VIDEO_URI, savedUri);
                 setResult(RESULT_OK, data);
@@ -283,6 +295,8 @@ public class IntakeVideoActivity extends AppCompatActivity {
         final String fileName = "intake.mp4";
         final String relPath = Environment.DIRECTORY_MOVIES + "/GT6/" + consignmentId + "/";
 
+        deleteExistingVideoRow(fileName, relPath);
+
         ContentValues cv = new ContentValues();
         cv.put(MediaStore.MediaColumns.DISPLAY_NAME, fileName);
         cv.put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4");
@@ -298,9 +312,61 @@ public class IntakeVideoActivity extends AppCompatActivity {
         ).setContentValues(cv).build();
     }
 
+    private void deleteExistingVideoRow(String fileName, String relPath) {
+        try {
+            String sel = MediaStore.MediaColumns.DISPLAY_NAME + "=? AND " +
+                    MediaStore.MediaColumns.RELATIVE_PATH + "=?";
+            int deleted = getContentResolver().delete(
+                    MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                    sel,
+                    new String[]{fileName, relPath}
+            );
+            Log.i(TAG, "Deleted existing intake rows count=" + deleted);
+        } catch (Exception e) {
+            Log.w(TAG, "Failed deleting existing intake video row", e);
+        }
+    }
+
+    private long getVideoDurationMs(Uri uri) {
+        MediaMetadataRetriever mmr = new MediaMetadataRetriever();
+        try {
+            mmr.setDataSource(this, uri);
+            String dur = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);
+            if (dur == null || dur.trim().isEmpty()) return -1L;
+            return Long.parseLong(dur);
+        } catch (Exception e) {
+            Log.w(TAG, "Could not read video duration for uri=" + uri, e);
+            return -1L;
+        } finally {
+            try { mmr.release(); } catch (Exception ignored) {}
+        }
+    }
+
+    private void deleteUriQuietly(Uri uri) {
+        if (uri == null) return;
+        try {
+            getContentResolver().delete(uri, null, null);
+        } catch (Exception e) {
+            Log.w(TAG, "Failed deleting short video uri=" + uri, e);
+        }
+    }
+
+    private void showTooShortVideoDialog(long durationMs) {
+        long seconds = Math.max(1L, durationMs / 1000L);
+
+        new MaterialAlertDialogBuilder(this)
+                .setTitle("Video Too Short")
+                .setMessage("The saved intake video was only " + seconds + " seconds. Please record again. Intake video must be longer than 1 minute.")
+                .setCancelable(false)
+                .setPositiveButton("OK", (dialog, which) -> dialog.dismiss())
+                .show();
+    }
+
     @Override
     protected void onStop() {
         super.onStop();
-        if (isRecording) stopRecording();
+        Log.i(TAG, "onStop called. recording=" + isRecording);
+        // Intentionally do not force stop here.
+        // Forcing stop in onStop can prematurely truncate longer recordings.
     }
 }

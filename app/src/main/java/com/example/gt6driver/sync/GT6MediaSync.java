@@ -1,4 +1,3 @@
-// app/src/main/java/com/example/gt6driver/sync/GT6MediaSync.java
 package com.example.gt6driver.sync;
 
 import android.content.Context;
@@ -39,16 +38,15 @@ public class GT6MediaSync {
     private static final String DEFAULT_CONTAINER_URL =
             "https://stgt6driverappprod.blob.core.windows.net/driver";
 
-    /** Returns saved SAS or default. (Public so other classes can reuse.) */
+    /** Returns saved SAS or default. */
     public static String getSas(Context ctx) {
         String s = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(PREF_SAS, "");
         s = (s == null || s.isEmpty()) ? DEFAULT_SAS : s;
-        // Helpful once in logs (never log the full sig in production!)
         Log.i(TAG, "getSas() len=" + s.length());
         return s;
     }
 
-    /** Returns saved container URL or default. (Public so other classes can reuse.) */
+    /** Returns saved container URL or default. */
     public static String getContainerUrl(Context ctx) {
         String u = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(PREF_CONTAINER_URL, "");
         u = (u == null || u.isEmpty()) ? DEFAULT_CONTAINER_URL : u.trim();
@@ -64,7 +62,7 @@ public class GT6MediaSync {
         Log.i(TAG, "setSas() updated (len=" + (value == null ? 0 : value.length()) + ")");
     }
 
-    /** Save/override Container URL (no trailing '/'; worker can normalize). */
+    /** Save/override Container URL (no trailing '/'). */
     public static void setContainerUrl(Context ctx, String value) {
         String v = (value == null) ? "" : value.trim();
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -75,8 +73,8 @@ public class GT6MediaSync {
     /** Helper to build input data shared by all enqueue methods. */
     private static Data buildInput(Context ctx, boolean recursive, String prefix) {
         Data d = new Data.Builder()
-                .putString(KEY_SAS, getSas(ctx))                     // no leading '?' needed
-                .putString(KEY_CONTAINER_URL, getContainerUrl(ctx))  // e.g. https://acct.blob.core.windows.net/driver
+                .putString(KEY_SAS, getSas(ctx))
+                .putString(KEY_CONTAINER_URL, getContainerUrl(ctx))
                 .putBoolean(KEY_RECURSIVE, recursive)
                 .putString(KEY_PREFIX, prefix == null ? "" : prefix)
                 .build();
@@ -86,7 +84,7 @@ public class GT6MediaSync {
 
     // ----------------- Public enqueue APIs -----------------
 
-    /** Fire a one-off sync now. */
+    /** Fire a one-off sync now. Latest request wins. */
     public static void enqueueImmediate(Context ctx) {
         Constraints net = new Constraints.Builder()
                 .setRequiredNetworkType(NetworkType.CONNECTED)
@@ -103,9 +101,11 @@ public class GT6MediaSync {
                 .setInputData(buildInput(ctx, false, ""))
                 .build();
 
-        // Replace any existing scan instead of appending to a chain
+        Log.i(TAG, "enqueueImmediate() id=" + req.getId());
+
+        // Replace any existing immediate scan so stale queued work does not run later
         WorkManager.getInstance(ctx)
-                .enqueueUniqueWork("gt6_scan_serial", ExistingWorkPolicy.APPEND, req);
+                .enqueueUniqueWork("gt6_scan_serial", ExistingWorkPolicy.REPLACE, req);
     }
 
     /** Run every 15 minutes. */
@@ -125,7 +125,7 @@ public class GT6MediaSync {
                 .enqueueUniquePeriodicWork("gt6_scan_periodic", ExistingPeriodicWorkPolicy.KEEP, req);
     }
 
-    /** React to media changes via MediaStore (fires when user captures new media). */
+    /** React to media changes via MediaStore. */
     public static void enqueueContentTriggers(Context ctx) {
         Constraints constraints = new Constraints.Builder()
                 .setRequiredNetworkType(NetworkType.CONNECTED)
@@ -161,15 +161,10 @@ public class GT6MediaSync {
 
     /**
      * Call this right after changing container URL or SAS to avoid stale jobs running with old config.
-     * Example:
-     *   GT6MediaSync.setContainerUrl(ctx, prodUrl);
-     *   GT6MediaSync.setSas(ctx, prodSas);
-     *   GT6MediaSync.applyConfigAndReenqueue(ctx);
      */
     public static void applyConfigAndReenqueue(Context ctx) {
         resetAndReenqueueAll(ctx);
     }
 }
-
 
 

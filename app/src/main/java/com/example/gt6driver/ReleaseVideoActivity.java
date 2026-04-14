@@ -1,12 +1,11 @@
-// app/src/main/java/com/example/gt6driver/ReleaseVideoActivity.java
 package com.example.gt6driver;
 
 import android.Manifest;
 import android.content.ContentValues;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.media.MediaMetadataRetriever;
 import android.net.Uri;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.util.Log;
@@ -39,6 +38,7 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
 import com.google.android.material.button.MaterialButton;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.common.util.concurrent.ListenableFuture;
 
 import java.util.concurrent.Executor;
@@ -49,11 +49,12 @@ public class ReleaseVideoActivity extends AppCompatActivity {
     public static final String EXTRA_CONSIGNMENT_ID = "consignmentId";
     public static final String EXTRA_ENABLE_AUDIO   = "enableAudio";
 
-    // Outputs (match CheckOutDetailsActivity)
-    public static final String EXTRA_RESULT_VIDEO_URI = "extra_video_uri";      // Parcelable Uri
-    public static final String EXTRA_RESULT_CANCELED  = "extra_video_canceled"; // boolean
+    // Outputs
+    public static final String EXTRA_RESULT_VIDEO_URI = "extra_video_uri";
+    public static final String EXTRA_RESULT_CANCELED  = "extra_video_canceled";
 
     private static final String TAG = "GT6-ReleaseVideo";
+    private static final long MIN_VALID_VIDEO_MS = 60_000L; // 1 minute minimum
 
     private PreviewView previewView;
     private MaterialButton btnRecordStop;
@@ -82,7 +83,6 @@ public class ReleaseVideoActivity extends AppCompatActivity {
         btnRecordStop = findViewById(R.id.btnRecordStop);
         btnClose = findViewById(R.id.btnClose);
 
-        // ✅ keep bottom button above gesture/nav bar in portrait + landscape
         applySystemBarInsets();
 
         mainExecutor = ContextCompat.getMainExecutor(this);
@@ -110,7 +110,10 @@ public class ReleaseVideoActivity extends AppCompatActivity {
         );
 
         btnClose.setOnClickListener(v -> {
-            if (isRecording) stopRecording();
+            if (isRecording) {
+                stopRecording();
+                return;
+            }
             Intent data = new Intent();
             data.putExtra(EXTRA_RESULT_CANCELED, true);
             setResult(RESULT_CANCELED, data);
@@ -137,10 +140,9 @@ public class ReleaseVideoActivity extends AppCompatActivity {
     private void applySystemBarInsets() {
         final View root = findViewById(android.R.id.content);
 
-        // Capture the original margins once, so we don't "stack" insets repeatedly.
         final ViewGroup.MarginLayoutParams recordLp =
                 (ViewGroup.MarginLayoutParams) btnRecordStop.getLayoutParams();
-        final int baseBottomMargin = recordLp.bottomMargin; // from XML
+        final int baseBottomMargin = recordLp.bottomMargin;
 
         final ViewGroup.MarginLayoutParams closeLp =
                 (ViewGroup.MarginLayoutParams) btnClose.getLayoutParams();
@@ -150,13 +152,11 @@ public class ReleaseVideoActivity extends AppCompatActivity {
         ViewCompat.setOnApplyWindowInsetsListener(root, (v, insets) -> {
             Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
 
-            // Record button: lift above nav/gesture bar
             ViewGroup.MarginLayoutParams lp =
                     (ViewGroup.MarginLayoutParams) btnRecordStop.getLayoutParams();
             lp.bottomMargin = baseBottomMargin + bars.bottom;
             btnRecordStop.setLayoutParams(lp);
 
-            // Close button: avoid status bar / cutout
             ViewGroup.MarginLayoutParams cp =
                     (ViewGroup.MarginLayoutParams) btnClose.getLayoutParams();
             cp.topMargin = baseTopMargin + bars.top;
@@ -232,7 +232,6 @@ public class ReleaseVideoActivity extends AppCompatActivity {
 
         MediaStoreOutputOptions out = buildOutputOptions();
 
-        // ✅ PendingRecording is a top-level class in androidx.camera.video
         PendingRecording pending = videoCapture.getOutput().prepareRecording(this, out);
         if (enableAudio) pending = pending.withAudioEnabled();
 
@@ -240,9 +239,11 @@ public class ReleaseVideoActivity extends AppCompatActivity {
             if (event instanceof VideoRecordEvent.Start) {
                 isRecording = true;
                 btnRecordStop.setText("STOP");
+                btnClose.setEnabled(false);
             } else if (event instanceof VideoRecordEvent.Finalize) {
                 isRecording = false;
                 btnRecordStop.setText("RECORD");
+                btnClose.setEnabled(true);
 
                 VideoRecordEvent.Finalize fin = (VideoRecordEvent.Finalize) event;
 
@@ -261,7 +262,6 @@ public class ReleaseVideoActivity extends AppCompatActivity {
                 Uri savedUri = fin.getOutputResults().getOutputUri();
                 activeRecording = null;
 
-                // If MediaStore returned null, treat as failure/cancel.
                 if (savedUri == null) {
                     Toast.makeText(this, "Video saved but no Uri returned.", Toast.LENGTH_SHORT).show();
                     Intent data = new Intent();
@@ -271,7 +271,15 @@ public class ReleaseVideoActivity extends AppCompatActivity {
                     return;
                 }
 
-                // Return the Uri as a Parcelable extra (matches CheckOutDetailsActivity)
+                long durationMs = getVideoDurationMs(savedUri);
+                Log.i(TAG, "Saved release video durationMs=" + durationMs + " uri=" + savedUri);
+
+                if (durationMs > 0 && durationMs < MIN_VALID_VIDEO_MS) {
+                    deleteUriQuietly(savedUri);
+                    showTooShortVideoDialog(durationMs);
+                    return;
+                }
+
                 Intent data = new Intent();
                 data.putExtra(EXTRA_RESULT_VIDEO_URI, savedUri);
                 setResult(RESULT_OK, data);
@@ -290,6 +298,8 @@ public class ReleaseVideoActivity extends AppCompatActivity {
         final String fileName = "release.mp4";
         final String relPath = Environment.DIRECTORY_MOVIES + "/GT6/" + consignmentId + "/";
 
+        deleteExistingVideoRow(fileName, relPath);
+
         ContentValues cv = new ContentValues();
         cv.put(MediaStore.MediaColumns.DISPLAY_NAME, fileName);
         cv.put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4");
@@ -305,10 +315,62 @@ public class ReleaseVideoActivity extends AppCompatActivity {
         ).setContentValues(cv).build();
     }
 
+    private void deleteExistingVideoRow(String fileName, String relPath) {
+        try {
+            String sel = MediaStore.MediaColumns.DISPLAY_NAME + "=? AND " +
+                    MediaStore.MediaColumns.RELATIVE_PATH + "=?";
+            int deleted = getContentResolver().delete(
+                    MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                    sel,
+                    new String[]{fileName, relPath}
+            );
+            Log.i(TAG, "Deleted existing release rows count=" + deleted);
+        } catch (Exception e) {
+            Log.w(TAG, "Failed deleting existing release video row", e);
+        }
+    }
+
+    private long getVideoDurationMs(Uri uri) {
+        MediaMetadataRetriever mmr = new MediaMetadataRetriever();
+        try {
+            mmr.setDataSource(this, uri);
+            String dur = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);
+            if (dur == null || dur.trim().isEmpty()) return -1L;
+            return Long.parseLong(dur);
+        } catch (Exception e) {
+            Log.w(TAG, "Could not read video duration for uri=" + uri, e);
+            return -1L;
+        } finally {
+            try { mmr.release(); } catch (Exception ignored) {}
+        }
+    }
+
+    private void deleteUriQuietly(Uri uri) {
+        if (uri == null) return;
+        try {
+            getContentResolver().delete(uri, null, null);
+        } catch (Exception e) {
+            Log.w(TAG, "Failed deleting short video uri=" + uri, e);
+        }
+    }
+
+    private void showTooShortVideoDialog(long durationMs) {
+        long seconds = Math.max(1L, durationMs / 1000L);
+
+        new MaterialAlertDialogBuilder(this)
+                .setTitle("Video Too Short")
+                .setMessage("The saved release video was only " + seconds + " seconds. Please record again. Release video must be longer than 1 minute.")
+                .setCancelable(false)
+                .setPositiveButton("OK", (dialog, which) -> dialog.dismiss())
+                .show();
+    }
+
     @Override
     protected void onStop() {
         super.onStop();
-        if (isRecording) stopRecording();
+        Log.i(TAG, "onStop called. recording=" + isRecording);
+        // Do not force stop here.
+        // Forcing stop in onStop can prematurely truncate longer recordings.
     }
 }
 
