@@ -1,9 +1,13 @@
 package com.example.gt6driver;
 
 import android.Manifest;
+import android.animation.ObjectAnimator;
+import android.animation.ValueAnimator;
 import android.content.ContentValues;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.content.res.ColorStateList;
+import android.graphics.Color;
 import android.media.MediaMetadataRetriever;
 import android.net.Uri;
 import android.os.Bundle;
@@ -45,19 +49,21 @@ import java.util.concurrent.Executor;
 
 public class IntakeVideoActivity extends AppCompatActivity {
 
-    // Inputs
     public static final String EXTRA_CONSIGNMENT_ID = "consignmentId";
     public static final String EXTRA_ENABLE_AUDIO   = "enableAudio";
 
-    // Outputs
     public static final String EXTRA_RESULT_VIDEO_URI = "extra_video_uri";
     public static final String EXTRA_RESULT_CANCELED  = "extra_video_canceled";
 
     private static final String TAG = "GT6-IntakeVideo";
-    private static final long MIN_VALID_VIDEO_MS = 60_000L; // 1 minute minimum
+    private static final long MIN_VALID_VIDEO_MS = 60_000L;
+
+    private static final int PAUSE_COLOR_NORMAL = Color.parseColor("#455A64");
+    private static final int PAUSE_COLOR_PAUSED = Color.parseColor("#FBC02D");
 
     private PreviewView previewView;
     private MaterialButton btnRecordStop;
+    private MaterialButton btnPauseResume;
     private ImageButton btnClose;
 
     private Executor mainExecutor;
@@ -68,6 +74,9 @@ public class IntakeVideoActivity extends AppCompatActivity {
     private Recording activeRecording;
 
     private boolean isRecording = false;
+    private boolean isPaused = false;
+
+    private ObjectAnimator pausedBlinkAnimator;
 
     private String consignmentId;
     private boolean enableAudio;
@@ -81,16 +90,18 @@ public class IntakeVideoActivity extends AppCompatActivity {
 
         previewView   = findViewById(R.id.releasePreviewView);
         btnRecordStop = findViewById(R.id.btnRecordStop);
+        btnPauseResume = findViewById(R.id.btnPauseResume);
         btnClose      = findViewById(R.id.btnClose);
 
         applySystemBarInsets();
-
         mainExecutor = ContextCompat.getMainExecutor(this);
 
         consignmentId = getIntent().getStringExtra(EXTRA_CONSIGNMENT_ID);
         if (consignmentId == null || consignmentId.trim().isEmpty()) consignmentId = "unknown";
 
         enableAudio = getIntent().getBooleanExtra(EXTRA_ENABLE_AUDIO, true);
+
+        setPauseEnabled(false);
 
         permsLauncher = registerForActivityResult(
                 new ActivityResultContracts.RequestMultiplePermissions(),
@@ -110,7 +121,10 @@ public class IntakeVideoActivity extends AppCompatActivity {
         );
 
         btnClose.setOnClickListener(v -> {
-            if (isRecording) stopRecording();
+            if (isRecording) {
+                stopRecording();
+                return;
+            }
             Intent data = new Intent();
             data.putExtra(EXTRA_RESULT_CANCELED, true);
             setResult(RESULT_CANCELED, data);
@@ -120,6 +134,21 @@ public class IntakeVideoActivity extends AppCompatActivity {
         btnRecordStop.setOnClickListener(v -> {
             if (!isRecording) startRecording();
             else stopRecording();
+        });
+
+        btnPauseResume.setOnClickListener(v -> {
+            if (activeRecording == null || !isRecording) return;
+
+            try {
+                if (!isPaused) {
+                    activeRecording.pause();
+                } else {
+                    activeRecording.resume();
+                }
+            } catch (Throwable t) {
+                Log.w(TAG, "Pause/resume failed", t);
+                Toast.makeText(this, "Pause/resume not supported on this device.", Toast.LENGTH_SHORT).show();
+            }
         });
 
         requestPermsAndStart();
@@ -141,6 +170,10 @@ public class IntakeVideoActivity extends AppCompatActivity {
                 (ViewGroup.MarginLayoutParams) btnRecordStop.getLayoutParams();
         final int baseBottomMargin = recordLp.bottomMargin;
 
+        final ViewGroup.MarginLayoutParams pauseLp =
+                (ViewGroup.MarginLayoutParams) btnPauseResume.getLayoutParams();
+        final int basePauseBottomMargin = pauseLp.bottomMargin;
+
         final ViewGroup.MarginLayoutParams closeLp =
                 (ViewGroup.MarginLayoutParams) btnClose.getLayoutParams();
         final int baseTopMargin = closeLp.topMargin;
@@ -154,6 +187,11 @@ public class IntakeVideoActivity extends AppCompatActivity {
             lp.bottomMargin = baseBottomMargin + bars.bottom;
             btnRecordStop.setLayoutParams(lp);
 
+            ViewGroup.MarginLayoutParams pp =
+                    (ViewGroup.MarginLayoutParams) btnPauseResume.getLayoutParams();
+            pp.bottomMargin = basePauseBottomMargin;
+            btnPauseResume.setLayoutParams(pp);
+
             ViewGroup.MarginLayoutParams cp =
                     (ViewGroup.MarginLayoutParams) btnClose.getLayoutParams();
             cp.topMargin = baseTopMargin + bars.top;
@@ -164,6 +202,44 @@ public class IntakeVideoActivity extends AppCompatActivity {
         });
 
         ViewCompat.requestApplyInsets(root);
+    }
+
+    private void setPauseEnabled(boolean enabled) {
+        btnPauseResume.setEnabled(enabled);
+        btnPauseResume.setAlpha(enabled ? 1f : 0.5f);
+
+        if (!enabled) {
+            stopPausedIndicator();
+            btnPauseResume.setText("PAUSE");
+            btnPauseResume.setBackgroundTintList(ColorStateList.valueOf(PAUSE_COLOR_NORMAL));
+        }
+    }
+
+    private void showPausedIndicator() {
+        btnPauseResume.setText("PAUSED - PRESS TO RESUME");
+        btnPauseResume.setBackgroundTintList(ColorStateList.valueOf(PAUSE_COLOR_PAUSED));
+        btnPauseResume.setTextColor(Color.BLACK);
+
+        if (pausedBlinkAnimator != null) {
+            pausedBlinkAnimator.cancel();
+        }
+
+        pausedBlinkAnimator = ObjectAnimator.ofFloat(btnPauseResume, "alpha", 1f, 0.35f, 1f);
+        pausedBlinkAnimator.setDuration(700);
+        pausedBlinkAnimator.setRepeatCount(ValueAnimator.INFINITE);
+        pausedBlinkAnimator.start();
+    }
+
+    private void stopPausedIndicator() {
+        if (pausedBlinkAnimator != null) {
+            pausedBlinkAnimator.cancel();
+            pausedBlinkAnimator = null;
+        }
+
+        btnPauseResume.setAlpha(1f);
+        btnPauseResume.setText("PAUSE");
+        btnPauseResume.setTextColor(Color.WHITE);
+        btnPauseResume.setBackgroundTintList(ColorStateList.valueOf(PAUSE_COLOR_NORMAL));
     }
 
     private void requestPermsAndStart() {
@@ -235,11 +311,26 @@ public class IntakeVideoActivity extends AppCompatActivity {
         activeRecording = pending.start(mainExecutor, event -> {
             if (event instanceof VideoRecordEvent.Start) {
                 isRecording = true;
+                isPaused = false;
                 btnRecordStop.setText("STOP");
+                setPauseEnabled(true);
+                stopPausedIndicator();
                 btnClose.setEnabled(false);
+
+            } else if (event instanceof VideoRecordEvent.Pause) {
+                isPaused = true;
+                showPausedIndicator();
+
+            } else if (event instanceof VideoRecordEvent.Resume) {
+                isPaused = false;
+                stopPausedIndicator();
+
             } else if (event instanceof VideoRecordEvent.Finalize) {
                 isRecording = false;
+                isPaused = false;
                 btnRecordStop.setText("RECORD");
+                setPauseEnabled(false);
+                stopPausedIndicator();
                 btnClose.setEnabled(true);
 
                 VideoRecordEvent.Finalize fin = (VideoRecordEvent.Finalize) event;
@@ -366,7 +457,5 @@ public class IntakeVideoActivity extends AppCompatActivity {
     protected void onStop() {
         super.onStop();
         Log.i(TAG, "onStop called. recording=" + isRecording);
-        // Intentionally do not force stop here.
-        // Forcing stop in onStop can prematurely truncate longer recordings.
     }
 }
