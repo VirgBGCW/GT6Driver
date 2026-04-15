@@ -5,5 +5,5 @@ public class MechanicDriverDto {
     public String mobilePhone;
     public String firstName;
     public String lastName;
-    public int driverNumber;
+    public Integer driverNumber;
 }

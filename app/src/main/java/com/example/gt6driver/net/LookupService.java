@@ -7,6 +7,7 @@ import java.util.List;
 
 import retrofit2.Call;
 import retrofit2.http.GET;
+import retrofit2.http.Path;
 import retrofit2.http.Query;
 
 public interface LookupService {
@@ -19,11 +20,11 @@ public interface LookupService {
             @Query("current") boolean current
     );
 
-    // ===================== MECHANIC DRIVERS =====================
-    // /api/v1/Lookup/Driver/Property/Key/Mechanic/Driver?eventId=ID
-    @GET("api/v1/Lookup/Driver/Property/Key/Mechanic/Driver")
+    // ===================== DRIVER / PROPERTY / KEY / MECHANIC =====================
+    // /api/v1/Lookup/Driver/Property/Key/Mechanic/{userType}?eventId=ID
+    @GET("api/v1/Lookup/Driver/Property/Key/Mechanic/{userType}")
     Call<List<MechanicDriverDto>> getMechanicDrivers(
+            @Path("userType") String userType,
             @Query("eventId") int eventId
     );
 }
-

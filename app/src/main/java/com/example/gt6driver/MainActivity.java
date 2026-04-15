@@ -62,7 +62,8 @@ public class MainActivity extends AppCompatActivity {
     private RecyclerView rvEvents;
     private EventButtonAdapter eventButtonAdapter;
 
-    // Driver spinner
+    // User type + Driver spinners
+    private Spinner spinnerUserType;
     private Spinner spinnerDriver;
 
     private MaterialButton btnSubmit;
@@ -81,9 +82,15 @@ public class MainActivity extends AppCompatActivity {
     @Nullable
     private EventItem selectedEvent = null;
 
+    @Nullable
+    private String selectedUserType = null;
+
     private static final String STATE_EVENT_ID = "state_event_id";
     private static final String STATE_DRIVER_POS = "state_driver_pos";
+    private static final String STATE_USER_TYPE_POS = "state_user_type_pos";
+
     private int pendingRestoreEventId = -1;
+    private int pendingRestoreUserTypePos = 0;
 
     private ActivityResultLauncher<String[]> permissionLauncher;
 
@@ -105,6 +112,7 @@ public class MainActivity extends AppCompatActivity {
         Log.i(TAG, "Main: configured container=/driver and SAS (redacted).");
 
         rvEvents = findViewById(R.id.rvEvents);
+        spinnerUserType = findViewById(R.id.spinnerUserType);
         spinnerDriver = findViewById(R.id.spinnerDriver);
         btnSubmit = findViewById(R.id.btnSubmit);
         progress = findViewById(R.id.progress);
@@ -133,7 +141,25 @@ public class MainActivity extends AppCompatActivity {
         eventButtonAdapter = new EventButtonAdapter();
         rvEvents.setAdapter(eventButtonAdapter);
 
+        initUserTypeSpinner();
         initDriverSpinner();
+
+        spinnerUserType.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                selectedUserType = getSelectedUserTypeFromPosition(position);
+                setDriverPlaceholder(selectedEvent == null ? "Select Event First" : "Select User Type / Loading…");
+                clearDriverDirectoryCache();
+                tryLoadDrivers();
+                updateSubmitEnabled();
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+                selectedUserType = null;
+                updateSubmitEnabled();
+            }
+        });
 
         spinnerDriver.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
@@ -152,28 +178,40 @@ public class MainActivity extends AppCompatActivity {
             int pos = spinnerDriver.getSelectedItemPosition();
             DriverItem selectedDriver = (pos >= 0 && pos < drivers.size()) ? drivers.get(pos) : null;
 
-            if (!isValid(selectedEventLocal) || !isValid(selectedDriver)) {
-                Toast.makeText(this, "Please select both EVENT and DRIVER.", Toast.LENGTH_SHORT).show();
+            if (!isValid(selectedEventLocal) || !isValidUserType(selectedUserType) || !isValid(selectedDriver)) {
+                Toast.makeText(this, "Please select EVENT, USER TYPE, and USER.", Toast.LENGTH_SHORT).show();
                 return;
             }
 
             Intent intent = new Intent(MainActivity.this, LookupActivity.class);
             intent.putExtra("eventName", selectedEventLocal.name);
             intent.putExtra("eventId", selectedEventLocal.id);
+            intent.putExtra("userType", selectedUserType);
             intent.putExtra("driver", selectedDriver.name);
-            intent.putExtra("driverNumber", selectedDriver.number);
+
+            if (selectedDriver.number != null) {
+                intent.putExtra("driverNumber", selectedDriver.number);
+            }
+
+            if (selectedDriver.contactId != null) {
+                intent.putExtra("contactId", selectedDriver.contactId);
+            }
 
             com.example.gt6driver.session.CurrentSelection.get()
-                    .setDriver(selectedDriver.number, selectedDriver.name);
+                    .setDriver(selectedDriver.number != null ? selectedDriver.number : 0, selectedDriver.name);
 
             startActivity(intent);
         });
 
         if (savedInstanceState != null) {
             pendingRestoreEventId = savedInstanceState.getInt(STATE_EVENT_ID, -1);
+            pendingRestoreUserTypePos = savedInstanceState.getInt(STATE_USER_TYPE_POS, 0);
             int drPos = savedInstanceState.getInt(STATE_DRIVER_POS, 0);
+
+            spinnerUserType.setSelection(Math.max(0, pendingRestoreUserTypePos));
             spinnerDriver.setSelection(Math.max(0, drPos));
         } else {
+            spinnerUserType.setSelection(0);
             spinnerDriver.setSelection(0);
         }
 
@@ -304,6 +342,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onSaveInstanceState(@NonNull Bundle outState) {
         super.onSaveInstanceState(outState);
         outState.putInt(STATE_EVENT_ID, selectedEvent != null ? selectedEvent.id : -1);
+        outState.putInt(STATE_USER_TYPE_POS, spinnerUserType.getSelectedItemPosition());
         outState.putInt(STATE_DRIVER_POS, spinnerDriver.getSelectedItemPosition());
     }
 
@@ -311,24 +350,34 @@ public class MainActivity extends AppCompatActivity {
         EventItem ev = selectedEvent;
         int pos = spinnerDriver.getSelectedItemPosition();
         DriverItem dr = (pos >= 0 && pos < drivers.size()) ? drivers.get(pos) : null;
-        btnSubmit.setEnabled(isValid(ev) && isValid(dr));
+        btnSubmit.setEnabled(isValid(ev) && isValidUserType(selectedUserType) && isValid(dr));
     }
 
     private boolean isValid(@Nullable EventItem ev) {
         return ev != null && ev.id > 0;
     }
 
+    private boolean isValidUserType(@Nullable String userType) {
+        return userType != null
+                && !userType.trim().isEmpty()
+                && !userType.startsWith("Select ");
+    }
+
     private boolean isValid(@Nullable DriverItem dr) {
         return dr != null
-                && dr.number > 0
                 && dr.name != null
                 && !dr.name.startsWith("Select ")
                 && !dr.name.startsWith("Loading")
-                && !dr.name.startsWith("No Drivers");
+                && !dr.name.startsWith("No Users")
+                && (
+                (dr.number != null && dr.number > 0) ||
+                        (dr.contactId != null && !dr.contactId.trim().isEmpty())
+        );
     }
 
     private void setLoading(boolean loading) {
         progress.setVisibility(loading ? View.VISIBLE : View.GONE);
+        spinnerUserType.setEnabled(!loading);
         spinnerDriver.setEnabled(!loading);
         rvEvents.setEnabled(!loading);
         updateSubmitEnabled();
@@ -400,10 +449,8 @@ public class MainActivity extends AppCompatActivity {
 
                         if (pendingRestoreEventId > 0) {
                             eventButtonAdapter.selectById(pendingRestoreEventId);
-                            if (selectedEvent != null) {
-                                loadDriversFromApi(selectedEvent.id);
-                            }
                             pendingRestoreEventId = -1;
+                            tryLoadDrivers();
                         } else {
                             selectedEvent = null;
                             eventButtonAdapter.clearSelection();
@@ -487,11 +534,58 @@ public class MainActivity extends AppCompatActivity {
         return 0L;
     }
 
+    // ===================== USER TYPE =====================
+
+    private void initUserTypeSpinner() {
+        ArrayList<String> userTypes = new ArrayList<>();
+        userTypes.add("Select User Type");
+        userTypes.add("Driver");
+        userTypes.add("Property");
+        userTypes.add("Key");
+        userTypes.add("Mechanic");
+
+        ArrayAdapter<String> userTypeAdapter =
+                new ArrayAdapter<>(this, R.layout.spinner_item_black, userTypes);
+        userTypeAdapter.setDropDownViewResource(R.layout.spinner_item_black);
+        spinnerUserType.setAdapter(userTypeAdapter);
+
+        selectedUserType = null;
+    }
+
+    @Nullable
+    private String getSelectedUserTypeFromPosition(int position) {
+        if (position <= 0) return null;
+
+        String value = (String) spinnerUserType.getItemAtPosition(position);
+        if (value == null) return null;
+
+        value = value.trim();
+        if (value.isEmpty() || value.startsWith("Select ")) return null;
+
+        return value;
+    }
+
+    private void tryLoadDrivers() {
+        if (selectedEvent == null || selectedEvent.id <= 0) {
+            setDriverPlaceholder("Select Event First");
+            clearDriverDirectoryCache();
+            return;
+        }
+
+        if (!isValidUserType(selectedUserType)) {
+            setDriverPlaceholder("Select User Type First");
+            clearDriverDirectoryCache();
+            return;
+        }
+
+        loadDriversFromApi(selectedEvent.id, selectedUserType);
+    }
+
     // ===================== DRIVERS =====================
 
     private void initDriverSpinner() {
         drivers.clear();
-        drivers.add(new DriverItem(-1, "Select Event First"));
+        drivers.add(new DriverItem(-1, null, "Select Event First"));
 
         ArrayList<String> names = new ArrayList<>();
         names.add("Select Event First");
@@ -503,7 +597,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void setDriverPlaceholder(String text) {
         drivers.clear();
-        drivers.add(new DriverItem(-1, text));
+        drivers.add(new DriverItem(-1, null, text));
 
         ArrayList<String> names = new ArrayList<>();
         names.add(text);
@@ -524,25 +618,39 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void loadDriversFromApi(int eventId) {
+    private void loadDriversFromApi(int eventId, @NonNull String userType) {
         if (eventId <= 0) {
             setDriverPlaceholder("Select Event First");
             clearDriverDirectoryCache();
             return;
         }
 
+        if (!isValidUserType(userType)) {
+            setDriverPlaceholder("Select User Type First");
+            clearDriverDirectoryCache();
+            return;
+        }
+
+        setDriverPlaceholder("Loading users…");
+
         LookupService svc = ApiClient.getMemberApi().create(LookupService.class);
 
-        svc.getMechanicDrivers(eventId).enqueue(new Callback<List<MechanicDriverDto>>() {
+        svc.getMechanicDrivers(userType, eventId).enqueue(new Callback<List<MechanicDriverDto>>() {
             @Override
             public void onResponse(Call<List<MechanicDriverDto>> call,
                                    Response<List<MechanicDriverDto>> response) {
 
+                if (response.code() == 404) {
+                    setDriverPlaceholder("No Users Found");
+                    clearDriverDirectoryCache();
+                    return;
+                }
+
                 if (!response.isSuccessful() || response.body() == null) {
-                    setDriverPlaceholder("Select Driver…");
+                    setDriverPlaceholder("Select User…");
                     clearDriverDirectoryCache();
                     Toast.makeText(MainActivity.this,
-                            "Failed to load drivers (" + response.code() + ")",
+                            "Failed to load users",
                             Toast.LENGTH_SHORT).show();
                     return;
                 }
@@ -553,15 +661,15 @@ public class MainActivity extends AppCompatActivity {
                 try {
                     DriverDirectory.replaceAllFromDto(MainActivity.this, fetched);
                 } catch (Exception e) {
-                    Log.w(TAG, "Failed to cache drivers in DriverDirectory", e);
+                    Log.w(TAG, "Failed to cache users in DriverDirectory", e);
                 }
 
                 List<DriverItem> mapped = new ArrayList<>();
                 for (MechanicDriverDto d : fetched) {
                     if (d == null) continue;
 
-                    int num = d.driverNumber;
-                    if (num <= 0) continue;
+                    Integer num = d.driverNumber;
+                    String contactId = (d.contactId == null) ? null : d.contactId.trim();
 
                     String first = (d.firstName == null) ? "" : d.firstName.trim();
                     String last = (d.lastName == null) ? "" : d.lastName.trim();
@@ -569,20 +677,28 @@ public class MainActivity extends AppCompatActivity {
 
                     if (display.isEmpty()) continue;
 
-                    mapped.add(new DriverItem(num, display));
+                    boolean hasDriverNumber = (num != null && num > 0);
+                    boolean hasContactId = (contactId != null && !contactId.isEmpty());
+
+                    if (!hasDriverNumber && !hasContactId) continue;
+
+                    mapped.add(new DriverItem(num, contactId, display));
                 }
 
                 mapped.sort((a, b) -> {
                     int cmp = a.name.compareToIgnoreCase(b.name);
                     if (cmp != 0) return cmp;
-                    return Integer.compare(a.number, b.number);
+
+                    int aNum = (a.number != null) ? a.number : 0;
+                    int bNum = (b.number != null) ? b.number : 0;
+                    return Integer.compare(aNum, bNum);
                 });
 
                 drivers.clear();
                 if (mapped.isEmpty()) {
-                    drivers.add(new DriverItem(-1, "No Drivers Found"));
+                    drivers.add(new DriverItem(-1, null, "No Users Found"));
                 } else {
-                    drivers.add(new DriverItem(-1, "Select Driver…"));
+                    drivers.add(new DriverItem(-1, null, "Select User…"));
                     drivers.addAll(mapped);
                 }
 
@@ -597,16 +713,16 @@ public class MainActivity extends AppCompatActivity {
                 updateSubmitEnabled();
 
                 Toast.makeText(MainActivity.this,
-                        "Loaded " + mapped.size() + " drivers",
+                        "Loaded " + mapped.size() + " users",
                         Toast.LENGTH_SHORT).show();
             }
 
             @Override
             public void onFailure(Call<List<MechanicDriverDto>> call, Throwable t) {
-                setDriverPlaceholder("Select Driver…");
+                setDriverPlaceholder("Select User…");
                 clearDriverDirectoryCache();
                 Toast.makeText(MainActivity.this,
-                        "Network error loading drivers.",
+                        "Network error loading users.",
                         Toast.LENGTH_SHORT).show();
             }
         });
@@ -643,11 +759,17 @@ public class MainActivity extends AppCompatActivity {
     // ===================== MODELS =====================
 
     private static class DriverItem {
-        final int number;
+        @Nullable
+        final Integer number;
+
+        @Nullable
+        final String contactId;
+
         final String name;
 
-        DriverItem(int number, String name) {
+        DriverItem(@Nullable Integer number, @Nullable String contactId, String name) {
             this.number = number;
+            this.contactId = contactId;
             this.name = name;
         }
 
@@ -743,12 +865,10 @@ public class MainActivity extends AppCompatActivity {
                 selectedId = item.id;
                 selectedEvent = item;
 
-                setDriverPlaceholder("Loading drivers…");
-
                 notifyDataSetChanged();
                 updateSubmitEnabled();
 
-                loadDriversFromApi(item.id);
+                tryLoadDrivers();
             });
         }
 
@@ -863,7 +983,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 }
-
 
 
 
