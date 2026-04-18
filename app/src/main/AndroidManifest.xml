@@ -153,6 +153,16 @@
             android:label="Configuration"
             android:screenOrientation="portrait" />
 
+        <activity
+            android:name=".LocalVideosActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
+        <activity
+            android:name=".VideoPlayerActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
         <!-- Launcher -->
         <activity
             android:name=".MainActivity"
@@ -166,6 +176,11 @@
 
     </application>
 </manifest>
+
+
+
+
+
 
 
 

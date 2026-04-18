@@ -16,6 +16,7 @@ import android.provider.MediaStore;
 import android.util.Log;
 import android.util.TypedValue;
 import android.view.View;
+import android.widget.LinearLayout;
 import android.view.ViewGroup;
 import android.widget.ImageButton;
 import android.widget.Toast;
@@ -62,8 +63,12 @@ public class IntakeVideoActivity extends AppCompatActivity {
     private static final int PAUSE_COLOR_PAUSED = Color.parseColor("#FBC02D");
 
     private PreviewView previewView;
-    private MaterialButton btnRecordStop;
+    private MaterialButton btnRecordStart;
     private MaterialButton btnPauseResume;
+    private MaterialButton btnStopRecording;
+    private MaterialButton btnPausedResumeFull;
+    private LinearLayout recordingControlsRow;
+    private View bottomControlsContainer;
     private ImageButton btnClose;
 
     private Executor mainExecutor;
@@ -89,8 +94,12 @@ public class IntakeVideoActivity extends AppCompatActivity {
         setContentView(R.layout.activity_release_video);
 
         previewView   = findViewById(R.id.releasePreviewView);
-        btnRecordStop = findViewById(R.id.btnRecordStop);
+        bottomControlsContainer = findViewById(R.id.bottomControlsContainer);
+        btnRecordStart = findViewById(R.id.btnRecordStart);
+        recordingControlsRow = findViewById(R.id.recordingControlsRow);
         btnPauseResume = findViewById(R.id.btnPauseResume);
+        btnStopRecording = findViewById(R.id.btnStopRecording);
+        btnPausedResumeFull = findViewById(R.id.btnPausedResumeFull);
         btnClose      = findViewById(R.id.btnClose);
 
         applySystemBarInsets();
@@ -102,6 +111,7 @@ public class IntakeVideoActivity extends AppCompatActivity {
         enableAudio = getIntent().getBooleanExtra(EXTRA_ENABLE_AUDIO, true);
 
         setPauseEnabled(false);
+        updateRecordingControls();
 
         permsLauncher = registerForActivityResult(
                 new ActivityResultContracts.RequestMultiplePermissions(),
@@ -131,12 +141,11 @@ public class IntakeVideoActivity extends AppCompatActivity {
             finish();
         });
 
-        btnRecordStop.setOnClickListener(v -> {
-            if (!isRecording) startRecording();
-            else stopRecording();
-        });
+        btnRecordStart.setOnClickListener(v -> startRecording());
 
-        btnPauseResume.setOnClickListener(v -> {
+        btnStopRecording.setOnClickListener(v -> stopRecording());
+
+        View.OnClickListener pauseResumeClick = v -> {
             if (activeRecording == null || !isRecording) return;
 
             try {
@@ -149,7 +158,10 @@ public class IntakeVideoActivity extends AppCompatActivity {
                 Log.w(TAG, "Pause/resume failed", t);
                 Toast.makeText(this, "Pause/resume not supported on this device.", Toast.LENGTH_SHORT).show();
             }
-        });
+        };
+
+        btnPauseResume.setOnClickListener(pauseResumeClick);
+        btnPausedResumeFull.setOnClickListener(pauseResumeClick);
 
         requestPermsAndStart();
     }
@@ -166,13 +178,9 @@ public class IntakeVideoActivity extends AppCompatActivity {
     private void applySystemBarInsets() {
         final View root = findViewById(android.R.id.content);
 
-        final ViewGroup.MarginLayoutParams recordLp =
-                (ViewGroup.MarginLayoutParams) btnRecordStop.getLayoutParams();
-        final int baseBottomMargin = recordLp.bottomMargin;
-
-        final ViewGroup.MarginLayoutParams pauseLp =
-                (ViewGroup.MarginLayoutParams) btnPauseResume.getLayoutParams();
-        final int basePauseBottomMargin = pauseLp.bottomMargin;
+        final ViewGroup.MarginLayoutParams controlsLp =
+                (ViewGroup.MarginLayoutParams) bottomControlsContainer.getLayoutParams();
+        final int baseBottomMargin = controlsLp.bottomMargin;
 
         final ViewGroup.MarginLayoutParams closeLp =
                 (ViewGroup.MarginLayoutParams) btnClose.getLayoutParams();
@@ -183,14 +191,9 @@ public class IntakeVideoActivity extends AppCompatActivity {
             Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
 
             ViewGroup.MarginLayoutParams lp =
-                    (ViewGroup.MarginLayoutParams) btnRecordStop.getLayoutParams();
+                    (ViewGroup.MarginLayoutParams) bottomControlsContainer.getLayoutParams();
             lp.bottomMargin = baseBottomMargin + bars.bottom;
-            btnRecordStop.setLayoutParams(lp);
-
-            ViewGroup.MarginLayoutParams pp =
-                    (ViewGroup.MarginLayoutParams) btnPauseResume.getLayoutParams();
-            pp.bottomMargin = basePauseBottomMargin;
-            btnPauseResume.setLayoutParams(pp);
+            bottomControlsContainer.setLayoutParams(lp);
 
             ViewGroup.MarginLayoutParams cp =
                     (ViewGroup.MarginLayoutParams) btnClose.getLayoutParams();
@@ -204,27 +207,57 @@ public class IntakeVideoActivity extends AppCompatActivity {
         ViewCompat.requestApplyInsets(root);
     }
 
+    private void updateRecordingControls() {
+        if (!isRecording) {
+            btnRecordStart.setVisibility(View.VISIBLE);
+            recordingControlsRow.setVisibility(View.GONE);
+            btnPausedResumeFull.setVisibility(View.GONE);
+            btnPauseResume.setEnabled(false);
+            btnPauseResume.setAlpha(0.5f);
+            return;
+        }
+
+        btnRecordStart.setVisibility(View.GONE);
+        if (isPaused) {
+            recordingControlsRow.setVisibility(View.GONE);
+            btnPausedResumeFull.setVisibility(View.VISIBLE);
+        } else {
+            recordingControlsRow.setVisibility(View.VISIBLE);
+            btnPausedResumeFull.setVisibility(View.GONE);
+        }
+
+        btnPauseResume.setEnabled(true);
+        btnPauseResume.setAlpha(1f);
+    }
+
     private void setPauseEnabled(boolean enabled) {
         btnPauseResume.setEnabled(enabled);
         btnPauseResume.setAlpha(enabled ? 1f : 0.5f);
+        btnPausedResumeFull.setEnabled(enabled);
+        btnPausedResumeFull.setAlpha(enabled ? 1f : 0.5f);
 
         if (!enabled) {
             stopPausedIndicator();
             btnPauseResume.setText("PAUSE");
             btnPauseResume.setBackgroundTintList(ColorStateList.valueOf(PAUSE_COLOR_NORMAL));
+            btnPausedResumeFull.setText("PAUSED - PRESS TO RESUME");
+            btnPausedResumeFull.setBackgroundTintList(ColorStateList.valueOf(PAUSE_COLOR_PAUSED));
+            btnPausedResumeFull.setTextColor(Color.BLACK);
+            updateRecordingControls();
         }
     }
 
     private void showPausedIndicator() {
-        btnPauseResume.setText("PAUSED - PRESS TO RESUME");
-        btnPauseResume.setBackgroundTintList(ColorStateList.valueOf(PAUSE_COLOR_PAUSED));
-        btnPauseResume.setTextColor(Color.BLACK);
+        btnPausedResumeFull.setText("PAUSED - PRESS TO RESUME");
+        btnPausedResumeFull.setBackgroundTintList(ColorStateList.valueOf(PAUSE_COLOR_PAUSED));
+        btnPausedResumeFull.setTextColor(Color.BLACK);
+        updateRecordingControls();
 
         if (pausedBlinkAnimator != null) {
             pausedBlinkAnimator.cancel();
         }
 
-        pausedBlinkAnimator = ObjectAnimator.ofFloat(btnPauseResume, "alpha", 1f, 0.35f, 1f);
+        pausedBlinkAnimator = ObjectAnimator.ofFloat(btnPausedResumeFull, "alpha", 1f, 0.35f, 1f);
         pausedBlinkAnimator.setDuration(700);
         pausedBlinkAnimator.setRepeatCount(ValueAnimator.INFINITE);
         pausedBlinkAnimator.start();
@@ -240,6 +273,11 @@ public class IntakeVideoActivity extends AppCompatActivity {
         btnPauseResume.setText("PAUSE");
         btnPauseResume.setTextColor(Color.WHITE);
         btnPauseResume.setBackgroundTintList(ColorStateList.valueOf(PAUSE_COLOR_NORMAL));
+        btnPausedResumeFull.setAlpha(1f);
+        btnPausedResumeFull.setText("PAUSED - PRESS TO RESUME");
+        btnPausedResumeFull.setTextColor(Color.BLACK);
+        btnPausedResumeFull.setBackgroundTintList(ColorStateList.valueOf(PAUSE_COLOR_PAUSED));
+        updateRecordingControls();
     }
 
     private void requestPermsAndStart() {
@@ -312,9 +350,9 @@ public class IntakeVideoActivity extends AppCompatActivity {
             if (event instanceof VideoRecordEvent.Start) {
                 isRecording = true;
                 isPaused = false;
-                btnRecordStop.setText("STOP");
                 setPauseEnabled(true);
                 stopPausedIndicator();
+                updateRecordingControls();
                 btnClose.setEnabled(false);
 
             } else if (event instanceof VideoRecordEvent.Pause) {
@@ -328,9 +366,9 @@ public class IntakeVideoActivity extends AppCompatActivity {
             } else if (event instanceof VideoRecordEvent.Finalize) {
                 isRecording = false;
                 isPaused = false;
-                btnRecordStop.setText("RECORD");
                 setPauseEnabled(false);
                 stopPausedIndicator();
+                updateRecordingControls();
                 btnClose.setEnabled(true);
 
                 VideoRecordEvent.Finalize fin = (VideoRecordEvent.Finalize) event;

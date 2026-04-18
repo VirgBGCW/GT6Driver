@@ -578,19 +578,11 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
         if (btnVideoAccept != null) {
             btnVideoAccept.setText("RECORD VIDEO");
             btnVideoAccept.setOnClickListener(v -> {
-
-                // ✅ Block if already accepted
-                if (releaseModel != null && releaseModel.video != null
-                        && !TextUtils.isEmpty(releaseModel.video.videoUrl)) {
-                    return;
-                }
-
                 setVideoExpanded(true);
                 hideKeyboard();
                 ensureCameraThenLaunchVideo();
             });
         }
-
 
         // CONFIRM
         btnConfirm.setOnClickListener(v -> {
@@ -653,12 +645,22 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
         try {
             Intent intent = new Intent(this, ReleaseVideoActivity.class);
 
-            // Pass context if your ReleaseVideoActivity uses it (safe even if it ignores extras)
             intent.putExtra(EXTRA_OPPORTUNITY_ID, opportunityId);
-            intent.putExtra("consignmentId", consignmentIdStr());
+            intent.putExtra(ReleaseVideoActivity.EXTRA_CONSIGNMENT_ID, consignmentIdStr());
+            intent.putExtra(ReleaseVideoActivity.EXTRA_ENABLE_AUDIO, true);
             intent.putExtra("lot", lot != null ? lot : "");
             intent.putExtra("driver", resolveDriverName());
             intent.putExtra("mode", mode != null ? mode : "");
+
+            String existingReleaseVideoUrl = "";
+            if (releaseModel != null && releaseModel.video != null && releaseModel.video.videoUrl != null) {
+                existingReleaseVideoUrl = releaseModel.video.videoUrl;
+            }
+
+            intent.putExtra(
+                    ReleaseVideoActivity.EXTRA_EXISTING_RELEASE_VIDEO_URL,
+                    existingReleaseVideoUrl
+            );
 
             releaseVideoLauncher.launch(intent);
         } catch (Exception e) {
@@ -758,23 +760,19 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
         return sdf.format(new java.util.Date(now));
     }
 
-    // ✅ no-URI accept logic used after returning from ReleaseVideoActivity
-// ✅ no-URI accept logic used after returning from ReleaseVideoActivity
     private void acceptReleaseVideoAfterRecord() {
         if (releaseModel == null) releaseModel = new ReleasePayload();
         if (releaseModel.video == null) releaseModel.video = new ReleasePayload.Video();
 
-        // ✅ Save the URL (this is what the API payload will send)
         releaseModel.video.videoUrl = compressedMp4Url("release");
 
         setStatusIcon(videoIcon, true);
         videoDone = true;
 
-        // ✅ Make UI consistent with CheckIn: no re-record
         if (btnVideoAccept != null) {
-            btnVideoAccept.setEnabled(false);
-            btnVideoAccept.setAlpha(0.5f);
-            btnVideoAccept.setText("ACCEPTED");
+            btnVideoAccept.setEnabled(true);
+            btnVideoAccept.setAlpha(1f);
+            btnVideoAccept.setText("RECORD VIDEO");
         }
 
         Toast.makeText(this, "Release video saved.", Toast.LENGTH_SHORT).show();
@@ -840,7 +838,6 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
 
     // NOTE: applyReleaseToUi(...) unchanged from your original (keep yours as-is)
     private void applyReleaseToUi(ReleasePayload r) {
-// RELEASE VIDEO UI bind
         String url = (r != null && r.video != null) ? r.video.videoUrl : "";
         boolean hasUrl = !TextUtils.isEmpty(url);
 
@@ -849,9 +846,9 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
             videoDone = true;
 
             if (btnVideoAccept != null) {
-                btnVideoAccept.setEnabled(false);
-                btnVideoAccept.setAlpha(0.5f);
-                btnVideoAccept.setText("ACCEPTED");
+                btnVideoAccept.setEnabled(true);
+                btnVideoAccept.setAlpha(1f);
+                btnVideoAccept.setText("RECORD VIDEO");
             }
         } else {
             setStatusIcon(videoIcon, false);
@@ -865,7 +862,6 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
         }
 
         refreshConfirmEnabled();
-
     }
 
     private String consignmentSubdir() {

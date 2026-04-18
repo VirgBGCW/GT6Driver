@@ -43,6 +43,10 @@ public class MediaUploadWorker extends Worker {
     public static final String KEY_RECURSIVE = "recursive";
     public static final String KEY_PREFIX = "prefix";
 
+    public static final String PROGRESS_TOTAL = "progress_total";
+    public static final String PROGRESS_UPLOADED = "progress_uploaded";
+    public static final String PROGRESS_PERCENT = "progress_percent";
+
     private static final String DEFAULT_CONTAINER_BASE = "https://stgt6driverappprod.blob.core.windows.net";
     private static final String DEFAULT_CONTAINER_NAME = "driver";
     private static final String DEFAULT_PREFIX = "";
@@ -100,6 +104,11 @@ public class MediaUploadWorker extends Worker {
         final AzureUploader uploader = new AzureUploader(sasRaw);
         final ContentResolver cr = getApplicationContext().getContentResolver();
 
+        int totalImages = countRows(cr, MediaStore.Images.Media.EXTERNAL_CONTENT_URI, false);
+        int totalVideos = countRows(cr, MediaStore.Video.Media.EXTERNAL_CONTENT_URI, true);
+        ProgressState progressState = new ProgressState(totalImages + totalVideos);
+        updateProgress(progressState);
+
         boolean okImages = processTable(
                 cr,
                 MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
@@ -107,7 +116,8 @@ public class MediaUploadWorker extends Worker {
                 uploader,
                 containerUrl,
                 prefix,
-                false
+                false,
+                progressState
         );
 
         boolean okVideos = processTable(
@@ -117,7 +127,8 @@ public class MediaUploadWorker extends Worker {
                 uploader,
                 containerUrl,
                 prefix,
-                true
+                true,
+                progressState
         );
 
         GT6MediaSync.enqueueContentTriggers(getApplicationContext());
@@ -131,7 +142,8 @@ public class MediaUploadWorker extends Worker {
                                  AzureUploader uploader,
                                  String containerUrl,
                                  String prefix,
-                                 boolean isVideo) {
+                                 boolean isVideo,
+                                 ProgressState progressState) {
 
         String like1 = isVideo ? "Movies/GT6/%" : "Pictures/GT6/%";
         String like2 = isVideo ? "Movies/gt6/%" : "Pictures/gt6/%";
@@ -161,7 +173,7 @@ public class MediaUploadWorker extends Worker {
                         " MediaStore query found " + c.getCount() + " rows.");
 
                 while (c.moveToNext()) {
-                    if (!uploadRow(cr, table, c, defaultMime, uploader, containerUrl, prefix, isVideo)) {
+                    if (!uploadRow(cr, table, c, defaultMime, uploader, containerUrl, prefix, isVideo, progressState)) {
                         allOk = false;
                     }
                 }
@@ -183,7 +195,8 @@ public class MediaUploadWorker extends Worker {
                               AzureUploader uploader,
                               String containerUrl,
                               String prefix,
-                              boolean isVideo) {
+                              boolean isVideo,
+                              ProgressState progressState) {
 
         long id        = c.getLong(0);
         String name    = safe(c.getString(1));
@@ -198,6 +211,8 @@ public class MediaUploadWorker extends Worker {
         if (TextUtils.isEmpty(consignmentId)) {
             Log.w(TAG, (isVideo ? "[VIDEO]" : "[IMAGE]") +
                     " skip (no consignmentId) relPath=" + relPath + " name=" + name);
+            progressState.incrementProcessed();
+            updateProgress(progressState);
             return true;
         }
 
@@ -217,6 +232,8 @@ public class MediaUploadWorker extends Worker {
 
                 if (durationMs > 0 && durationMs < MIN_VIDEO_MS) {
                     Log.w(TAG, "[VIDEO] skip upload; too short (" + durationMs + " ms): " + itemUri);
+                    progressState.incrementProcessed();
+                    updateProgress(progressState);
                     return true;
                 }
             }
@@ -262,15 +279,64 @@ public class MediaUploadWorker extends Worker {
 
                 Log.i(TAG, "Uploaded; delete attempted: " + itemUri +
                         (sidecarUri != null ? (" + sidecar " + sidecarUri) : ""));
+                progressState.incrementProcessed();
+                updateProgress(progressState);
                 return true;
 
             } catch (FileNotFoundException e) {
                 Log.w(TAG, "File not found: " + itemUri);
+                progressState.incrementProcessed();
+                updateProgress(progressState);
                 return true;
             } catch (IOException e) {
                 Log.e(TAG, "Upload failed; will retry. " + e.getMessage());
+                progressState.incrementProcessed();
+                updateProgress(progressState);
                 return false;
             }
+        }
+    }
+
+    private int countRows(ContentResolver cr, Uri table, boolean isVideo) {
+        String like1 = isVideo ? "Movies/GT6/%" : "Pictures/GT6/%";
+        String like2 = isVideo ? "Movies/gt6/%" : "Pictures/gt6/%";
+        String sel = MediaStore.MediaColumns.RELATIVE_PATH + " LIKE ? OR " +
+                MediaStore.MediaColumns.RELATIVE_PATH + " LIKE ?";
+        String[] args = new String[]{like1, like2};
+
+        try (Cursor c = cr.query(table, new String[]{MediaStore.MediaColumns._ID}, sel, args, null)) {
+            return c != null ? c.getCount() : 0;
+        } catch (Exception e) {
+            Log.w(TAG, "Count query failed", e);
+            return 0;
+        }
+    }
+
+    private void updateProgress(ProgressState progressState) {
+        int total = Math.max(0, progressState.total);
+        int processed = Math.max(0, Math.min(progressState.processed, total));
+        int percent = total <= 0 ? 0 : (int) Math.round((processed * 100.0) / total);
+        setProgressAsync(new Data.Builder()
+                .putInt(PROGRESS_TOTAL, total)
+                .putInt(PROGRESS_UPLOADED, processed)
+                .putInt(PROGRESS_PERCENT, percent)
+                .build());
+        setForegroundAsync(makeForegroundInfo(total > 0
+                ? ("GT6: uploading media... " + percent + "% (" + processed + "/" + total + ")")
+                : "GT6: uploading media..."));
+    }
+
+    private static class ProgressState {
+        final int total;
+        int processed;
+
+        ProgressState(int total) {
+            this.total = total;
+            this.processed = 0;
+        }
+
+        void incrementProcessed() {
+            processed++;
         }
     }
 
@@ -483,6 +549,7 @@ public class MediaUploadWorker extends Worker {
         return url.replaceAll("/+$", "");
     }
 }
+
 
 
 

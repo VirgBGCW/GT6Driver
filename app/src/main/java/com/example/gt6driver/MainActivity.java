@@ -2,6 +2,7 @@ package com.example.gt6driver;
 
 import android.Manifest;
 import android.content.Intent;
+import android.graphics.Color;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.os.Build;
@@ -17,6 +18,8 @@ import android.widget.ProgressBar;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import androidx.lifecycle.LiveData;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
@@ -72,6 +75,7 @@ public class MainActivity extends AppCompatActivity {
     // Header labels
     private TextView tvDeviceName;
     private TextView tvLocalVideos;
+    private TextView tvUploadStatus;
     private TextView tvVersion;
 
     private ArrayAdapter<String> driverNamesAdapter;
@@ -97,6 +101,8 @@ public class MainActivity extends AppCompatActivity {
     private static volatile boolean sWMInited = false;
     private static volatile boolean sSyncStarted = false;
 
+    private boolean uploadStatusObserversAttached = false;
+
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -119,6 +125,7 @@ public class MainActivity extends AppCompatActivity {
 
         tvDeviceName = findViewById(R.id.tvDeviceName);
         tvLocalVideos = findViewById(R.id.tvLocalVideos);
+        tvUploadStatus = findViewById(R.id.tvUploadStatus);
         tvVersion = findViewById(R.id.tvVersion);
 
         refreshHeaderLabels();
@@ -228,6 +235,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         refreshHeaderLabels();
+        refreshUploadStatus();
     }
 
     private void refreshHeaderLabels() {
@@ -240,6 +248,7 @@ public class MainActivity extends AppCompatActivity {
             tvVersion.setText(getVersionDisplayText());
         }
         refreshLocalVideoCountAsync();
+        refreshUploadStatus();
     }
 
     // ===================== LOCAL VIDEO COUNT =====================
@@ -248,19 +257,104 @@ public class MainActivity extends AppCompatActivity {
         if (tvLocalVideos == null) return;
 
         tvLocalVideos.setText("Local Videos —");
+        tvLocalVideos.setClickable(false);
+        tvLocalVideos.setFocusable(false);
+        tvLocalVideos.setOnClickListener(null);
+        tvLocalVideos.setTextColor(Color.WHITE);
 
         new Thread(() -> {
             int count = countMp4sInMoviesGT6();
             new Handler(Looper.getMainLooper()).post(() -> {
                 if (tvLocalVideos == null) return;
 
-                if (count <= 0) tvLocalVideos.setText("No Local Videos");
-                else if (count == 1) tvLocalVideos.setText("Local Videos: 1");
-                else tvLocalVideos.setText("Local Videos: " + count);
+                if (count <= 0) {
+                    tvLocalVideos.setText("No Local Videos");
+                    tvLocalVideos.setClickable(false);
+                    tvLocalVideos.setFocusable(false);
+                    tvLocalVideos.setOnClickListener(null);
+                    tvLocalVideos.setTextColor(Color.WHITE);
+                } else {
+                    tvLocalVideos.setText("Local Videos: " + count + " (tap to view)");
+                    tvLocalVideos.setClickable(true);
+                    tvLocalVideos.setFocusable(true);
+                    tvLocalVideos.setTextColor(Color.parseColor("#9AD0FF"));
+                    tvLocalVideos.setOnClickListener(v -> startActivity(new Intent(MainActivity.this, LocalVideosActivity.class)));
+                }
             });
         }).start();
     }
 
+    private void refreshUploadStatus() {
+        if (tvUploadStatus == null) return;
+
+        if (!uploadStatusObserversAttached) {
+            uploadStatusObserversAttached = true;
+            WorkManager wm = WorkManager.getInstance(getApplicationContext());
+            observeWorkInfos(wm.getWorkInfosForUniqueWorkLiveData("gt6_scan_serial"));
+            observeWorkInfos(wm.getWorkInfosForUniqueWorkLiveData("gt6_scan_periodic"));
+            observeWorkInfos(wm.getWorkInfosByTagLiveData("gt6_content_triggered"));
+            observeWorkInfos(wm.getWorkInfosByTagLiveData("gt6_scan_now"));
+        }
+
+        if (tvUploadStatus.getText() == null || tvUploadStatus.getText().toString().trim().isEmpty()) {
+            tvUploadStatus.setText("Upload Status: idle");
+        }
+    }
+
+    private void observeWorkInfos(LiveData<List<WorkInfo>> liveData) {
+        if (liveData == null) return;
+        liveData.observe(this, infos -> updateUploadStatusText(infos));
+    }
+
+    private void updateUploadStatusText(@Nullable List<WorkInfo> infos) {
+        if (tvUploadStatus == null || infos == null || infos.isEmpty()) return;
+
+        WorkInfo running = null;
+        WorkInfo enqueued = null;
+        WorkInfo succeeded = null;
+        for (WorkInfo wi : infos) {
+            if (wi == null) continue;
+            if (wi.getState() == WorkInfo.State.RUNNING) {
+                running = wi;
+                break;
+            }
+            if (wi.getState() == WorkInfo.State.ENQUEUED) enqueued = wi;
+            if (wi.getState() == WorkInfo.State.SUCCEEDED) succeeded = wi;
+        }
+
+        if (running != null) {
+            int processed = running.getProgress().getInt(com.example.gt6driver.sync.MediaUploadWorker.PROGRESS_UPLOADED, 0);
+            int total = running.getProgress().getInt(com.example.gt6driver.sync.MediaUploadWorker.PROGRESS_TOTAL, 0);
+            int percent = running.getProgress().getInt(com.example.gt6driver.sync.MediaUploadWorker.PROGRESS_PERCENT, 0);
+            if (total > 0) {
+                tvUploadStatus.setText("Upload Status: " + percent + "% (" + processed + "/" + total + ")");
+            } else {
+                tvUploadStatus.setText("Upload Status: uploading…");
+            }
+            return;
+        }
+
+        if (enqueued != null) {
+            tvUploadStatus.setText("Upload Status: queued");
+            return;
+        }
+
+        if (succeeded != null) {
+            int total = succeeded.getProgress().getInt(com.example.gt6driver.sync.MediaUploadWorker.PROGRESS_TOTAL, 0);
+            if (total > 0) {
+                tvUploadStatus.setText("Upload Status: 100% (" + total + "/" + total + ")");
+                new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                    if (tvUploadStatus != null) {
+                        tvUploadStatus.setText("Upload Status: idle");
+                    }
+                    refreshLocalVideoCountAsync();
+                }, 1200);
+            } else {
+                tvUploadStatus.setText("Upload Status: idle");
+                refreshLocalVideoCountAsync();
+            }
+        }
+    }
     private int countMp4sInMoviesGT6() {
         try {
             File moviesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES);
@@ -983,6 +1077,19 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

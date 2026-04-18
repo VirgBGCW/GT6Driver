@@ -17,6 +17,7 @@ import android.util.TypedValue;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageButton;
+import android.widget.LinearLayout;
 import android.widget.Toast;
 import android.provider.MediaStore;
 
@@ -50,10 +51,11 @@ import java.util.concurrent.Executor;
 public class ReleaseVideoActivity extends AppCompatActivity {
 
     public static final String EXTRA_CONSIGNMENT_ID = "consignmentId";
-    public static final String EXTRA_ENABLE_AUDIO   = "enableAudio";
+    public static final String EXTRA_ENABLE_AUDIO = "enableAudio";
+    public static final String EXTRA_EXISTING_RELEASE_VIDEO_URL = "existingReleaseVideoUrl";
 
     public static final String EXTRA_RESULT_VIDEO_URI = "extra_video_uri";
-    public static final String EXTRA_RESULT_CANCELED  = "extra_video_canceled";
+    public static final String EXTRA_RESULT_CANCELED = "extra_video_canceled";
 
     private static final String TAG = "GT6-ReleaseVideo";
     private static final long MIN_VALID_VIDEO_MS = 60_000L;
@@ -62,8 +64,12 @@ public class ReleaseVideoActivity extends AppCompatActivity {
     private static final int PAUSE_COLOR_PAUSED = Color.parseColor("#FBC02D");
 
     private PreviewView previewView;
-    private MaterialButton btnRecordStop;
+    private MaterialButton btnRecordStart;
     private MaterialButton btnPauseResume;
+    private MaterialButton btnStopRecording;
+    private MaterialButton btnPausedResumeFull;
+    private LinearLayout recordingControlsRow;
+    private View bottomControlsContainer;
     private ImageButton btnClose;
 
     private Executor mainExecutor;
@@ -80,6 +86,7 @@ public class ReleaseVideoActivity extends AppCompatActivity {
 
     private String consignmentId;
     private boolean enableAudio;
+    private String existingReleaseVideoUrl;
 
     private ActivityResultLauncher<String[]> permsLauncher;
 
@@ -89,19 +96,27 @@ public class ReleaseVideoActivity extends AppCompatActivity {
         setContentView(R.layout.activity_release_video);
 
         previewView = findViewById(R.id.releasePreviewView);
-        btnRecordStop = findViewById(R.id.btnRecordStop);
+        btnRecordStart = findViewById(R.id.btnRecordStart);
         btnPauseResume = findViewById(R.id.btnPauseResume);
+        btnStopRecording = findViewById(R.id.btnStopRecording);
+        btnPausedResumeFull = findViewById(R.id.btnPausedResumeFull);
+        recordingControlsRow = findViewById(R.id.recordingControlsRow);
+        bottomControlsContainer = findViewById(R.id.bottomControlsContainer);
         btnClose = findViewById(R.id.btnClose);
 
         applySystemBarInsets();
         mainExecutor = ContextCompat.getMainExecutor(this);
 
         consignmentId = getIntent().getStringExtra(EXTRA_CONSIGNMENT_ID);
-        if (consignmentId == null || consignmentId.trim().isEmpty()) consignmentId = "unknown";
+        if (consignmentId == null || consignmentId.trim().isEmpty()) {
+            consignmentId = "unknown";
+        }
 
         enableAudio = getIntent().getBooleanExtra(EXTRA_ENABLE_AUDIO, true);
+        existingReleaseVideoUrl = getIntent().getStringExtra(EXTRA_EXISTING_RELEASE_VIDEO_URL);
 
         setPauseEnabled(false);
+        updateRecordingControls();
 
         permsLauncher = registerForActivityResult(
                 new ActivityResultContracts.RequestMultiplePermissions(),
@@ -131,12 +146,17 @@ public class ReleaseVideoActivity extends AppCompatActivity {
             finish();
         });
 
-        btnRecordStop.setOnClickListener(v -> {
-            if (!isRecording) startRecording();
-            else stopRecording();
+        btnRecordStart.setOnClickListener(v -> {
+            if (hasExistingReleaseVideo()) {
+                showReRecordDialog();
+            } else {
+                startRecording();
+            }
         });
 
-        btnPauseResume.setOnClickListener(v -> {
+        btnStopRecording.setOnClickListener(v -> stopRecording());
+
+        View.OnClickListener pauseResumeClick = v -> {
             if (activeRecording == null || !isRecording) return;
 
             try {
@@ -149,7 +169,10 @@ public class ReleaseVideoActivity extends AppCompatActivity {
                 Log.w(TAG, "Pause/resume failed", t);
                 Toast.makeText(this, "Pause/resume not supported on this device.", Toast.LENGTH_SHORT).show();
             }
-        });
+        };
+
+        btnPauseResume.setOnClickListener(pauseResumeClick);
+        btnPausedResumeFull.setOnClickListener(pauseResumeClick);
 
         requestPermsAndStart();
     }
@@ -166,13 +189,9 @@ public class ReleaseVideoActivity extends AppCompatActivity {
     private void applySystemBarInsets() {
         final View root = findViewById(android.R.id.content);
 
-        final ViewGroup.MarginLayoutParams recordLp =
-                (ViewGroup.MarginLayoutParams) btnRecordStop.getLayoutParams();
-        final int baseBottomMargin = recordLp.bottomMargin;
-
-        final ViewGroup.MarginLayoutParams pauseLp =
-                (ViewGroup.MarginLayoutParams) btnPauseResume.getLayoutParams();
-        final int basePauseBottomMargin = pauseLp.bottomMargin;
+        final ViewGroup.MarginLayoutParams controlsLp =
+                (ViewGroup.MarginLayoutParams) bottomControlsContainer.getLayoutParams();
+        final int baseBottomMargin = controlsLp.bottomMargin;
 
         final ViewGroup.MarginLayoutParams closeLp =
                 (ViewGroup.MarginLayoutParams) btnClose.getLayoutParams();
@@ -183,14 +202,9 @@ public class ReleaseVideoActivity extends AppCompatActivity {
             Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
 
             ViewGroup.MarginLayoutParams lp =
-                    (ViewGroup.MarginLayoutParams) btnRecordStop.getLayoutParams();
+                    (ViewGroup.MarginLayoutParams) bottomControlsContainer.getLayoutParams();
             lp.bottomMargin = baseBottomMargin + bars.bottom;
-            btnRecordStop.setLayoutParams(lp);
-
-            ViewGroup.MarginLayoutParams pp =
-                    (ViewGroup.MarginLayoutParams) btnPauseResume.getLayoutParams();
-            pp.bottomMargin = basePauseBottomMargin;
-            btnPauseResume.setLayoutParams(pp);
+            bottomControlsContainer.setLayoutParams(lp);
 
             ViewGroup.MarginLayoutParams cp =
                     (ViewGroup.MarginLayoutParams) btnClose.getLayoutParams();
@@ -204,27 +218,61 @@ public class ReleaseVideoActivity extends AppCompatActivity {
         ViewCompat.requestApplyInsets(root);
     }
 
+    private void updateRecordingControls() {
+        if (!isRecording) {
+            btnRecordStart.setVisibility(View.VISIBLE);
+            recordingControlsRow.setVisibility(View.GONE);
+            btnPausedResumeFull.setVisibility(View.GONE);
+            btnPauseResume.setEnabled(false);
+            btnPauseResume.setAlpha(0.5f);
+            return;
+        }
+
+        btnRecordStart.setVisibility(View.GONE);
+
+        if (isPaused) {
+            recordingControlsRow.setVisibility(View.GONE);
+            btnPausedResumeFull.setVisibility(View.VISIBLE);
+        } else {
+            recordingControlsRow.setVisibility(View.VISIBLE);
+            btnPausedResumeFull.setVisibility(View.GONE);
+        }
+
+        btnPauseResume.setEnabled(true);
+        btnPauseResume.setAlpha(1f);
+    }
+
     private void setPauseEnabled(boolean enabled) {
         btnPauseResume.setEnabled(enabled);
         btnPauseResume.setAlpha(enabled ? 1f : 0.5f);
+
+        btnPausedResumeFull.setEnabled(enabled);
+        btnPausedResumeFull.setAlpha(enabled ? 1f : 0.5f);
 
         if (!enabled) {
             stopPausedIndicator();
             btnPauseResume.setText("PAUSE");
             btnPauseResume.setBackgroundTintList(ColorStateList.valueOf(PAUSE_COLOR_NORMAL));
+
+            btnPausedResumeFull.setText("PAUSED - PRESS TO RESUME");
+            btnPausedResumeFull.setBackgroundTintList(ColorStateList.valueOf(PAUSE_COLOR_PAUSED));
+            btnPausedResumeFull.setTextColor(Color.BLACK);
+
+            updateRecordingControls();
         }
     }
 
     private void showPausedIndicator() {
-        btnPauseResume.setText("PAUSED - PRESS TO RESUME");
-        btnPauseResume.setBackgroundTintList(ColorStateList.valueOf(PAUSE_COLOR_PAUSED));
-        btnPauseResume.setTextColor(Color.BLACK);
+        btnPausedResumeFull.setText("PAUSED - PRESS TO RESUME");
+        btnPausedResumeFull.setBackgroundTintList(ColorStateList.valueOf(PAUSE_COLOR_PAUSED));
+        btnPausedResumeFull.setTextColor(Color.BLACK);
+        updateRecordingControls();
 
         if (pausedBlinkAnimator != null) {
             pausedBlinkAnimator.cancel();
         }
 
-        pausedBlinkAnimator = ObjectAnimator.ofFloat(btnPauseResume, "alpha", 1f, 0.35f, 1f);
+        pausedBlinkAnimator = ObjectAnimator.ofFloat(btnPausedResumeFull, "alpha", 1f, 0.35f, 1f);
         pausedBlinkAnimator.setDuration(700);
         pausedBlinkAnimator.setRepeatCount(ValueAnimator.INFINITE);
         pausedBlinkAnimator.start();
@@ -240,6 +288,26 @@ public class ReleaseVideoActivity extends AppCompatActivity {
         btnPauseResume.setText("PAUSE");
         btnPauseResume.setTextColor(Color.WHITE);
         btnPauseResume.setBackgroundTintList(ColorStateList.valueOf(PAUSE_COLOR_NORMAL));
+
+        btnPausedResumeFull.setAlpha(1f);
+        btnPausedResumeFull.setText("PAUSED - PRESS TO RESUME");
+        btnPausedResumeFull.setTextColor(Color.BLACK);
+        btnPausedResumeFull.setBackgroundTintList(ColorStateList.valueOf(PAUSE_COLOR_PAUSED));
+
+        updateRecordingControls();
+    }
+
+    private boolean hasExistingReleaseVideo() {
+        return existingReleaseVideoUrl != null && !existingReleaseVideoUrl.trim().isEmpty();
+    }
+
+    private void showReRecordDialog() {
+        new MaterialAlertDialogBuilder(this)
+                .setTitle("Release Video Exists")
+                .setMessage("A release video already exists. Do you want to re-record it?")
+                .setNegativeButton("No", null)
+                .setPositiveButton("Yes", (dialog, which) -> startRecording())
+                .show();
     }
 
     private void requestPermsAndStart() {
@@ -306,15 +374,17 @@ public class ReleaseVideoActivity extends AppCompatActivity {
         MediaStoreOutputOptions out = buildOutputOptions();
 
         PendingRecording pending = videoCapture.getOutput().prepareRecording(this, out);
-        if (enableAudio) pending = pending.withAudioEnabled();
+        if (enableAudio) {
+            pending = pending.withAudioEnabled();
+        }
 
         activeRecording = pending.start(mainExecutor, event -> {
             if (event instanceof VideoRecordEvent.Start) {
                 isRecording = true;
                 isPaused = false;
-                btnRecordStop.setText("STOP");
                 setPauseEnabled(true);
                 stopPausedIndicator();
+                updateRecordingControls();
                 btnClose.setEnabled(false);
 
             } else if (event instanceof VideoRecordEvent.Pause) {
@@ -328,9 +398,9 @@ public class ReleaseVideoActivity extends AppCompatActivity {
             } else if (event instanceof VideoRecordEvent.Finalize) {
                 isRecording = false;
                 isPaused = false;
-                btnRecordStop.setText("RECORD");
                 setPauseEnabled(false);
                 stopPausedIndicator();
+                updateRecordingControls();
                 btnClose.setEnabled(true);
 
                 VideoRecordEvent.Finalize fin = (VideoRecordEvent.Finalize) event;
@@ -339,11 +409,6 @@ public class ReleaseVideoActivity extends AppCompatActivity {
                     Log.e(TAG, "Recording finalize error=" + fin.getError());
                     Toast.makeText(this, "Recording failed.", Toast.LENGTH_SHORT).show();
                     activeRecording = null;
-
-                    Intent data = new Intent();
-                    data.putExtra(EXTRA_RESULT_CANCELED, true);
-                    setResult(RESULT_CANCELED, data);
-                    finish();
                     return;
                 }
 
@@ -368,6 +433,8 @@ public class ReleaseVideoActivity extends AppCompatActivity {
                     return;
                 }
 
+                existingReleaseVideoUrl = savedUri.toString();
+
                 Intent data = new Intent();
                 data.putExtra(EXTRA_RESULT_VIDEO_URI, savedUri);
                 setResult(RESULT_OK, data);
@@ -378,8 +445,11 @@ public class ReleaseVideoActivity extends AppCompatActivity {
 
     private void stopRecording() {
         try {
-            if (activeRecording != null) activeRecording.stop();
-        } catch (Exception ignored) {}
+            if (activeRecording != null) {
+                activeRecording.stop();
+            }
+        } catch (Exception ignored) {
+        }
     }
 
     private MediaStoreOutputOptions buildOutputOptions() {
@@ -429,7 +499,10 @@ public class ReleaseVideoActivity extends AppCompatActivity {
             Log.w(TAG, "Could not read video duration for uri=" + uri, e);
             return -1L;
         } finally {
-            try { mmr.release(); } catch (Exception ignored) {}
+            try {
+                mmr.release();
+            } catch (Exception ignored) {
+            }
         }
     }
 
