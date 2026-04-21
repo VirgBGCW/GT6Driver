@@ -4,25 +4,47 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/root"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="@android:color/black">
+    android:layout_height="match_parent">
 
-    <!-- 75% width via guidelines -->
+    <!-- BACKGROUND -->
+    <ImageView
+        android:id="@+id/bgImage"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:scaleType="fitXY"
+        android:src="@drawable/carbonfiber"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- DARK OVERLAY -->
+    <View
+        android:id="@+id/bgOverlay"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="#66000000"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- GUIDES -->
     <androidx.constraintlayout.widget.Guideline
         android:id="@+id/leftGuide"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
         android:orientation="vertical"
-        app:layout_constraintGuide_percent="0.125" />
+        app:layout_constraintGuide_percent="0.125"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content" />
 
     <androidx.constraintlayout.widget.Guideline
         android:id="@+id/rightGuide"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
         android:orientation="vertical"
-        app:layout_constraintGuide_percent="0.875" />
+        app:layout_constraintGuide_percent="0.875"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content" />
 
-    <!-- Same logo (change to @mipmap/ic_launcher if needed during compile) -->
+    <!-- LOGO -->
     <ImageView
         android:id="@+id/logo"
         android:layout_width="0dp"
@@ -30,89 +52,144 @@
         android:src="@drawable/logo"
         android:contentDescription="@string/logo_desc"
         android:adjustViewBounds="true"
+        android:layout_marginTop="32dp"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="@id/leftGuide"
-        app:layout_constraintEnd_toEndOf="@id/rightGuide"
-        android:layout_marginTop="32dp" />
+        app:layout_constraintEnd_toEndOf="@id/rightGuide" />
 
-    <!-- LOT NUMBER -->
+    <!-- LOT LABEL -->
+    <TextView
+        android:id="@+id/labelLot"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="LOT NUMBER"
+        android:textColor="@color/white"
+        android:textStyle="bold"
+        android:textSize="18sp"
+        android:shadowColor="#AA000000"
+        android:shadowDx="0"
+        android:shadowDy="1"
+        android:shadowRadius="3"
+        android:layout_marginTop="28dp"
+        app:layout_constraintTop_toBottomOf="@id/logo"
+        app:layout_constraintStart_toStartOf="@id/leftGuide"
+        app:layout_constraintEnd_toEndOf="@id/rightGuide" />
+
+    <!-- LOT INPUT -->
     <com.google.android.material.textfield.TextInputLayout
         android:id="@+id/lotNumberLayout"
         style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:hint="LOT NUMBER"
-        app:boxStrokeColor="#FFFFFF"
-        app:hintTextColor="@android:color/white"
-        app:boxBackgroundMode="outline"
-        app:layout_constraintTop_toBottomOf="@id/logo"
+        app:boxBackgroundMode="filled"
+        app:boxBackgroundColor="@android:color/white"
+        app:boxStrokeColor="@android:color/white"
+        app:hintEnabled="false"
+        app:layout_constraintTop_toBottomOf="@id/labelLot"
         app:layout_constraintStart_toStartOf="@id/leftGuide"
         app:layout_constraintEnd_toEndOf="@id/rightGuide"
-        android:layout_marginTop="28dp">
+        android:layout_marginTop="8dp">
 
         <com.google.android.material.textfield.TextInputEditText
             android:id="@+id/lotNumberInput"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColor="@android:color/white"
-            android:hint="LOT NUMBER"
+            android:textColor="@android:color/black"
+            android:textColorHint="#666666"
             android:inputType="numberSigned|numberDecimal"
             android:digits="0123456789-."
-            android:imeOptions="actionSearch" />
-
-
+            android:imeOptions="actionSearch"
+            android:hint="LOT NUMBER" />
     </com.google.android.material.textfield.TextInputLayout>
 
-    <!-- LAST 4 OF VIN -->
+    <!-- VIN LABEL -->
+    <TextView
+        android:id="@+id/labelVin"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="LAST 4 OF VIN"
+        android:textColor="@color/white"
+        android:textStyle="bold"
+        android:textSize="18sp"
+        android:shadowColor="#AA000000"
+        android:shadowDx="0"
+        android:shadowDy="1"
+        android:shadowRadius="3"
+        android:layout_marginTop="24dp"
+        app:layout_constraintTop_toBottomOf="@id/lotNumberLayout"
+        app:layout_constraintStart_toStartOf="@id/leftGuide"
+        app:layout_constraintEnd_toEndOf="@id/rightGuide" />
+
+    <!-- VIN INPUT -->
     <com.google.android.material.textfield.TextInputLayout
         android:id="@+id/vinLayout"
         style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:hint="LAST 4 OF VIN"
-        app:boxStrokeColor="#FFFFFF"
-        app:hintTextColor="@android:color/white"
-        app:boxBackgroundMode="outline"
-        app:layout_constraintTop_toBottomOf="@id/lotNumberLayout"
+        app:boxBackgroundMode="filled"
+        app:boxBackgroundColor="@android:color/white"
+        app:boxStrokeColor="@android:color/white"
+        app:hintEnabled="false"
+        app:layout_constraintTop_toBottomOf="@id/labelVin"
         app:layout_constraintStart_toStartOf="@id/leftGuide"
         app:layout_constraintEnd_toEndOf="@id/rightGuide"
-        android:layout_marginTop="18dp">
+        android:layout_marginTop="8dp">
 
         <com.google.android.material.textfield.TextInputEditText
             android:id="@+id/vinInput"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColor="@android:color/white"
+            android:textColor="@android:color/black"
+            android:textColorHint="#666666"
             android:inputType="textCapCharacters"
             android:maxLength="4"
             android:hint="LAST 4 OF VIN" />
     </com.google.android.material.textfield.TextInputLayout>
 
-    <!-- DESCRIPTION -->
+    <!-- DESCRIPTION LABEL -->
+    <TextView
+        android:id="@+id/labelDesc"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="DESCRIPTION"
+        android:textColor="@color/white"
+        android:textStyle="bold"
+        android:textSize="18sp"
+        android:shadowColor="#AA000000"
+        android:shadowDx="0"
+        android:shadowDy="1"
+        android:shadowRadius="3"
+        android:layout_marginTop="24dp"
+        app:layout_constraintTop_toBottomOf="@id/vinLayout"
+        app:layout_constraintStart_toStartOf="@id/leftGuide"
+        app:layout_constraintEnd_toEndOf="@id/rightGuide" />
+
+    <!-- DESCRIPTION INPUT -->
     <com.google.android.material.textfield.TextInputLayout
         android:id="@+id/descriptionLayout"
         style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:hint="DESCRIPTION"
-        app:boxStrokeColor="#FFFFFF"
-        app:hintTextColor="@android:color/white"
-        app:boxBackgroundMode="outline"
-        app:layout_constraintTop_toBottomOf="@id/vinLayout"
+        app:boxBackgroundMode="filled"
+        app:boxBackgroundColor="@android:color/white"
+        app:boxStrokeColor="@android:color/white"
+        app:hintEnabled="false"
+        app:layout_constraintTop_toBottomOf="@id/labelDesc"
         app:layout_constraintStart_toStartOf="@id/leftGuide"
         app:layout_constraintEnd_toEndOf="@id/rightGuide"
-        android:layout_marginTop="18dp">
+        android:layout_marginTop="8dp">
 
         <com.google.android.material.textfield.TextInputEditText
             android:id="@+id/descriptionInput"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColor="@android:color/white"
+            android:textColor="@android:color/black"
+            android:textColorHint="#666666"
             android:inputType="textCapSentences"
             android:hint="DESCRIPTION" />
     </com.google.android.material.textfield.TextInputLayout>
 
-    <!-- SEARCH button directly under Description -->
+    <!-- SEARCH BUTTON -->
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btnSearch"
         android:layout_width="0dp"
@@ -127,6 +204,8 @@
         app:layout_constraintStart_toStartOf="@id/leftGuide"
         app:layout_constraintEnd_toEndOf="@id/rightGuide"
         android:layout_marginTop="20dp" />
+
+    <!-- ERROR TEXT -->
     <TextView
         android:id="@+id/textError"
         android:layout_width="0dp"
@@ -141,17 +220,13 @@
         android:padding="20dp"
         android:background="#66000000"
         android:layout_marginHorizontal="24dp"
-
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintVertical_bias="0.75"/>
+        app:layout_constraintVertical_bias="0.75" />
 
-
-
-
-    <!-- Results panel -->
+    <!-- RESULTS -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/resultsRecycler"
         android:layout_width="0dp"
@@ -166,4 +241,3 @@
         android:layout_marginTop="16dp" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>
-

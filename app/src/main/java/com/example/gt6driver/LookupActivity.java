@@ -44,6 +44,7 @@ public class LookupActivity extends AppCompatActivity {
     private String eventName;
     private int eventId;
     private String driver;
+    private String userType;
     private VehicleSearchApi vehicleApi;
     private Call<List<LotSearchResponse>> lotCall;
     private Call<List<LotSearchResponse>> vinCall;
@@ -65,7 +66,8 @@ public class LookupActivity extends AppCompatActivity {
         // From MainActivity (event/driver context)
         eventName = getIntent().getStringExtra("eventName");
         eventId   = getIntent().getIntExtra("eventId", -1);
-        driver    = getIntent().getStringExtra("driver");
+        driver    = getIntent().getStringExtra(Nav.EXTRA_DRIVER);
+        userType  = getIntent().getStringExtra(Nav.EXTRA_USER_TYPE);
 
         lotNumberInput   = findViewById(R.id.lotNumberInput);
         vinInput         = findViewById(R.id.vinInput);
@@ -81,17 +83,28 @@ public class LookupActivity extends AppCompatActivity {
         // Start EMPTY
         adapter.setItems(new ArrayList<>());
 
-        // Row click → highlight + go to ActionActivity, passing the WHOLE object
+        // Row click → highlight + navigate based on user type, passing the WHOLE object
         adapter.setOnItemClickListener((position, vehicle) -> {
             adapter.setSelectedPosition(position);
-            Intent intent = new Intent(LookupActivity.this, ActionActivity.class);
 
-            // ✅ use the shared key for the parcelable
+            boolean isPropertyUser = userType != null && "Property".equalsIgnoreCase(userType.trim());
+            boolean isKeyUser = userType != null && "Key".equalsIgnoreCase(userType.trim());
+
+            Class<?> destination = ActionActivity.class;
+            if (isPropertyUser) {
+                destination = PropertyActivity.class;
+            } else if (isKeyUser) {
+                destination = RemoteKeyControlActivity.class;
+            }
+
+            Intent intent = new Intent(LookupActivity.this, destination);
+
+            // ✅ use shared keys for the parcelable/context
             intent.putExtra(Nav.EXTRA_VEHICLE, vehicle);
-
-            intent.putExtra("eventId", eventId);
-            intent.putExtra("eventName", eventName);
-            intent.putExtra("driver", driver);
+            intent.putExtra(Nav.EXTRA_EVENT_ID, eventId);
+            intent.putExtra(Nav.EXTRA_EVENT_NAME, eventName);
+            intent.putExtra(Nav.EXTRA_DRIVER, driver);
+            intent.putExtra(Nav.EXTRA_USER_TYPE, userType);
 
             // ✅ pass opp id under BOTH keys to satisfy old/new readers downstream
             String opp = (vehicle != null && vehicle.opportunityId != null) ? vehicle.opportunityId : "";
@@ -230,34 +243,34 @@ public class LookupActivity extends AppCompatActivity {
             android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_LONG).show();
         }
     }
-// Clear Previous input and results
-private void resetLookupUi() {
-    // cancel any in-flight network calls
-    cancelAll();
+    // Clear Previous input and results
+    private void resetLookupUi() {
+        // cancel any in-flight network calls
+        cancelAll();
 
-    // clear inputs
-    if (lotNumberInput != null) lotNumberInput.setText("");
-    if (vinInput != null) vinInput.setText("");
-    if (descriptionInput != null) descriptionInput.setText("");
+        // clear inputs
+        if (lotNumberInput != null) lotNumberInput.setText("");
+        if (vinInput != null) vinInput.setText("");
+        if (descriptionInput != null) descriptionInput.setText("");
 
-    // clear results
-    if (adapter != null) adapter.setItems(new ArrayList<>());
+        // clear results
+        if (adapter != null) adapter.setItems(new ArrayList<>());
 
-    // hide error
-    if (errorText != null) errorText.setVisibility(View.GONE);
+        // hide error
+        if (errorText != null) errorText.setVisibility(View.GONE);
 
-    // reset search button
-    if (btnSearch != null) {
-        btnSearch.setText("Search");
-        btnSearch.setEnabled(false);
+        // reset search button
+        if (btnSearch != null) {
+            btnSearch.setText("Search");
+            btnSearch.setEnabled(false);
+        }
+
+        // clear focus + keyboard
+        lotNumberInput.clearFocus();
+        vinInput.clearFocus();
+        descriptionInput.clearFocus();
+        hideKeyboard();
     }
-
-    // clear focus + keyboard
-    lotNumberInput.clearFocus();
-    vinInput.clearFocus();
-    descriptionInput.clearFocus();
-    hideKeyboard();
-}
 
 
     /**
@@ -752,6 +765,19 @@ private void resetLookupUi() {
         @Override public void afterTextChanged(Editable s) {}
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

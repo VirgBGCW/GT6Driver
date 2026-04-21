@@ -106,7 +106,7 @@ public class ActionActivity extends AppCompatActivity {
 
     // Buttons
     private MaterialButton btnTransport;
-    private MaterialButton btnCheckIn, btnCheckOut, btnProperty;
+    private MaterialButton btnCheckIn, btnCheckOut;
     private MaterialButton btnKeyBagTags, btnCarTag, btnAssignDriver, btnDriverCheckIn;
 
     // Context/state
@@ -202,7 +202,6 @@ public class ActionActivity extends AppCompatActivity {
         btnTransport = findViewById(R.id.btnTransport);
         btnCheckIn = findViewById(R.id.btnCheckIn);
         btnCheckOut = findViewById(R.id.btnCheckOut);
-        btnProperty = findViewById(R.id.btnProperty);
 
         // Tool row
         btnKeyBagTags = findViewById(R.id.btnKeyBagTags);
@@ -293,14 +292,6 @@ public class ActionActivity extends AppCompatActivity {
             putCommonExtras(i);
             startActivity(i);
         });
-
-        if (btnProperty != null) {
-            btnProperty.setOnClickListener(v -> {
-                Intent i = new Intent(this, PropertyActivity.class);
-                putCommonExtras(i);
-                startActivity(i);
-            });
-        }
 
         btnDriverCheckIn.setOnClickListener(v -> postDriverCheckInHardcoded());
 
@@ -712,12 +703,18 @@ public class ActionActivity extends AppCompatActivity {
                 if (response.isSuccessful()) {
                     showFullScreenResult(true, "Moved to Barrett-Jackson");
                 } else {
+                    int code = response.code();
                     String errBody = null;
                     try {
                         errBody = response.errorBody() != null ? response.errorBody().string() : null;
                     } catch (Exception ignored) {}
-                    Log.w(HTTP_LOG_TAG, "DriverCheckIn failed. code=" + response.code() + ", body=" + errBody);
-                    showFullScreenResult(false, "FAILED");
+                    Log.w(HTTP_LOG_TAG, "DriverCheckIn failed. code=" + code + ", body=" + errBody);
+
+                    if (code == 404) {
+                        showFullScreenResult(false, "KEY RECORD NOT FOUND");
+                    } else {
+                        showFullScreenResult(false, "FAILED");
+                    }
                 }
             }
 
@@ -771,12 +768,18 @@ public class ActionActivity extends AppCompatActivity {
                 if (response.isSuccessful()) {
                     showFullScreenResult(true, "Assigned to " + selectedDriverName);
                 } else {
+                    int code = response.code();
                     String errBody = null;
                     try {
                         errBody = response.errorBody() != null ? response.errorBody().string() : null;
                     } catch (Exception ignored) {}
-                    Log.w(HTTP_LOG_TAG, "Consignment update failed. code=" + response.code() + ", body=" + errBody);
-                    showFullScreenResult(false, "FAILED");
+                    Log.w(HTTP_LOG_TAG, "Consignment update failed. code=" + code + ", body=" + errBody);
+
+                    if (code == 404) {
+                        showFullScreenResult(false, "KEY RECORD NOT FOUND");
+                    } else {
+                        showFullScreenResult(false, "FAILED");
+                    }
                 }
             }
 
@@ -1124,6 +1127,27 @@ public class ActionActivity extends AppCompatActivity {
         });
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

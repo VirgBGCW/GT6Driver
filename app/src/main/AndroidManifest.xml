@@ -141,6 +141,11 @@
             android:exported="false"
             android:screenOrientation="portrait" />
 
+        <activity
+            android:name=".RemoteKeyControlActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
         <!-- ✅ Transport screen (already correct; leaving as-is) -->
         <activity
             android:name=".TransportActivity"
@@ -176,6 +181,15 @@
 
     </application>
 </manifest>
+
+
+
+
+
+
+
+
+
 
 
 

@@ -12,5 +12,6 @@ public final class Nav {
     public static final String EXTRA_EVENT_ID        = "eventId";
     public static final String EXTRA_EVENT_NAME      = "eventName";
     public static final String EXTRA_DRIVER          = "driver";
+    public static final String EXTRA_USER_TYPE       = "userType";
     public static final String EXTRA_OPPORTUNITY_ID  = "opportunityId";
 }
