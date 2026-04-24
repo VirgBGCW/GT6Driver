@@ -102,6 +102,7 @@ public class MainActivity extends AppCompatActivity {
     private static volatile boolean sSyncStarted = false;
 
     private boolean uploadStatusObserversAttached = false;
+    private boolean isLoading = false;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -155,15 +156,22 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
                 selectedUserType = getSelectedUserTypeFromPosition(position);
-                setDriverPlaceholder(selectedEvent == null ? "Select Event First" : "Select User Type / Loading…");
-                clearDriverDirectoryCache();
-                tryLoadDrivers();
+                updateDriverInputState();
+                if (isVideoReviewer(selectedUserType)) {
+                    setDriverPlaceholder("User Not Required");
+                    clearDriverDirectoryCache();
+                } else {
+                    setDriverPlaceholder(selectedEvent == null ? "Select Event First" : "Select User Type / Loading…");
+                    clearDriverDirectoryCache();
+                    tryLoadDrivers();
+                }
                 updateSubmitEnabled();
             }
 
             @Override
             public void onNothingSelected(AdapterView<?> parent) {
                 selectedUserType = null;
+                updateDriverInputState();
                 updateSubmitEnabled();
             }
         });
@@ -185,8 +193,11 @@ public class MainActivity extends AppCompatActivity {
             int pos = spinnerDriver.getSelectedItemPosition();
             DriverItem selectedDriver = (pos >= 0 && pos < drivers.size()) ? drivers.get(pos) : null;
 
-            if (!isValid(selectedEventLocal) || !isValidUserType(selectedUserType) || !isValid(selectedDriver)) {
-                Toast.makeText(this, "Please select EVENT, USER TYPE, and USER.", Toast.LENGTH_SHORT).show();
+            boolean userRequired = !isVideoReviewer(selectedUserType);
+            if (!isValid(selectedEventLocal) || !isValidUserType(selectedUserType) || (userRequired && !isValid(selectedDriver))) {
+                Toast.makeText(this, userRequired
+                        ? "Please select EVENT, USER TYPE, and USER."
+                        : "Please select EVENT and USER TYPE.", Toast.LENGTH_SHORT).show();
                 return;
             }
 
@@ -194,18 +205,25 @@ public class MainActivity extends AppCompatActivity {
             intent.putExtra("eventName", selectedEventLocal.name);
             intent.putExtra("eventId", selectedEventLocal.id);
             intent.putExtra("userType", selectedUserType);
-            intent.putExtra("driver", selectedDriver.name);
 
-            if (selectedDriver.number != null) {
-                intent.putExtra("driverNumber", selectedDriver.number);
+            if (userRequired && selectedDriver != null) {
+                intent.putExtra("driver", selectedDriver.name);
+
+                if (selectedDriver.number != null) {
+                    intent.putExtra("driverNumber", selectedDriver.number);
+                }
+
+                if (selectedDriver.contactId != null) {
+                    intent.putExtra("contactId", selectedDriver.contactId);
+                }
+
+                com.example.gt6driver.session.CurrentSelection.get()
+                        .setDriver(selectedDriver.number != null ? selectedDriver.number : 0, selectedDriver.name);
+            } else {
+                intent.putExtra("driver", "Video Reviewer");
+                com.example.gt6driver.session.CurrentSelection.get()
+                        .setDriver(0, "Video Reviewer");
             }
-
-            if (selectedDriver.contactId != null) {
-                intent.putExtra("contactId", selectedDriver.contactId);
-            }
-
-            com.example.gt6driver.session.CurrentSelection.get()
-                    .setDriver(selectedDriver.number != null ? selectedDriver.number : 0, selectedDriver.name);
 
             startActivity(intent);
         });
@@ -444,7 +462,8 @@ public class MainActivity extends AppCompatActivity {
         EventItem ev = selectedEvent;
         int pos = spinnerDriver.getSelectedItemPosition();
         DriverItem dr = (pos >= 0 && pos < drivers.size()) ? drivers.get(pos) : null;
-        btnSubmit.setEnabled(isValid(ev) && isValidUserType(selectedUserType) && isValid(dr));
+        boolean userRequired = !isVideoReviewer(selectedUserType);
+        btnSubmit.setEnabled(isValid(ev) && isValidUserType(selectedUserType) && (!userRequired || isValid(dr)));
     }
 
     private boolean isValid(@Nullable EventItem ev) {
@@ -455,6 +474,10 @@ public class MainActivity extends AppCompatActivity {
         return userType != null
                 && !userType.trim().isEmpty()
                 && !userType.startsWith("Select ");
+    }
+
+    private boolean isVideoReviewer(@Nullable String userType) {
+        return userType != null && "Video Reviewer".equalsIgnoreCase(userType.trim());
     }
 
     private boolean isValid(@Nullable DriverItem dr) {
@@ -470,11 +493,24 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setLoading(boolean loading) {
+        isLoading = loading;
         progress.setVisibility(loading ? View.VISIBLE : View.GONE);
         spinnerUserType.setEnabled(!loading);
-        spinnerDriver.setEnabled(!loading);
+        updateDriverInputState();
         rvEvents.setEnabled(!loading);
         updateSubmitEnabled();
+    }
+
+    private void updateDriverInputState() {
+        if (spinnerDriver == null) return;
+
+        boolean videoReviewer = isVideoReviewer(selectedUserType);
+        boolean enabled = !isLoading && !videoReviewer;
+
+        spinnerDriver.setEnabled(enabled);
+        spinnerDriver.setClickable(enabled);
+        spinnerDriver.setFocusable(enabled);
+        spinnerDriver.setAlpha(videoReviewer ? 0.5f : 1.0f);
     }
 
     // ===================== EVENTS =====================
@@ -637,6 +673,7 @@ public class MainActivity extends AppCompatActivity {
         userTypes.add("Property");
         userTypes.add("Key");
         userTypes.add("Mechanic");
+        userTypes.add("Video Reviewer");
 
         ArrayAdapter<String> userTypeAdapter =
                 new ArrayAdapter<>(this, R.layout.spinner_item_black, userTypes);
@@ -672,6 +709,12 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
+        if (isVideoReviewer(selectedUserType)) {
+            setDriverPlaceholder("User Not Required");
+            clearDriverDirectoryCache();
+            return;
+        }
+
         loadDriversFromApi(selectedEvent.id, selectedUserType);
     }
 
@@ -701,6 +744,7 @@ public class MainActivity extends AppCompatActivity {
         driverNamesAdapter.notifyDataSetChanged();
 
         spinnerDriver.setSelection(0);
+        updateDriverInputState();
         updateSubmitEnabled();
     }
 

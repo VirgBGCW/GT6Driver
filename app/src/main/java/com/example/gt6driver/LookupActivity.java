@@ -89,12 +89,15 @@ public class LookupActivity extends AppCompatActivity {
 
             boolean isPropertyUser = userType != null && "Property".equalsIgnoreCase(userType.trim());
             boolean isKeyUser = userType != null && "Key".equalsIgnoreCase(userType.trim());
+            boolean isVideoReviewer = userType != null && "Video Reviewer".equalsIgnoreCase(userType.trim());
 
             Class<?> destination = ActionActivity.class;
             if (isPropertyUser) {
                 destination = PropertyActivity.class;
             } else if (isKeyUser) {
                 destination = RemoteKeyControlActivity.class;
+            } else if (isVideoReviewer) {
+                destination = VideoReviewActivity.class;
             }
 
             Intent intent = new Intent(LookupActivity.this, destination);
