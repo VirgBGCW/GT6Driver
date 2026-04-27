@@ -10,7 +10,7 @@ android {
         applicationId = "com.example.gt6driver"
         minSdk = 24
         targetSdk = 35
-        versionCode = 30
+        versionCode = 31
         versionName = "COLUMBUS2026"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

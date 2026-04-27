@@ -64,6 +64,20 @@ public class PropertyAdapter extends RecyclerView.Adapter<PropertyAdapter.VH> {
         h.tvNotes.setText(notes);
         h.tvNotes.setVisibility(notes.isEmpty() ? View.GONE : View.VISIBLE);
 
+        boolean noProperty = isNoPropertyType(type);
+
+        h.checkInGroup.clearOnButtonCheckedListeners();
+
+        if (noProperty) {
+            h.tvCheckInLabel.setVisibility(View.GONE);
+            h.progressCheckIn.setVisibility(View.GONE);
+            h.checkInGroup.clearChecked();
+            h.checkInGroup.setVisibility(View.GONE);
+            return;
+        }
+
+        h.tvCheckInLabel.setVisibility(View.VISIBLE);
+        h.checkInGroup.setVisibility(View.VISIBLE);
         h.tvCheckInLabel.setText(canUpdate ? "Property Status" : "Property Status (unavailable)");
         h.progressCheckIn.setVisibility(it.isUpdatingCheckInType ? View.VISIBLE : View.GONE);
 
@@ -72,7 +86,6 @@ public class PropertyAdapter extends RecyclerView.Adapter<PropertyAdapter.VH> {
         h.btnLeftInCar.setEnabled(enabled);
         h.checkInGroup.setEnabled(enabled);
 
-        h.checkInGroup.clearOnButtonCheckedListeners();
         h.checkInGroup.check(buttonIdForType(checkInType));
 
         h.checkInGroup.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
@@ -152,5 +165,9 @@ public class PropertyAdapter extends RecyclerView.Adapter<PropertyAdapter.VH> {
 
     private static String safe(String s) {
         return s == null ? "" : s.trim();
+    }
+
+    private static boolean isNoPropertyType(String value) {
+        return value != null && value.trim().equalsIgnoreCase("No Property");
     }
 }
