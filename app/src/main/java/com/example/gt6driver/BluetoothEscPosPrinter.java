@@ -9,6 +9,7 @@ import android.util.Log;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 import java.nio.charset.Charset;
@@ -58,6 +59,37 @@ public class BluetoothEscPosPrinter {
         out = socket.getOutputStream();
         connectedName = target.getName();
         Log.d(TAG, "Connected (name) to " + connectedName + " [" + target.getAddress() + "]");
+        initPc437();
+    }
+
+    /** Connect by paired device name prefix (case-insensitive). */
+    public void connectByNamePrefix(String namePrefix) throws IOException {
+        ensureBt();
+        if (namePrefix == null || namePrefix.trim().isEmpty()) {
+            throw new IOException("Empty printer name prefix");
+        }
+
+        String prefix = namePrefix.trim().toLowerCase(Locale.US);
+        Set<BluetoothDevice> paired = adapter.getBondedDevices();
+        BluetoothDevice target = null;
+        if (paired != null) {
+            for (BluetoothDevice d : paired) {
+                String n = d.getName();
+                if (n != null && n.trim().toLowerCase(Locale.US).startsWith(prefix)) {
+                    target = d;
+                    break;
+                }
+            }
+        }
+        if (target == null) {
+            throw new IOException("Paired printer not found by name prefix: " + namePrefix);
+        }
+        socket = target.createRfcommSocketToServiceRecord(SPP_UUID);
+        adapter.cancelDiscovery();
+        socket.connect();
+        out = socket.getOutputStream();
+        connectedName = target.getName();
+        Log.d(TAG, "Connected (name prefix) to " + connectedName + " [" + target.getAddress() + "]");
         initPc437();
     }
 

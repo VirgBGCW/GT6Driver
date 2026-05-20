@@ -48,6 +48,7 @@ import com.google.zxing.qrcode.QRCodeWriter;
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel;
 
 import java.io.ByteArrayOutputStream;
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Locale;
@@ -75,9 +76,7 @@ import android.os.VibratorManager;
 public class ActionActivity extends AppCompatActivity {
 
     // Printer/device constants
-    private static final String[] PRINTER_CANDIDATES = new String[]{
-            "SPP-R310", "SPP-310", "SPP-R300", "SPP-300"
-    };
+    private static final String PRINTER_NAME_PREFIX = "SPP-";
     private static final int RECEIPT_WIDTH_DOTS = 576; // 80mm; 384 for 58mm
 
     // ESC/POS control bytes
@@ -335,35 +334,6 @@ public class ActionActivity extends AppCompatActivity {
         });
     }
 
-    /**
-     * Pick the best available printer name. Prefers a bonded device whose name contains one
-     * of our candidates (case-insensitive). Falls back to the first candidate if none found.
-     */
-    private String resolvePrinterName() {
-        try {
-            android.bluetooth.BluetoothManager bm =
-                    (android.bluetooth.BluetoothManager) getSystemService(BLUETOOTH_SERVICE);
-            android.bluetooth.BluetoothAdapter adapter = (bm != null) ? bm.getAdapter() : null;
-            if (adapter != null && adapter.isEnabled()) {
-                java.util.Set<android.bluetooth.BluetoothDevice> bonded = adapter.getBondedDevices();
-                if (bonded != null) {
-                    for (String cand : PRINTER_CANDIDATES) {
-                        for (android.bluetooth.BluetoothDevice d : bonded) {
-                            String n = (d.getName() == null) ? "" : d.getName();
-                            if (n.toLowerCase(Locale.US).contains(cand.toLowerCase(Locale.US))) {
-                                Log.d(LOG_TAG, "Resolved bonded printer match: " + n + " (cand=" + cand + ")");
-                                return n;
-                            }
-                        }
-                    }
-                }
-            }
-        } catch (Throwable t) {
-            Log.w(LOG_TAG, "resolvePrinterName() failed; using default", t);
-        }
-        return PRINTER_CANDIDATES[0];
-    }
-
     private void putCommonExtras(Intent i) {
         if (vehicle != null) {
             i.putExtra(Nav.EXTRA_VEHICLE, vehicle);
@@ -425,6 +395,16 @@ public class ActionActivity extends AppCompatActivity {
     private static String coalesce(String... vals) {
         for (String s : vals) if (s != null && !s.trim().isEmpty()) return s;
         return "";
+    }
+
+    private String formatLotForLabel(String lot) {
+        String s = safe(lot).trim();
+        if (s.isEmpty()) return "";
+        try {
+            return new BigDecimal(s).stripTrailingZeros().toPlainString();
+        } catch (NumberFormatException e) {
+            return s;
+        }
     }
 
     // ===== Bluetooth permission helpers =====
@@ -500,9 +480,10 @@ public class ActionActivity extends AppCompatActivity {
         printExec.execute(() -> {
             BluetoothEscPosPrinter esc = new BluetoothEscPosPrinter();
             try {
-                esc.connectByName(resolvePrinterName());
+                esc.connectByNamePrefix(PRINTER_NAME_PREFIX);
 
-                esc.printText(escSeq(cmdFontA()) + escSeq(cmdCharSize(1, 0)) + "LOT      : " + defaulted(lot, "—") + "\n");
+                String printLot = defaulted(formatLotForLabel(lot), "—");
+                esc.printText(escSeq(cmdFontA()) + escSeq(cmdCharSize(1, 0)) + "LOT      : " + printLot + "\n");
                 esc.printText(escSeq(cmdFontA()) + escSeq(cmdCharSize(1, 0)) + "YEAR     : " + defaulted(year, "—") + "\n");
                 esc.printText(escSeq(cmdFontA()) + escSeq(cmdCharSize(1, 0)) + "MAKE     : " + defaulted(make, "—") + "\n");
                 esc.printText(escSeq(cmdFontA()) + escSeq(cmdCharSize(1, 0)) + "MODEL    : " + defaulted(model, "—") + "\n");
@@ -543,7 +524,7 @@ public class ActionActivity extends AppCompatActivity {
             return;
         }
 
-        final String lot = defaulted(lotNum, "—");
+        final String lot = defaulted(formatLotForLabel(lotNum), "—");
         final String tent = defaulted(tentId, "—");
         final String colRow = defaulted(col, "—") + "-" + defaulted(row, "—");
         final String day = defaulted(formatDayParenUpper(targetTimeText), "");
@@ -552,7 +533,7 @@ public class ActionActivity extends AppCompatActivity {
         printExec.execute(() -> {
             BluetoothEscPosPrinter esc = new BluetoothEscPosPrinter();
             try {
-                esc.connectByName(resolvePrinterName());
+                esc.connectByNamePrefix(PRINTER_NAME_PREFIX);
 
                 StringBuilder job = new StringBuilder(512);
                 job.append(escSeq(cmdInit()))

@@ -46,6 +46,9 @@ public class PropertyActivity extends AppCompatActivity {
 
     private static final String LOG_TAG = "PropertyActivity";
     private static final String HTTP_LOG_TAG = "GT6DriverHTTP";
+    private static final String PROPERTY_STATUS_AWAITING_ARRIVAL = "AwaitingArrival";
+    private static final String PROPERTY_STATUS_ARRIVED = "360450009";
+    private static final String PROPERTY_STATUS_LEFT_IN_CAR = "LeftInCar";
 
     /**
      * Property types from CSV (sorted by Name).
@@ -171,21 +174,28 @@ public class PropertyActivity extends AppCompatActivity {
             return;
         }
 
-        String previousType = normalizePropertyCheckInType(item.checkInType);
+        String previousType = currentPropertyCheckInType(item);
         String targetType = normalizePropertyCheckInType(newCheckInType);
         if (targetType.equals(previousType)) return;
 
+        Boolean previousIsLeftInCar = item.isLeftInCar;
         item.checkInType = targetType;
+        item.isLeftInCar = PROPERTY_STATUS_LEFT_IN_CAR.equals(targetType);
         item.isUpdatingCheckInType = true;
         adapter.notifyItemChanged(position);
 
         OpportunityApi api = ApiClient.getMemberApi().create(OpportunityApi.class);
-        PropertyCheckinTypeUpdateRequest body = new PropertyCheckinTypeUpdateRequest(targetType);
+        boolean isLeftInCar = PROPERTY_STATUS_LEFT_IN_CAR.equals(targetType);
+        PropertyCheckinTypeUpdateRequest body = new PropertyCheckinTypeUpdateRequest(targetType, isLeftInCar);
         Call<Void> call = api.updateConsignmentPropertyCheckinType(propertyId, body);
 
         try {
+            String payloadJson = new com.google.gson.Gson().toJson(body);
             Log.i(HTTP_LOG_TAG, call.request().method() + " " + call.request().url());
-            Log.d(HTTP_LOG_TAG, "PUT body: {propertyItemCheckinType='" + targetType + "'}");
+            Log.i(HTTP_LOG_TAG, "Property PUT context: propertyId=" + propertyId
+                    + ", previousType=" + previousType
+                    + ", targetType=" + targetType);
+            Log.i(HTTP_LOG_TAG, "Property PUT payload JSON: " + payloadJson);
         } catch (Throwable ignored) {}
 
         call.enqueue(new Callback<Void>() {
@@ -195,10 +205,12 @@ public class PropertyActivity extends AppCompatActivity {
 
                 if (response.isSuccessful()) {
                     item.checkInType = targetType;
+                    item.isLeftInCar = isLeftInCar;
                     adapter.notifyItemChanged(position);
                     Toast.makeText(PropertyActivity.this, "Property status updated", Toast.LENGTH_SHORT).show();
                 } else {
                     item.checkInType = previousType;
+                    item.isLeftInCar = previousIsLeftInCar;
                     adapter.notifyItemChanged(position);
 
                     String errorText = readErrorBody(response);
@@ -215,6 +227,7 @@ public class PropertyActivity extends AppCompatActivity {
             public void onFailure(Call<Void> call, Throwable t) {
                 item.isUpdatingCheckInType = false;
                 item.checkInType = previousType;
+                item.isLeftInCar = previousIsLeftInCar;
                 adapter.notifyItemChanged(position);
 
                 Log.e(HTTP_LOG_TAG, "Property PUT network error", t);
@@ -328,19 +341,31 @@ public class PropertyActivity extends AppCompatActivity {
         });
     }
     private String normalizePropertyCheckInType(String value) {
-        if (value == null) return "AwaitingArrival";
+        if (value == null) return PROPERTY_STATUS_AWAITING_ARRIVAL;
 
         String normalized = value.trim()
                 .replace(" ", "")
                 .replace("-", "")
                 .replace("_", "");
 
-        if (normalized.equalsIgnoreCase("Removed")) return "Removed";
-        if (normalized.equalsIgnoreCase("LeftInCar") || normalized.equalsIgnoreCase("LeftInVehicle")) {
-            return "LeftInCar";
+        if (normalized.equalsIgnoreCase(PROPERTY_STATUS_ARRIVED)
+                || normalized.equalsIgnoreCase("Arrived")
+                || normalized.equalsIgnoreCase("Removed")) {
+            return PROPERTY_STATUS_ARRIVED;
         }
-        return "AwaitingArrival";
+        if (normalized.equalsIgnoreCase("LeftInCar") || normalized.equalsIgnoreCase("LeftInVehicle")) {
+            return PROPERTY_STATUS_LEFT_IN_CAR;
+        }
+        return PROPERTY_STATUS_AWAITING_ARRIVAL;
     }
+
+    private String currentPropertyCheckInType(PropertyItem item) {
+        if (item != null && Boolean.TRUE.equals(item.isLeftInCar)) {
+            return PROPERTY_STATUS_LEFT_IN_CAR;
+        }
+        return normalizePropertyCheckInType(item == null ? null : item.checkInType);
+    }
+
     private void showAddPropertyDialog() {
         View view = LayoutInflater.from(this).inflate(R.layout.dialog_add_property, null, false);
 

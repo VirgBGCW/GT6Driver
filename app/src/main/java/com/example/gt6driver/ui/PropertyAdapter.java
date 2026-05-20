@@ -18,6 +18,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class PropertyAdapter extends RecyclerView.Adapter<PropertyAdapter.VH> {
+    private static final String TYPE_AWAITING_ARRIVAL = "AwaitingArrival";
+    private static final String TYPE_ARRIVED = "360450009";
+    private static final String TYPE_LEFT_IN_CAR = "LeftInCar";
 
     public interface OnCheckInTypeChangedListener {
         void onCheckInTypeChanged(@NonNull PropertyItem item, int position, @NonNull String newCheckInType);
@@ -51,7 +54,7 @@ public class PropertyAdapter extends RecyclerView.Adapter<PropertyAdapter.VH> {
         String qty = (it.quantity != null) ? ("x" + it.quantity) : "";
         String desc = safe(it.propertyDescription);
         String notes = safe(it.notes);
-        String checkInType = normalizeCheckInType(it.checkInType);
+        String checkInType = currentCheckInType(it);
         boolean canUpdate = !it.getPropertyIdForApi().isEmpty();
         boolean enabled = canUpdate && !it.isUpdatingCheckInType;
 
@@ -95,7 +98,7 @@ public class PropertyAdapter extends RecyclerView.Adapter<PropertyAdapter.VH> {
             if (adapterPosition == RecyclerView.NO_POSITION) return;
 
             String newType = typeForButtonId(checkedId);
-            String currentType = normalizeCheckInType(items.get(adapterPosition).checkInType);
+            String currentType = currentCheckInType(items.get(adapterPosition));
             if (newType.equals(currentType)) return;
 
             if (listener != null) {
@@ -132,35 +135,46 @@ public class PropertyAdapter extends RecyclerView.Adapter<PropertyAdapter.VH> {
 
     private static int buttonIdForType(String type) {
         switch (normalizeCheckInType(type)) {
-            case "Removed":
+            case TYPE_ARRIVED:
                 return R.id.btnRemoved;
-            case "LeftInCar":
+            case TYPE_LEFT_IN_CAR:
                 return R.id.btnLeftInCar;
-            case "AwaitingArrival":
+            case TYPE_AWAITING_ARRIVAL:
             default:
                 return R.id.btnAwaitingArrival;
         }
     }
 
     private static String typeForButtonId(int checkedId) {
-        if (checkedId == R.id.btnRemoved) return "Removed";
-        if (checkedId == R.id.btnLeftInCar) return "LeftInCar";
-        return "AwaitingArrival";
+        if (checkedId == R.id.btnRemoved) return TYPE_ARRIVED;
+        if (checkedId == R.id.btnLeftInCar) return TYPE_LEFT_IN_CAR;
+        return TYPE_AWAITING_ARRIVAL;
     }
 
     private static String normalizeCheckInType(String value) {
-        if (value == null) return "AwaitingArrival";
+        if (value == null) return TYPE_AWAITING_ARRIVAL;
 
         String normalized = value.trim()
                 .replace(" ", "")
                 .replace("-", "")
                 .replace("_", "");
 
-        if (normalized.equalsIgnoreCase("Removed")) return "Removed";
-        if (normalized.equalsIgnoreCase("LeftInCar") || normalized.equalsIgnoreCase("LeftInVehicle")) {
-            return "LeftInCar";
+        if (normalized.equalsIgnoreCase(TYPE_ARRIVED)
+                || normalized.equalsIgnoreCase("Arrived")
+                || normalized.equalsIgnoreCase("Removed")) {
+            return TYPE_ARRIVED;
         }
-        return "AwaitingArrival";
+        if (normalized.equalsIgnoreCase("LeftInCar") || normalized.equalsIgnoreCase("LeftInVehicle")) {
+            return TYPE_LEFT_IN_CAR;
+        }
+        return TYPE_AWAITING_ARRIVAL;
+    }
+
+    private static String currentCheckInType(PropertyItem item) {
+        if (item != null && Boolean.TRUE.equals(item.isLeftInCar)) {
+            return TYPE_LEFT_IN_CAR;
+        }
+        return normalizeCheckInType(item == null ? null : item.checkInType);
     }
 
     private static String safe(String s) {

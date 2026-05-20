@@ -24,6 +24,9 @@ public class PropertyItem {
     @SerializedName(value = "checkInType", alternate = {"propertyItemCheckinType"})
     public String checkInType;
 
+    @SerializedName("isLeftInCar")
+    public Boolean isLeftInCar;
+
     public String propertyReceivedBy;
     public String status;
 

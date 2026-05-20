@@ -360,15 +360,11 @@ public class MediaUploadWorker extends Worker {
                 MediaStore.MediaColumns.RELATIVE_PATH
         };
 
-        String sel = MediaStore.MediaColumns.DISPLAY_NAME + "=? AND (" +
-                MediaStore.MediaColumns.RELATIVE_PATH + " LIKE ? OR " +
-                MediaStore.MediaColumns.RELATIVE_PATH + " LIKE ?" +
-                ")";
+        String relPath = android.os.Environment.DIRECTORY_DOWNLOADS + "/GT6/" + consignmentId + "/";
+        String sel = MediaStore.MediaColumns.DISPLAY_NAME + "=? AND " +
+                MediaStore.MediaColumns.RELATIVE_PATH + "=?";
 
-        String like1 = "%/GT6/" + consignmentId + "/%";
-        String like2 = "%/GT6/%";
-
-        try (Cursor c = cr.query(table, proj, sel, new String[]{sidecarName, like1, like2},
+        try (Cursor c = cr.query(table, proj, sel, new String[]{sidecarName, relPath},
                 MediaStore.MediaColumns.DATE_ADDED + " DESC")) {
 
             if (c != null && c.moveToFirst()) {
