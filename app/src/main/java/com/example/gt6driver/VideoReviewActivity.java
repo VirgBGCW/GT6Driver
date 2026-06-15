@@ -274,6 +274,7 @@ public class VideoReviewActivity extends AppCompatActivity {
         Intent intent = new Intent(this, VideoPlayerActivity.class);
         intent.putExtra(VideoPlayerActivity.EXTRA_VIDEO_TITLE, title);
         intent.putExtra(VideoPlayerActivity.EXTRA_VIDEO_URI, url.trim());
+        intent.putExtra(VideoPlayerActivity.EXTRA_FORCE_LANDSCAPE, true);
         startActivity(intent);
     }
 

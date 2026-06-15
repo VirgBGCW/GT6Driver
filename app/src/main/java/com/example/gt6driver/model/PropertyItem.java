@@ -13,6 +13,14 @@ public class PropertyItem {
     public Object propertyId;
 
     public String propertyType;
+
+    @SerializedName(value = "propertyItemTypeId", alternate = {
+            "propertyTypeId",
+            "propertyItemType",
+            "typeId"
+    })
+    public Object propertyItemTypeId;
+
     public String propertyDescription;
     public String notes;
     public String releaseTo;

@@ -60,6 +60,7 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
     private static final String BLOB_BASE = "https://stgt6driverappprod.blob.core.windows.net/";
     private static final String COMPRESSED_VIDEO_BASE =
             "https://stgt6driverappprod.blob.core.windows.net/compressed-files/";
+    private static final String DEFAULT_OWNER_OTHER_PARTY = "STORAGE LOT";
 
     private static final String EXTRA_VEHICLE        = "vehicle";
     private static final String EXTRA_OPPORTUNITY_ID = "opportunityId";
@@ -125,7 +126,6 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
     private MaterialCardView videoPanel;
     private View videoGroup;
     private ImageView videoIcon;
-    private ImageView videoPromptIcon;
     private MaterialButton btnVideoAccept; // launches ReleaseVideoActivity
     private boolean videoExpanded = false;
 
@@ -221,7 +221,6 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
         videoPanel      = findViewById(R.id.videoPanel);
         videoGroup      = findViewById(R.id.videoGroup);
         videoIcon       = findViewById(R.id.videoIcon);
-        videoPromptIcon = findViewById(R.id.videoPromptIcon);
         btnVideoAccept  = findViewById(R.id.btnVideoAccept);
 
         // Confirm
@@ -560,20 +559,15 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
         if (btnGateNo != null) {
             btnGateNo.setOnClickListener(v -> {
                 gateRelease = false;
-                setStatusIcon(gateIcon, false);
-                if (gateWarning != null) gateWarning.setVisibility(View.VISIBLE);
+                setStatusIcon(gateIcon, true);
+                if (gateWarning != null) gateWarning.setVisibility(View.GONE);
+                setGateExpanded(false);
+                refreshConfirmEnabled();
             });
         }
 
         // VIDEO: use ReleaseVideoActivity
         if (videoPanel != null) videoPanel.setOnClickListener(v -> toggleVideoPanel());
-        if (videoPromptIcon != null) {
-            videoPromptIcon.setOnClickListener(v -> {
-                setVideoExpanded(true);
-                hideKeyboard();
-                ensureCameraThenLaunchVideo();
-            });
-        }
 
         if (btnVideoAccept != null) {
             btnVideoAccept.setText("RECORD VIDEO");
@@ -615,10 +609,8 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
         // Prefill from server
         repo.fetchRelease(opportunityId, new DriverTaskRepository.ReleaseCallback() {
             @Override public void onSuccess(ReleasePayload r) {
-                if (r != null) {
-                    releaseModel = r;
-                    applyReleaseToUi(r);
-                }
+                releaseModel = r != null ? r : new ReleasePayload();
+                applyReleaseToUi(releaseModel);
             }
             @Override public void onError(Throwable t) {}
             @Override public void onHttpError(int code, String message) {}
@@ -682,6 +674,11 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
         final String sidecarName = baseNameNoExt + ".meta.json";
 
         try {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                Log.w(TAG, "Sidecar(Download): skipped on Android version below scoped Downloads support");
+                return false;
+            }
+
             final String relPath = Environment.DIRECTORY_DOWNLOADS + "/GT6/" + consignmentId + "/";
 
             Uri collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI;
@@ -824,7 +821,11 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
         p.ownerVerification.isTfx      = isTfx;
         p.ownerVerification.isOther    = isOther;
 
-        p.ownerVerification.otherTransportName = (isOther ? readOtherParty() : null);
+        String otherParty = readOtherParty();
+        if (isOther && TextUtils.isEmpty(otherParty)) {
+            otherParty = DEFAULT_OWNER_OTHER_PARTY;
+        }
+        p.ownerVerification.otherTransportName = (isOther ? otherParty : null);
 
         if (TextUtils.isEmpty(p.ownerVerification.licensePhotoUrl)) {
             p.ownerVerification.licensePhotoUrl = "";
@@ -836,8 +837,10 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
         return p;
     }
 
-    // NOTE: applyReleaseToUi(...) unchanged from your original (keep yours as-is)
     private void applyReleaseToUi(ReleasePayload r) {
+        applyOwnerVerificationToUi(r != null ? r.ownerVerification : null);
+        applyGateReleaseToUi(r != null ? r.gateRelease : null);
+
         String url = (r != null && r.video != null) ? r.video.videoUrl : "";
         boolean hasUrl = !TextUtils.isEmpty(url);
 
@@ -862,6 +865,65 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
         }
 
         refreshConfirmEnabled();
+    }
+
+    private void applyOwnerVerificationToUi(ReleasePayload.OwnerVerification ownerVerification) {
+        if (!hasOwnerVerificationSelection(ownerVerification)) {
+            applyDefaultOwnerVerification();
+            return;
+        }
+
+        if (Boolean.TRUE.equals(ownerVerification.isOwner)) {
+            selectOwnerOption(cbOwner);
+        } else if (Boolean.TRUE.equals(ownerVerification.isReliable)) {
+            selectOwnerOption(cbReliable);
+        } else if (Boolean.TRUE.equals(ownerVerification.isTfx)) {
+            selectOwnerOption(cbTFX);
+        } else {
+            selectOwnerOption(cbOther);
+            String otherName = ownerVerification.otherTransportName;
+            if (TextUtils.isEmpty(otherName)) {
+                otherName = DEFAULT_OWNER_OTHER_PARTY;
+            }
+            if (enterTowInput != null) {
+                enterTowInput.setText(otherName);
+            }
+        }
+
+        ownerDone = true;
+        setStatusIcon(ownerIcon, true);
+        setOwnerExpanded(false);
+    }
+
+    private boolean hasOwnerVerificationSelection(ReleasePayload.OwnerVerification ownerVerification) {
+        return ownerVerification != null
+                && (Boolean.TRUE.equals(ownerVerification.isOwner)
+                || Boolean.TRUE.equals(ownerVerification.isReliable)
+                || Boolean.TRUE.equals(ownerVerification.isTfx)
+                || Boolean.TRUE.equals(ownerVerification.isOther));
+    }
+
+    private void applyDefaultOwnerVerification() {
+        selectOwnerOption(cbOther);
+        if (enterTowInput != null) {
+            enterTowInput.setText(DEFAULT_OWNER_OTHER_PARTY);
+        }
+        ownerDone = true;
+        setStatusIcon(ownerIcon, true);
+        setOwnerExpanded(false);
+    }
+
+    private void applyGateReleaseToUi(ReleasePayload.GateRelease gateReleaseRecord) {
+        if (gateReleaseRecord == null || gateReleaseRecord.gateReleaseTicket == null) {
+            return;
+        }
+
+        gateRelease = Boolean.TRUE.equals(gateReleaseRecord.gateReleaseTicket);
+        setStatusIcon(gateIcon, true);
+        if (gateWarning != null) {
+            gateWarning.setVisibility(View.GONE);
+        }
+        setGateExpanded(false);
     }
 
     private String consignmentSubdir() {

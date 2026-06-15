@@ -128,13 +128,13 @@
         <activity
             android:name=".ReleaseVideoActivity"
             android:exported="false"
-            android:screenOrientation="portrait" />
+            android:screenOrientation="sensorLandscape" />
 
         <!-- ✅ Full-screen CameraX recorder (Intake) -->
         <activity
             android:name=".IntakeVideoActivity"
             android:exported="false"
-            android:screenOrientation="portrait" />
+            android:screenOrientation="sensorLandscape" />
 
         <!-- ✅ Property screen (explicit exported + orientation to match the rest) -->
         <activity
@@ -187,7 +187,6 @@
 
     </application>
 </manifest>
-
 
 
 

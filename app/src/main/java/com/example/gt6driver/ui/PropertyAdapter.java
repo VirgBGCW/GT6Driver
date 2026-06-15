@@ -39,6 +39,10 @@ public class PropertyAdapter extends RecyclerView.Adapter<PropertyAdapter.VH> {
         notifyDataSetChanged();
     }
 
+    public List<PropertyItem> getItemsSnapshot() {
+        return new ArrayList<>(items);
+    }
+
     @NonNull
     @Override
     public VH onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {

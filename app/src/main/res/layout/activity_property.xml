@@ -171,6 +171,25 @@
         app:layout_constraintEnd_toEndOf="@id/rightGuide"
         app:layout_constraintTop_toBottomOf="@id/vehiclePanel" />
 
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnPrintPropertyForm"
+        android:layout_width="0dp"
+        android:layout_height="52dp"
+        android:layout_marginTop="8dp"
+        android:text="@string/print_form"
+        android:textAllCaps="false"
+        android:textStyle="bold"
+        android:backgroundTint="#FFFFFF"
+        android:textColor="#111111"
+        app:cornerRadius="12dp"
+        app:icon="@drawable/ic_print_24"
+        app:iconGravity="textStart"
+        app:iconPadding="8dp"
+        app:iconTint="#111111"
+        app:layout_constraintStart_toStartOf="@id/leftGuide"
+        app:layout_constraintEnd_toEndOf="@id/rightGuide"
+        app:layout_constraintTop_toBottomOf="@id/btnAddProperty" />
+
     <!-- ✅ PROPERTY LIST -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/rvProperty"
@@ -182,7 +201,7 @@
         android:clipToPadding="false"
         app:layout_constraintStart_toStartOf="@id/leftGuide"
         app:layout_constraintEnd_toEndOf="@id/rightGuide"
-        app:layout_constraintTop_toBottomOf="@id/btnAddProperty"
+        app:layout_constraintTop_toBottomOf="@id/btnPrintPropertyForm"
         app:layout_constraintBottom_toTopOf="@id/btnCloseProperty" />
 
     <com.google.android.material.card.MaterialCardView
@@ -197,7 +216,7 @@
         app:cardBackgroundColor="#2a0f0f"
         app:layout_constraintStart_toStartOf="@id/leftGuide"
         app:layout_constraintEnd_toEndOf="@id/rightGuide"
-        app:layout_constraintTop_toBottomOf="@id/btnAddProperty"
+        app:layout_constraintTop_toBottomOf="@id/btnPrintPropertyForm"
         app:layout_constraintBottom_toTopOf="@id/btnCloseProperty">
 
         <TextView

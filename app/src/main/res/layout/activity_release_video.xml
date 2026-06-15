@@ -16,11 +16,30 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:implementationMode="performance" />
 
+    <TextView
+        android:id="@+id/minimumTimerText"
+        android:layout_width="wrap_content"
+        android:layout_height="44dp"
+        android:layout_marginTop="16dp"
+        android:background="#CC0B1220"
+        android:gravity="center"
+        android:minWidth="220dp"
+        android:paddingStart="18dp"
+        android:paddingEnd="18dp"
+        android:text="@string/minimum_recording_countdown_initial"
+        android:textColor="@android:color/white"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
     <FrameLayout
         android:id="@+id/bottomControlsContainer"
-        android:layout_width="0dp"
+        android:layout_width="360dp"
         android:layout_height="wrap_content"
-        android:layout_margin="20dp"
+        android:layout_marginBottom="16dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
@@ -28,12 +47,20 @@
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnRecordStart"
             android:layout_width="match_parent"
-            android:layout_height="64dp"
-            android:text="RECORD"
+            android:layout_height="48dp"
+            android:minHeight="0dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:text="@string/record"
             android:textStyle="bold"
+            android:textSize="15sp"
             android:textColor="@android:color/white"
             android:backgroundTint="#D32F2F"
-            app:cornerRadius="18dp" />
+            app:cornerRadius="14dp"
+            app:icon="@drawable/ic_record_24"
+            app:iconGravity="textStart"
+            app:iconPadding="8dp"
+            app:iconTint="@android:color/white" />
 
         <LinearLayout
             android:id="@+id/recordingControlsRow"
@@ -45,38 +72,62 @@
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnPauseResume"
                 android:layout_width="0dp"
-                android:layout_height="64dp"
+                android:layout_height="48dp"
                 android:layout_weight="1"
-                android:layout_marginEnd="8dp"
-                android:text="PAUSE"
+                android:layout_marginEnd="6dp"
+                android:minHeight="0dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:text="@string/pause"
                 android:textStyle="bold"
+                android:textSize="14sp"
                 android:textColor="@android:color/white"
                 android:backgroundTint="#455A64"
-                app:cornerRadius="18dp" />
+                app:cornerRadius="14dp"
+                app:icon="@drawable/ic_pause_24"
+                app:iconGravity="textStart"
+                app:iconPadding="6dp"
+                app:iconTint="@android:color/white" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnStopRecording"
                 android:layout_width="0dp"
-                android:layout_height="64dp"
+                android:layout_height="48dp"
                 android:layout_weight="1"
-                android:layout_marginStart="8dp"
-                android:text="STOP"
+                android:layout_marginStart="6dp"
+                android:minHeight="0dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:text="@string/stop"
                 android:textStyle="bold"
+                android:textSize="14sp"
                 android:textColor="@android:color/white"
                 android:backgroundTint="#D32F2F"
-                app:cornerRadius="18dp" />
+                app:cornerRadius="14dp"
+                app:icon="@drawable/ic_stop_24"
+                app:iconGravity="textStart"
+                app:iconPadding="6dp"
+                app:iconTint="@android:color/white" />
         </LinearLayout>
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnPausedResumeFull"
             android:layout_width="match_parent"
-            android:layout_height="64dp"
-            android:text="PAUSED - PRESS TO RESUME"
+            android:layout_height="48dp"
+            android:minHeight="0dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:text="@string/paused_tap_to_resume"
             android:textStyle="bold"
+            android:textSize="14sp"
             android:textColor="@android:color/black"
             android:backgroundTint="#FBC02D"
             android:visibility="gone"
-            app:cornerRadius="18dp" />
+            app:cornerRadius="14dp"
+            app:icon="@drawable/ic_pause_24"
+            app:iconGravity="textStart"
+            app:iconPadding="8dp"
+            app:iconTint="@android:color/black" />
     </FrameLayout>
 
     <ImageButton
@@ -84,8 +135,9 @@
         android:layout_width="48dp"
         android:layout_height="48dp"
         android:background="?attr/selectableItemBackgroundBorderless"
-        android:tint="@android:color/white"
+        android:contentDescription="@string/cancel"
         android:src="@android:drawable/ic_menu_close_clear_cancel"
+        app:tint="@android:color/white"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         android:layout_margin="12dp"/>

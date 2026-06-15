@@ -1,6 +1,7 @@
 package com.example.gt6driver;
 
 import android.Manifest;
+import android.annotation.SuppressLint;
 import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator;
 import android.content.ContentValues;
@@ -12,12 +13,17 @@ import android.media.MediaMetadataRetriever;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.SystemClock;
 import android.util.Log;
 import android.util.TypedValue;
+import android.view.Surface;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
+import android.widget.TextView;
 import android.widget.Toast;
 import android.provider.MediaStore;
 
@@ -46,6 +52,7 @@ import com.google.android.material.button.MaterialButton;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.common.util.concurrent.ListenableFuture;
 
+import java.util.Locale;
 import java.util.concurrent.Executor;
 
 public class ReleaseVideoActivity extends AppCompatActivity {
@@ -71,6 +78,7 @@ public class ReleaseVideoActivity extends AppCompatActivity {
     private LinearLayout recordingControlsRow;
     private View bottomControlsContainer;
     private ImageButton btnClose;
+    private TextView minimumTimerText;
 
     private Executor mainExecutor;
     private ListenableFuture<ProcessCameraProvider> cameraProviderFuture;
@@ -81,8 +89,20 @@ public class ReleaseVideoActivity extends AppCompatActivity {
 
     private boolean isRecording = false;
     private boolean isPaused = false;
+    private long accumulatedRecordingMs = 0L;
+    private long activeRecordingStartedAtMs = 0L;
 
     private ObjectAnimator pausedBlinkAnimator;
+    private final Handler timerHandler = new Handler(Looper.getMainLooper());
+    private final Runnable minimumTimerRunnable = new Runnable() {
+        @Override
+        public void run() {
+            updateMinimumTimerText();
+            if (isRecording) {
+                timerHandler.postDelayed(this, 500L);
+            }
+        }
+    };
 
     private String consignmentId;
     private boolean enableAudio;
@@ -103,6 +123,7 @@ public class ReleaseVideoActivity extends AppCompatActivity {
         recordingControlsRow = findViewById(R.id.recordingControlsRow);
         bottomControlsContainer = findViewById(R.id.bottomControlsContainer);
         btnClose = findViewById(R.id.btnClose);
+        minimumTimerText = findViewById(R.id.minimumTimerText);
 
         applySystemBarInsets();
         mainExecutor = ContextCompat.getMainExecutor(this);
@@ -251,10 +272,10 @@ public class ReleaseVideoActivity extends AppCompatActivity {
 
         if (!enabled) {
             stopPausedIndicator();
-            btnPauseResume.setText("PAUSE");
+            btnPauseResume.setText(R.string.pause);
             btnPauseResume.setBackgroundTintList(ColorStateList.valueOf(PAUSE_COLOR_NORMAL));
 
-            btnPausedResumeFull.setText("PAUSED - PRESS TO RESUME");
+            btnPausedResumeFull.setText(R.string.paused_tap_to_resume);
             btnPausedResumeFull.setBackgroundTintList(ColorStateList.valueOf(PAUSE_COLOR_PAUSED));
             btnPausedResumeFull.setTextColor(Color.BLACK);
 
@@ -263,7 +284,7 @@ public class ReleaseVideoActivity extends AppCompatActivity {
     }
 
     private void showPausedIndicator() {
-        btnPausedResumeFull.setText("PAUSED - PRESS TO RESUME");
+        btnPausedResumeFull.setText(R.string.paused_tap_to_resume);
         btnPausedResumeFull.setBackgroundTintList(ColorStateList.valueOf(PAUSE_COLOR_PAUSED));
         btnPausedResumeFull.setTextColor(Color.BLACK);
         updateRecordingControls();
@@ -285,12 +306,12 @@ public class ReleaseVideoActivity extends AppCompatActivity {
         }
 
         btnPauseResume.setAlpha(1f);
-        btnPauseResume.setText("PAUSE");
+        btnPauseResume.setText(R.string.pause);
         btnPauseResume.setTextColor(Color.WHITE);
         btnPauseResume.setBackgroundTintList(ColorStateList.valueOf(PAUSE_COLOR_NORMAL));
 
         btnPausedResumeFull.setAlpha(1f);
-        btnPausedResumeFull.setText("PAUSED - PRESS TO RESUME");
+        btnPausedResumeFull.setText(R.string.paused_tap_to_resume);
         btnPausedResumeFull.setTextColor(Color.BLACK);
         btnPausedResumeFull.setBackgroundTintList(ColorStateList.valueOf(PAUSE_COLOR_PAUSED));
 
@@ -348,7 +369,10 @@ public class ReleaseVideoActivity extends AppCompatActivity {
 
         cameraProvider.unbindAll();
 
-        Preview preview = new Preview.Builder().build();
+        int targetRotation = targetRotation();
+        Preview preview = new Preview.Builder()
+                .setTargetRotation(targetRotation)
+                .build();
         preview.setSurfaceProvider(previewView.getSurfaceProvider());
 
         Recorder recorder = new Recorder.Builder()
@@ -356,6 +380,7 @@ public class ReleaseVideoActivity extends AppCompatActivity {
                 .build();
 
         videoCapture = VideoCapture.withOutput(recorder);
+        videoCapture.setTargetRotation(targetRotation);
 
         cameraProvider.bindToLifecycle(
                 this,
@@ -365,6 +390,14 @@ public class ReleaseVideoActivity extends AppCompatActivity {
         );
     }
 
+    private int targetRotation() {
+        if (getWindowManager() == null || getWindowManager().getDefaultDisplay() == null) {
+            return Surface.ROTATION_90;
+        }
+        return getWindowManager().getDefaultDisplay().getRotation();
+    }
+
+    @SuppressLint("MissingPermission")
     private void startRecording() {
         if (videoCapture == null) {
             Toast.makeText(this, "Camera not ready.", Toast.LENGTH_SHORT).show();
@@ -382,6 +415,7 @@ public class ReleaseVideoActivity extends AppCompatActivity {
             if (event instanceof VideoRecordEvent.Start) {
                 isRecording = true;
                 isPaused = false;
+                startMinimumTimer();
                 setPauseEnabled(true);
                 stopPausedIndicator();
                 updateRecordingControls();
@@ -389,15 +423,18 @@ public class ReleaseVideoActivity extends AppCompatActivity {
 
             } else if (event instanceof VideoRecordEvent.Pause) {
                 isPaused = true;
+                pauseMinimumTimer();
                 showPausedIndicator();
 
             } else if (event instanceof VideoRecordEvent.Resume) {
                 isPaused = false;
+                resumeMinimumTimer();
                 stopPausedIndicator();
 
             } else if (event instanceof VideoRecordEvent.Finalize) {
                 isRecording = false;
                 isPaused = false;
+                stopMinimumTimer();
                 setPauseEnabled(false);
                 stopPausedIndicator();
                 updateRecordingControls();
@@ -450,6 +487,78 @@ public class ReleaseVideoActivity extends AppCompatActivity {
             }
         } catch (Exception ignored) {
         }
+    }
+
+    private void startMinimumTimer() {
+        accumulatedRecordingMs = 0L;
+        activeRecordingStartedAtMs = SystemClock.elapsedRealtime();
+        if (minimumTimerText != null) {
+            minimumTimerText.setVisibility(View.VISIBLE);
+        }
+        timerHandler.removeCallbacks(minimumTimerRunnable);
+        updateMinimumTimerText();
+        timerHandler.postDelayed(minimumTimerRunnable, 500L);
+    }
+
+    private void pauseMinimumTimer() {
+        if (activeRecordingStartedAtMs > 0L) {
+            accumulatedRecordingMs += SystemClock.elapsedRealtime() - activeRecordingStartedAtMs;
+            activeRecordingStartedAtMs = 0L;
+        }
+        updateMinimumTimerText();
+    }
+
+    private void resumeMinimumTimer() {
+        activeRecordingStartedAtMs = SystemClock.elapsedRealtime();
+        updateMinimumTimerText();
+    }
+
+    private void stopMinimumTimer() {
+        timerHandler.removeCallbacks(minimumTimerRunnable);
+        accumulatedRecordingMs = 0L;
+        activeRecordingStartedAtMs = 0L;
+        if (minimumTimerText != null) {
+            minimumTimerText.setVisibility(View.GONE);
+        }
+    }
+
+    private void updateMinimumTimerText() {
+        if (minimumTimerText == null) {
+            return;
+        }
+        if (!isRecording) {
+            minimumTimerText.setVisibility(View.GONE);
+            return;
+        }
+
+        long elapsedMs = currentRecordingMs();
+        long remainingMs = Math.max(0L, MIN_VALID_VIDEO_MS - elapsedMs);
+        minimumTimerText.setVisibility(View.VISIBLE);
+        if (remainingMs > 0L) {
+            minimumTimerText.setBackgroundColor(Color.parseColor("#CC0B1220"));
+            int label = isPaused ? R.string.minimum_recording_paused : R.string.minimum_recording_countdown;
+            minimumTimerText.setText(getString(label, formatRemainingTime(remainingMs)));
+        } else {
+            minimumTimerText.setBackgroundColor(Color.parseColor("#CC1B5E20"));
+            minimumTimerText.setText(getString(R.string.minimum_recording_met, formatElapsedTime(elapsedMs)));
+        }
+    }
+
+    private long currentRecordingMs() {
+        if (isRecording && !isPaused && activeRecordingStartedAtMs > 0L) {
+            return accumulatedRecordingMs + (SystemClock.elapsedRealtime() - activeRecordingStartedAtMs);
+        }
+        return accumulatedRecordingMs;
+    }
+
+    private String formatRemainingTime(long millis) {
+        long totalSeconds = Math.max(0L, (millis + 999L) / 1000L);
+        return String.format(Locale.US, "%d:%02d", totalSeconds / 60L, totalSeconds % 60L);
+    }
+
+    private String formatElapsedTime(long millis) {
+        long totalSeconds = Math.max(0L, millis / 1000L);
+        return String.format(Locale.US, "%d:%02d", totalSeconds / 60L, totalSeconds % 60L);
     }
 
     private MediaStoreOutputOptions buildOutputOptions() {
@@ -530,5 +639,11 @@ public class ReleaseVideoActivity extends AppCompatActivity {
     protected void onStop() {
         super.onStop();
         Log.i(TAG, "onStop called. recording=" + isRecording);
+    }
+
+    @Override
+    protected void onDestroy() {
+        timerHandler.removeCallbacks(minimumTimerRunnable);
+        super.onDestroy();
     }
 }

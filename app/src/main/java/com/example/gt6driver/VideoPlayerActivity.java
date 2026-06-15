@@ -1,5 +1,6 @@
 package com.example.gt6driver;
 
+import android.content.pm.ActivityInfo;
 import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Bundle;
@@ -14,12 +15,16 @@ public class VideoPlayerActivity extends AppCompatActivity {
 
     public static final String EXTRA_VIDEO_URI = "video_uri";
     public static final String EXTRA_VIDEO_TITLE = "video_title";
+    public static final String EXTRA_FORCE_LANDSCAPE = "force_landscape";
 
     private VideoView videoView;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        if (getIntent().getBooleanExtra(EXTRA_FORCE_LANDSCAPE, false)) {
+            setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+        }
         setContentView(R.layout.activity_video_player);
 
         videoView = findViewById(R.id.videoView);

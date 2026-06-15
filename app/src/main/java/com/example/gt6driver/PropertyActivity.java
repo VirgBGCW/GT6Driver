@@ -3,6 +3,8 @@ package com.example.gt6driver;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.os.Bundle;
+import android.print.PrintAttributes;
+import android.print.PrintManager;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -33,10 +35,12 @@ import com.google.android.material.textfield.MaterialAutoCompleteTextView;
 import com.google.android.material.textfield.TextInputEditText;
 import com.google.android.material.textfield.TextInputLayout;
 import com.example.gt6driver.net.PropertyCheckinTypeUpdateRequest;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
+import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 
 import retrofit2.Call;
 import retrofit2.Callback;
@@ -54,7 +58,7 @@ public class PropertyActivity extends AppCompatActivity {
      * Property types from CSV (sorted by Name).
      * UI shows Name, but API must send Property ID as the "type" value.
      */
-    private static final List<PropertyTypeOption> PROPERTY_TYPES = buildPropertyTypesSorted();
+    private static final List<PropertyTypeCatalog.Option> PROPERTY_TYPES = PropertyTypeCatalog.optionsSorted();
 
     // Vehicle panel views
     private ImageView panelImage;
@@ -73,6 +77,7 @@ public class PropertyActivity extends AppCompatActivity {
     // Buttons
     private MaterialButton btnCloseProperty;
     private MaterialButton btnAddProperty;
+    private MaterialButton btnPrintPropertyForm;
 
     // Inputs/state
     private VehicleDetail vehicle;
@@ -118,6 +123,10 @@ public class PropertyActivity extends AppCompatActivity {
         if (btnAddProperty != null) {
             btnAddProperty.setOnClickListener(v -> showAddPropertyDialog());
         }
+
+        if (btnPrintPropertyForm != null) {
+            btnPrintPropertyForm.setOnClickListener(v -> printPropertyForm());
+        }
     }
 
     private void bindViews() {
@@ -135,6 +144,7 @@ public class PropertyActivity extends AppCompatActivity {
 
         btnCloseProperty = findViewById(R.id.btnCloseProperty);
         btnAddProperty = findViewById(R.id.btnAddProperty);
+        btnPrintPropertyForm = findViewById(R.id.btnPrintPropertyForm);
 
         propertyEmptyState = findViewById(R.id.propertyEmptyState);
     }
@@ -174,27 +184,31 @@ public class PropertyActivity extends AppCompatActivity {
             return;
         }
 
-        String previousType = currentPropertyCheckInType(item);
-        String targetType = normalizePropertyCheckInType(newCheckInType);
-        if (targetType.equals(previousType)) return;
+        String previousSelectionType = currentPropertyCheckInType(item);
+        String targetSelectionType = normalizePropertyCheckInType(newCheckInType);
+        if (targetSelectionType.equals(previousSelectionType)) return;
 
+        String previousCheckInType = item.checkInType;
         Boolean previousIsLeftInCar = item.isLeftInCar;
-        item.checkInType = targetType;
-        item.isLeftInCar = PROPERTY_STATUS_LEFT_IN_CAR.equals(targetType);
+        boolean isLeftInCar = PROPERTY_STATUS_LEFT_IN_CAR.equals(targetSelectionType);
+        String apiCheckInType = isLeftInCar ? PROPERTY_STATUS_ARRIVED : targetSelectionType;
+
+        item.checkInType = apiCheckInType;
+        item.isLeftInCar = isLeftInCar;
         item.isUpdatingCheckInType = true;
         adapter.notifyItemChanged(position);
 
         OpportunityApi api = ApiClient.getMemberApi().create(OpportunityApi.class);
-        boolean isLeftInCar = PROPERTY_STATUS_LEFT_IN_CAR.equals(targetType);
-        PropertyCheckinTypeUpdateRequest body = new PropertyCheckinTypeUpdateRequest(targetType, isLeftInCar);
+        PropertyCheckinTypeUpdateRequest body = new PropertyCheckinTypeUpdateRequest(apiCheckInType, isLeftInCar);
         Call<Void> call = api.updateConsignmentPropertyCheckinType(propertyId, body);
 
         try {
             String payloadJson = new com.google.gson.Gson().toJson(body);
             Log.i(HTTP_LOG_TAG, call.request().method() + " " + call.request().url());
             Log.i(HTTP_LOG_TAG, "Property PUT context: propertyId=" + propertyId
-                    + ", previousType=" + previousType
-                    + ", targetType=" + targetType);
+                    + ", previousSelectionType=" + previousSelectionType
+                    + ", targetSelectionType=" + targetSelectionType
+                    + ", apiCheckInType=" + apiCheckInType);
             Log.i(HTTP_LOG_TAG, "Property PUT payload JSON: " + payloadJson);
         } catch (Throwable ignored) {}
 
@@ -204,12 +218,12 @@ public class PropertyActivity extends AppCompatActivity {
                 item.isUpdatingCheckInType = false;
 
                 if (response.isSuccessful()) {
-                    item.checkInType = targetType;
+                    item.checkInType = apiCheckInType;
                     item.isLeftInCar = isLeftInCar;
                     adapter.notifyItemChanged(position);
                     Toast.makeText(PropertyActivity.this, "Property status updated", Toast.LENGTH_SHORT).show();
                 } else {
-                    item.checkInType = previousType;
+                    item.checkInType = previousCheckInType;
                     item.isLeftInCar = previousIsLeftInCar;
                     adapter.notifyItemChanged(position);
 
@@ -226,7 +240,7 @@ public class PropertyActivity extends AppCompatActivity {
             @Override
             public void onFailure(Call<Void> call, Throwable t) {
                 item.isUpdatingCheckInType = false;
-                item.checkInType = previousType;
+                item.checkInType = previousCheckInType;
                 item.isLeftInCar = previousIsLeftInCar;
                 adapter.notifyItemChanged(position);
 
@@ -305,6 +319,7 @@ public class PropertyActivity extends AppCompatActivity {
                     List<PropertyItem> list = response.body();
 
                     if (list == null || list.isEmpty()) {
+                        adapter.setItems(Collections.emptyList());
                         rvProperty.setVisibility(View.GONE);
                         if (propertyEmptyState != null) propertyEmptyState.setVisibility(View.VISIBLE);
                     } else {
@@ -314,6 +329,7 @@ public class PropertyActivity extends AppCompatActivity {
                     }
 
                 } else if (response.code() == 404) {
+                    adapter.setItems(Collections.emptyList());
                     rvProperty.setVisibility(View.GONE);
                     if (propertyEmptyState != null) propertyEmptyState.setVisibility(View.VISIBLE);
 
@@ -340,6 +356,85 @@ public class PropertyActivity extends AppCompatActivity {
             }
         });
     }
+
+    private void printPropertyForm() {
+        PrintManager printManager = (PrintManager) getSystemService(PRINT_SERVICE);
+        if (printManager == null) {
+            Toast.makeText(this, "Print service is not available.", Toast.LENGTH_LONG).show();
+            return;
+        }
+
+        List<PropertyItem> items = adapter != null
+                ? adapter.getItemsSnapshot()
+                : Collections.emptyList();
+
+        PropertyPrintDocumentAdapter.Data data = buildPropertyPrintData(items);
+        String lot = data.lotNumber.isEmpty() ? "Vehicle" : ("Lot " + data.lotNumber);
+        String jobName = "GT6 Property Check-In - " + lot;
+
+        PrintAttributes attributes = new PrintAttributes.Builder()
+                .setMediaSize(PrintAttributes.MediaSize.NA_LETTER)
+                .setColorMode(PrintAttributes.COLOR_MODE_COLOR)
+                .setMinMargins(PrintAttributes.Margins.NO_MARGINS)
+                .build();
+
+        printManager.print(jobName, new PropertyPrintDocumentAdapter(this, data), attributes);
+    }
+
+    private PropertyPrintDocumentAdapter.Data buildPropertyPrintData(List<PropertyItem> items) {
+        PropertyPrintDocumentAdapter.Data data = new PropertyPrintDocumentAdapter.Data();
+
+        data.eventName = eventName.isEmpty() ? "GT6" : eventName;
+        data.year = (vehicle != null && vehicle.year != null) ? String.valueOf(vehicle.year) : "";
+
+        String make = vehicle != null ? safe(vehicle.make) : "";
+        String model = vehicle != null ? safe(vehicle.model) : "";
+        data.makeModel = (make + " " + model).trim();
+        if (data.makeModel.isEmpty()) {
+            data.makeModel = vehicle != null
+                    ? coalesce(safe(vehicle.title), safe(vehicle.marketingdescription))
+                    : descLegacy;
+        }
+
+        data.color = vehicle != null ? safe(vehicle.exteriorcolor) : "";
+        data.lotNumber = vehicle != null && vehicle.lotnumber != null
+                ? safe(vehicle.lotnumber)
+                : lotLegacy;
+        data.dateText = new SimpleDateFormat("MMMM d, yyyy", Locale.US).format(new Date());
+        data.parkingLocation = buildParkingLocationText();
+        data.initials = initialsFor(driver);
+        data.items = items != null ? new ArrayList<>(items) : Collections.emptyList();
+        return data;
+    }
+
+    private String buildParkingLocationText() {
+        if (vehicle == null) return "";
+
+        String location = safe(vehicle.tentid);
+        String row = safe(vehicle.row);
+        String col = safe(vehicle.col);
+        String rowCol = "";
+        if (!row.isEmpty() || !col.isEmpty()) {
+            rowCol = defaulted(col, "-") + " - " + defaulted(row, "-");
+        }
+        return coalesce((location + " " + rowCol).trim(), location, rowCol);
+    }
+
+    private String initialsFor(String name) {
+        String clean = safe(name).trim();
+        if (clean.isEmpty()) return "";
+
+        StringBuilder initials = new StringBuilder();
+        String[] parts = clean.split("\\s+");
+        for (String part : parts) {
+            if (!part.isEmpty()) {
+                initials.append(Character.toUpperCase(part.charAt(0)));
+            }
+            if (initials.length() >= 3) break;
+        }
+        return initials.toString();
+    }
+
     private String normalizePropertyCheckInType(String value) {
         if (value == null) return PROPERTY_STATUS_AWAITING_ARRIVAL;
 
@@ -404,7 +499,7 @@ public class PropertyActivity extends AppCompatActivity {
         }
 
         List<String> typeNames = new ArrayList<>();
-        for (PropertyTypeOption opt : PROPERTY_TYPES) {
+        for (PropertyTypeCatalog.Option opt : PROPERTY_TYPES) {
             typeNames.add(opt.name);
         }
 
@@ -456,7 +551,7 @@ public class PropertyActivity extends AppCompatActivity {
                     tilNotes.setError(null);
                 }
 
-                int propertyTypeId = resolvePropertyTypeIdByName(typeName);
+                int propertyTypeId = PropertyTypeCatalog.resolveIdByName(typeName);
                 if (propertyTypeId <= 0) {
                     tilType.setError("Invalid type");
                     ok = false;
@@ -614,96 +709,6 @@ public class PropertyActivity extends AppCompatActivity {
         return (v != null && !v.trim().isEmpty()) ? v : d;
     }
 
-    private static class PropertyTypeOption {
-        final int id;
-        final String name;
-
-        PropertyTypeOption(int id, String name) {
-            this.id = id;
-            this.name = name;
-        }
-    }
-    private static List<PropertyTypeOption> buildPropertyTypesSorted() {
-        List<PropertyTypeOption> list = new ArrayList<>();
-
-        list.add(new PropertyTypeOption(1, "Award / Trophy"));
-        list.add(new PropertyTypeOption(2, "Binder(s) of Documents"));
-        list.add(new PropertyTypeOption(3, "Broadcast Sheet"));
-        list.add(new PropertyTypeOption(4, "Build Sheet"));
-        list.add(new PropertyTypeOption(5, "Car Cover"));
-        list.add(new PropertyTypeOption(6, "Certificate of Authenticity"));
-        list.add(new PropertyTypeOption(7, "Cleaning Supplies"));
-        list.add(new PropertyTypeOption(8, "Dealer Invoices"));
-        list.add(new PropertyTypeOption(9, "EV/Charging Cables"));
-        list.add(new PropertyTypeOption(10, "Spare Keys/Fobs"));
-        list.add(new PropertyTypeOption(11, "License Plate"));
-        list.add(new PropertyTypeOption(12, "Magazine"));
-        list.add(new PropertyTypeOption(13, "Manuals (shop/parts)"));
-        list.add(new PropertyTypeOption(14, "Marti Report"));
-        list.add(new PropertyTypeOption(15, "Misc Documents"));
-        list.add(new PropertyTypeOption(16, "NCRS Documents"));
-        list.add(new PropertyTypeOption(16, "Title"));
-        list.add(new PropertyTypeOption(17, "No Property"));
-        list.add(new PropertyTypeOption(18, "Other"));
-        list.add(new PropertyTypeOption(19, "Owner's Manual"));
-        list.add(new PropertyTypeOption(20, "Photos"));
-        list.add(new PropertyTypeOption(21, "PHS Docs"));
-        list.add(new PropertyTypeOption(22, "Protect-O-Plate"));
-        list.add(new PropertyTypeOption(23, "Remote"));
-        list.add(new PropertyTypeOption(24, "Service Records"));
-        list.add(new PropertyTypeOption(25, "Spare/Misc Parts"));
-        list.add(new PropertyTypeOption(26, "Spare Tire"));
-        list.add(new PropertyTypeOption(27, "Stereo/Radio Manual"));
-        list.add(new PropertyTypeOption(28, "Story Board"));
-        list.add(new PropertyTypeOption(29, "Tank Sticker"));
-        list.add(new PropertyTypeOption(30, "Tires"));
-        list.add(new PropertyTypeOption(31, "Manual(s)"));
-        list.add(new PropertyTypeOption(31, "Tool Kit"));
-        list.add(new PropertyTypeOption(32, "Top/T-Tops"));
-        list.add(new PropertyTypeOption(33, "Warranty Book"));
-        list.add(new PropertyTypeOption(34, "Wheel Lock(s)"));
-        list.add(new PropertyTypeOption(35, "Window Sticker"));
-        list.add(new PropertyTypeOption(36, "Jack"));
-        list.add(new PropertyTypeOption(37, "Engine Tuner"));
-        list.add(new PropertyTypeOption(38, "Trickle Charger"));
-        list.add(new PropertyTypeOption(39, "Battery Charger"));
-        list.add(new PropertyTypeOption(40, "Battery Tender"));
-        list.add(new PropertyTypeOption(41, "Receipts"));
-        list.add(new PropertyTypeOption(42, "Key/Key Fobs"));
-        list.add(new PropertyTypeOption(42, "Umbrella (s)"));
-        list.add(new PropertyTypeOption(43, "Literature"));
-        list.add(new PropertyTypeOption(44, "Books"));
-        list.add(new PropertyTypeOption(45, "Bill of Sale"));
-        list.add(new PropertyTypeOption(46, "Floor Mats"));
-        list.add(new PropertyTypeOption(47, "Air Pumps"));
-        list.add(new PropertyTypeOption(48, "Brochure"));
-        list.add(new PropertyTypeOption(49, "Luggage"));
-        list.add(new PropertyTypeOption(50, "Posters"));
-        list.add(new PropertyTypeOption(51, "manufacturer’s literature."));
-        list.add(new PropertyTypeOption(52, "Windows"));
-        list.add(new PropertyTypeOption(53, "Carfax"));
-        list.add(new PropertyTypeOption(54, "Copy of title"));
-        list.add(new PropertyTypeOption(55, "First-aid kit"));
-
-        Collections.sort(list, new Comparator<PropertyTypeOption>() {
-            @Override
-            public int compare(PropertyTypeOption a, PropertyTypeOption b) {
-                return a.name.compareToIgnoreCase(b.name);
-            }
-        });
-
-        return list;
-    }
-
-
-    private int resolvePropertyTypeIdByName(String name) {
-        if (name == null) return -1;
-        String target = name.trim();
-        for (PropertyTypeOption opt : PROPERTY_TYPES) {
-            if (opt.name.equalsIgnoreCase(target)) return opt.id;
-        }
-        return -1;
-    }
 }
 
 
