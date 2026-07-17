@@ -19,6 +19,7 @@ import androidx.work.ForegroundInfo;
 import androidx.work.Worker;
 import androidx.work.WorkerParameters;
 
+import com.example.gt6driver.StorageConfig;
 import com.example.gt6driver.util.DeviceInfo;
 
 import org.json.JSONObject;
@@ -47,8 +48,6 @@ public class MediaUploadWorker extends Worker {
     public static final String PROGRESS_UPLOADED = "progress_uploaded";
     public static final String PROGRESS_PERCENT = "progress_percent";
 
-    private static final String DEFAULT_CONTAINER_BASE = "https://stgt6driverappprod.blob.core.windows.net";
-    private static final String DEFAULT_CONTAINER_NAME = "driver";
     private static final String DEFAULT_PREFIX = "";
 
     private static final long MIN_VIDEO_MS = 60_000L;
@@ -74,9 +73,10 @@ public class MediaUploadWorker extends Worker {
 
         final String sasRaw = !TextUtils.isEmpty(sasInputParam) ? sasInputParam : sasPref;
         final String containerRaw = !TextUtils.isEmpty(containerInputParam) ? containerInputParam : containerPref;
+        final String defaultContainerUrl = StorageConfig.driverContainerUrl();
 
         Log.i(TAG, "CFG SOURCE: inputUrl=" + containerInputParam + " prefUrl=" + containerPref +
-                " defaultUrl=" + (DEFAULT_CONTAINER_BASE + "/" + DEFAULT_CONTAINER_NAME));
+                " defaultUrl=" + defaultContainerUrl);
 
         if (TextUtils.isEmpty(sasRaw)) {
             Log.e(TAG, "Missing SAS");
@@ -85,7 +85,7 @@ public class MediaUploadWorker extends Worker {
 
         final String containerUrl = normalizeContainerUrl(
                 TextUtils.isEmpty(containerRaw)
-                        ? (DEFAULT_CONTAINER_BASE + "/" + DEFAULT_CONTAINER_NAME)
+                        ? defaultContainerUrl
                         : containerRaw
         );
 

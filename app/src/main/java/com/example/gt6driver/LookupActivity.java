@@ -68,6 +68,7 @@ public class LookupActivity extends AppCompatActivity {
         eventId   = getIntent().getIntExtra("eventId", -1);
         driver    = getIntent().getStringExtra(Nav.EXTRA_DRIVER);
         userType  = getIntent().getStringExtra(Nav.EXTRA_USER_TYPE);
+        ApiClient.configure(this);
 
         lotNumberInput   = findViewById(R.id.lotNumberInput);
         vinInput         = findViewById(R.id.vinInput);
@@ -185,6 +186,8 @@ public class LookupActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        ApiClient.configure(this);
+        vehicleApi = ApiClient.getMemberApi().create(VehicleSearchApi.class);
 
         // ✅ Cancel any in-flight calls
         cancelAll();
@@ -381,12 +384,7 @@ public class LookupActivity extends AppCompatActivity {
         cancelAll();
         setLoading(true);
 
-        String absoluteUrl =
-                "http://mobiletools.corp.barrett-jackson.com/mn-bj-api/Driver"
-                        + "?auction=" + eventId
-                        + "&lot=" + lotStr;
-
-        lotCall = vehicleApi.searchByLotAbsolute(absoluteUrl);
+        lotCall = vehicleApi.searchByLot(eventId, lotStr);
         lotCall.enqueue(new Callback<List<LotSearchResponse>>() {
             @Override
             public void onResponse(Call<List<LotSearchResponse>> call, Response<List<LotSearchResponse>> resp) {
@@ -420,22 +418,10 @@ public class LookupActivity extends AppCompatActivity {
             return;
         }
         vinStr = vinStr.replace(" ", "").toUpperCase();
-        String encodedVin;
-        try {
-            encodedVin = java.net.URLEncoder.encode(vinStr, "UTF-8");
-        } catch (Exception e) {
-            showError("Encoding error.");
-            return;
-        }
         cancelAll();
         setLoading(true);
 
-        String absoluteUrl =
-                "http://mobiletools.corp.barrett-jackson.com/mn-bj-api/Driver"
-                        + "?auction=" + eventId
-                        + "&vin=" + encodedVin;
-
-        vinCall = vehicleApi.searchByVinAbsolute(absoluteUrl);
+        vinCall = vehicleApi.searchByVin(eventId, vinStr);
         vinCall.enqueue(new Callback<List<LotSearchResponse>>() {
             @Override
             public void onResponse(Call<List<LotSearchResponse>> call, Response<List<LotSearchResponse>> resp) {
@@ -476,21 +462,7 @@ public class LookupActivity extends AppCompatActivity {
         cancelAll();
         setLoading(true);
 
-        String encoded;
-        try {
-            encoded = java.net.URLEncoder.encode(terms, "UTF-8");
-        } catch (Exception e) {
-            showError("Encoding error.");
-            setLoading(false);
-            return;
-        }
-
-        String absoluteUrl =
-                "http://mobiletools.corp.barrett-jackson.com/mn-bj-api/Driver"
-                        + "?auction=" + eventId
-                        + "&terms=" + encoded;
-
-        descCall = vehicleApi.searchByTermsAbsolute(absoluteUrl);
+        descCall = vehicleApi.searchByTerms(eventId, terms);
         descCall.enqueue(new Callback<List<LotSearchResponse>>() {
             @Override
             public void onResponse(Call<List<LotSearchResponse>> call, Response<List<LotSearchResponse>> resp) {
@@ -528,11 +500,12 @@ public class LookupActivity extends AppCompatActivity {
             d.checkinmileage = v.checkinmileage;
             d.col = v.col;
             d.consignmentid = v.consignmentid;
+            d.crmopportunityid = v.opportunityId;
             d.opportunityId = v.opportunityId;
             d.exteriorcolor = v.exteriorcolor;
             d.intakevideo = v.intakevideo;
             d.itemid = v.itemid;
-            d.lotnumber = v.lotnumber;
+            d.lotnumber = normalizeLotNumber(v.lotnumber);
             d.make = v.make;
             d.marketingdescription = v.marketingdescription;
             d.model = v.model;
@@ -552,7 +525,7 @@ public class LookupActivity extends AppCompatActivity {
             // Derived
             d.title = fmtTitle(v.year, v.make, v.model);
             d.lane = fmtLane(v.col, v.row);
-            d.targetTimeText = fmtTargetTime(v.targettime);
+            d.targetTimeText = firstNonEmpty(fmtTargetTime(v.targettime), fmtExpectedStartTime(v.expectedStartTime));
             d.thumbUrl = buildThumbUrl(v.tbuncpath);
 
             mapped.add(d);
@@ -565,6 +538,17 @@ public class LookupActivity extends AppCompatActivity {
         String m = (make == null) ? "" : make.trim();
         String mo = (model == null) ? "" : model.trim();
         return (y + " " + m + " " + mo).trim().replaceAll("\\s+", " ");
+    }
+
+    private static String normalizeLotNumber(String value) {
+        if (value == null) return "";
+        String s = value.trim();
+        if (s.isEmpty()) return "";
+        try {
+            return new java.math.BigDecimal(s).stripTrailingZeros().toPlainString();
+        } catch (Exception ignored) {
+            return s;
+        }
     }
 
     private static String fmtLane(String col, String row) {
@@ -582,6 +566,24 @@ public class LookupActivity extends AppCompatActivity {
                 new java.text.SimpleDateFormat("EEE, MMM d h:mm a", java.util.Locale.getDefault());
         df.setTimeZone(java.util.TimeZone.getDefault());
         return df.format(new java.util.Date(epochMs));
+    }
+
+    private static String fmtExpectedStartTime(String value) {
+        if (value == null || value.trim().isEmpty()) return "";
+        String s = value.trim();
+        try {
+            java.time.Instant instant = java.time.Instant.parse(s);
+            java.text.DateFormat df =
+                    new java.text.SimpleDateFormat("EEE, MMM d h:mm a", java.util.Locale.getDefault());
+            df.setTimeZone(java.util.TimeZone.getDefault());
+            return df.format(java.util.Date.from(instant));
+        } catch (Exception ignored) {
+            return s;
+        }
+    }
+
+    private static String firstNonEmpty(String a, String b) {
+        return (a == null || a.trim().isEmpty()) ? (b == null ? "" : b) : a;
     }
 
     private static String urlDecode(String s) {
@@ -701,7 +703,7 @@ public class LookupActivity extends AppCompatActivity {
         public void onBindViewHolder(VH holder, int position) {
             VehicleDetail row = items.get(position);
 
-            String lotStr = (row.lotnumber == null) ? "" : row.lotnumber;
+            String lotStr = normalizeLotNumber(row.lotnumber);
             holder.tvLot.setText(lotStr.isEmpty() ? "LOT -" : "LOT # " + lotStr);
 
             String title = (row.title == null || row.title.isEmpty())
@@ -768,11 +770,6 @@ public class LookupActivity extends AppCompatActivity {
         @Override public void afterTextChanged(Editable s) {}
     }
 }
-
-
-
-
-
 
 
 

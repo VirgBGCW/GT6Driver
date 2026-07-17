@@ -52,10 +52,6 @@ public class CheckInDetailsActivity extends AppCompatActivity {
     private MaterialButton btnVideoAccept;
     private Uri lastCapturedVideoUri;
 
-    // for static AZURE STORAGE
-    private static final String BLOB_BASE = "https://stgt6driverappprod.blob.core.windows.net/driver/";
-    private static final String COMPRESSED_BASE = "https://stgt6driverappprod.blob.core.windows.net/compressed-files/";
-
     // Keys to match what ActionActivity sends
     private static final String EXTRA_VEHICLE        = "vehicle";
     private static final String EXTRA_OPPORTUNITY_ID = "opportunityId";
@@ -1260,7 +1256,7 @@ public class CheckInDetailsActivity extends AppCompatActivity {
         int dot = originalFileName.lastIndexOf('.');
         String name = (dot > 0) ? originalFileName.substring(0, dot) : originalFileName;
         String ext  = (dot > 0) ? originalFileName.substring(dot) : "";
-        return COMPRESSED_BASE + consignmentIdStr() + "/" + name + "_c" + ext;
+        return StorageConfig.compressedFilesBaseUrl() + consignmentIdStr() + "/" + name + "_c" + ext;
     }
 
     private String isoUtcNow() {
@@ -1400,7 +1396,7 @@ public class CheckInDetailsActivity extends AppCompatActivity {
     }
 
     private String mediaUrl(String fileName) {
-        return BLOB_BASE + consignmentIdStr() + "/" + fileName;
+        return StorageConfig.driverBaseUrl() + consignmentIdStr() + "/" + fileName;
     }
 
     private static boolean isEmpty(String s) { return s == null || s.trim().isEmpty(); }

@@ -11,10 +11,18 @@ import android.os.ParcelUuid;
 import android.util.Log;
 import android.view.View;
 
+import com.google.zxing.BarcodeFormat;
+import com.google.zxing.EncodeHintType;
+import com.google.zxing.common.BitMatrix;
+import com.google.zxing.qrcode.QRCodeWriter;
+import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel;
+
 import java.io.IOException;
 import java.io.OutputStream;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.*;
@@ -26,6 +34,7 @@ public class BixolonTsplPrinter {
     // Generic Serial Port Profile UUID
     private static final UUID GENERIC_SPP_UUID =
             UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
+    private static final char[] HEX_DIGITS = "0123456789ABCDEF".toCharArray();
 
     // ===== Make these PUBLIC so ActionActivity can reference them =====
     public static final int RECEIPT_WIDTH_DOTS = 576; // 80mm paper; 384 for 58mm
@@ -332,6 +341,10 @@ public class BixolonTsplPrinter {
         rawChunked(b, 1024);
     }
 
+    private void rawAscii(String s) throws IOException {
+        rawChunked(s.getBytes(StandardCharsets.US_ASCII), 256);
+    }
+
     private void rawChunked(byte[] b, int chunk) throws IOException {
         if (out == null) throw new IOException("Not connected");
         int off = 0;
@@ -347,6 +360,71 @@ public class BixolonTsplPrinter {
     /* =========================
        TSPL (label) printing
        ========================= */
+
+    public void printTsplTextTest() throws IOException {
+        if (out == null) throw new IOException("Not connected");
+        Log.i(TAG, "TSPL text test");
+        rawAscii("\r\n\r\n"
+                + "SIZE 72 mm,50 mm\r\n"
+                + "GAP 3 mm,0 mm\r\n"
+                + "REFERENCE 0,0\r\n"
+                + "DIRECTION 1\r\n"
+                + "CLS\r\n"
+                + "BOX 20,20,560,350,3\r\n"
+                + "TEXT 40,60,\"3\",0,2,2,\"GT6 TSPL TEST\"\r\n"
+                + "TEXT 40,150,\"2\",0,1,1,\"SPP BLUETOOTH OK\"\r\n"
+                + "PRINT 1,1\r\n");
+    }
+
+    public void printVehicleInfoTsplLabel(String lot, String year, String make, String model,
+                                          String color, String vin, String location) throws IOException {
+        if (out == null) throw new IOException("Not connected");
+        Log.i(TAG, "TSPL vehicle info label");
+
+        rawAscii("\r\n\r\n"
+                + "SIZE 72 mm,50 mm\r\n"
+                + "GAP 3 mm,0 mm\r\n"
+                + "DENSITY 8\r\n"
+                + "SPEED 4\r\n"
+                + "REFERENCE 0,0\r\n"
+                + "DIRECTION 1\r\n"
+                + "CLS\r\n");
+
+        tsplText(20, 20, "3", 2, 2, "LOT      : " + fitTspl(lot, 18));
+        tsplText(20, 95, "2", 1, 1, "YEAR     : " + fitTspl(year, 28));
+        tsplText(20, 140, "2", 1, 1, "MAKE     : " + fitTspl(make, 28));
+        tsplText(20, 185, "2", 1, 1, "MODEL    : " + fitTspl(model, 28));
+        tsplText(20, 230, "2", 1, 1, "COLOR    : " + fitTspl(color, 28));
+        tsplText(20, 275, "2", 1, 1, "VIN      : " + fitTspl(vin, 30));
+        tsplText(20, 320, "2", 1, 1, "LOCATION : " + fitTspl(location, 28));
+
+        cmd("PRINT 1,1");
+    }
+
+    public void printCarTagTsplLabel(String lot, String tent, String colRow,
+                                     String day, String qrData) throws IOException {
+        if (out == null) throw new IOException("Not connected");
+        Log.i(TAG, "TSPL car tag label");
+
+        rawAscii("\r\n\r\n"
+                + "SIZE 72 mm,70 mm\r\n"
+                + "GAP 3 mm,0 mm\r\n"
+                + "DENSITY 8\r\n"
+                + "SPEED 4\r\n"
+                + "REFERENCE 0,0\r\n"
+                + "DIRECTION 1\r\n"
+                + "CLS\r\n");
+
+        tsplText(25, 25, "3", 3, 3, fitTspl(lot, 10));
+        tsplText(350, 35, "3", 2, 2, fitTspl(tent, 11));
+        tsplText(25, 145, "2", 1, 1, fitTspl(day, 24));
+        tsplText(350, 135, "3", 2, 2, fitTspl(colRow, 10));
+        if (qrData != null && !qrData.trim().isEmpty()) {
+            rawAscii("QRCODE 170,220,H,8,A,0,\"" + tsplSafe(qrData) + "\"\r\n");
+        }
+
+        cmd("PRINT 1,1");
+    }
 
     public void printBitmapLabel(Bitmap bmp, int labelWidthMm, int labelHeightMm, int dpi, int gapMm) throws IOException {
         if (out == null) throw new IOException("Not connected");
@@ -379,14 +457,374 @@ public class BixolonTsplPrinter {
             if (bit != 0) { cur <<= (8 - bit); raster[i++] = (byte) cur; }
         }
 
+        Log.i(TAG, "TSPL bitmap label " + labelWidthMm + "x" + labelHeightMm
+                + "mm, dots=" + w + "x" + h
+                + ", bytesPerRow=" + bytesPerRow
+                + ", rasterBytes=" + raster.length);
+
         cmd("SIZE " + labelWidthMm + " mm, " + labelHeightMm + " mm");
         cmd("GAP " + gapMm + " mm,0 mm"); // GAP 0,0 for continuous
         cmd("REFERENCE 0,0");
         cmd("DIRECTION 1");
         cmd("CLS");
-        cmd("BITMAP 0,0," + bytesPerRow + "," + h + ",1");
+        raw(("BITMAP 0,0," + bytesPerRow + "," + h + ",1,").getBytes(StandardCharsets.US_ASCII));
         raw(raster);
-        cmd("PRINT 1");
+        raw("\r\n".getBytes(StandardCharsets.US_ASCII));
+        cmd("PRINT 1,1");
+    }
+
+    public void printBitmapLabelZpl(Bitmap bmp, int labelWidthMm, int labelHeightMm, int dpi) throws IOException {
+        if (out == null) throw new IOException("Not connected");
+
+        int targetW = Math.round(labelWidthMm * dpi / 25.4f);
+        int targetH = Math.round(labelHeightMm * dpi / 25.4f);
+
+        Bitmap scaled = scaleToWidth(bmp, targetW);
+        if (scaled.getHeight() > targetH) {
+            scaled = Bitmap.createBitmap(scaled, 0, 0, scaled.getWidth(), targetH);
+        }
+
+        Bitmap mono = toMono(scaled, 160);
+
+        final int w = mono.getWidth();
+        final int h = mono.getHeight();
+        final int bytesPerRow = (w + 7) / 8;
+        final int totalBytes = bytesPerRow * h;
+
+        StringBuilder hex = new StringBuilder(totalBytes * 2);
+        for (int y = 0; y < h; y++) {
+            int bit = 0;
+            int cur = 0;
+            for (int x = 0; x < w; x++) {
+                int c = mono.getPixel(x, y);
+                boolean black = (Color.red(c) == 0);
+                cur = (cur << 1) | (black ? 1 : 0);
+                bit++;
+                if (bit == 8) {
+                    appendHexByte(hex, cur);
+                    bit = 0;
+                    cur = 0;
+                }
+            }
+            if (bit != 0) {
+                cur <<= (8 - bit);
+                appendHexByte(hex, cur);
+            }
+        }
+
+        StringBuilder zpl = new StringBuilder(hex.length() + 128);
+        zpl.append("^XA\n")
+                .append("^PW").append(targetW).append('\n')
+                .append("^LL").append(targetH).append('\n')
+                .append("^LH0,0\n")
+                .append("^FO0,0^GFA,")
+                .append(totalBytes).append(',')
+                .append(totalBytes).append(',')
+                .append(bytesPerRow).append(',')
+                .append(hex)
+                .append("^FS\n")
+                .append("^XZ\n");
+
+        Log.i(TAG, "ZPL bitmap label " + labelWidthMm + "x" + labelHeightMm
+                + "mm, dots=" + w + "x" + h
+                + ", bytesPerRow=" + bytesPerRow
+                + ", totalBytes=" + totalBytes);
+        rawChunked(zpl.toString().getBytes(StandardCharsets.US_ASCII), 1024);
+    }
+
+    public void printZplTextTest() throws IOException {
+        if (out == null) throw new IOException("Not connected");
+        Log.i(TAG, "ZPL text test");
+        rawAscii("^XA\n"
+                + "^PW576\n"
+                + "^LL400\n"
+                + "^FO20,20^GB536,320,3^FS\n"
+                + "^FO40,70^A0N,44,44^FDGT6 ZPL TEST^FS\n"
+                + "^FO40,140^A0N,32,32^FDSPP BLUETOOTH OK^FS\n"
+                + "^XZ\n");
+    }
+
+    public void printBitmapLabelEpl(Bitmap bmp, int labelWidthMm, int labelHeightMm, int dpi, int gapMm) throws IOException {
+        if (out == null) throw new IOException("Not connected");
+
+        int targetW = Math.round(labelWidthMm * dpi / 25.4f);
+        int targetH = Math.round(labelHeightMm * dpi / 25.4f);
+        int gapDots = Math.max(0, Math.round(gapMm * dpi / 25.4f));
+
+        Bitmap scaled = scaleToWidth(bmp, targetW);
+        if (scaled.getHeight() > targetH) {
+            scaled = Bitmap.createBitmap(scaled, 0, 0, scaled.getWidth(), targetH);
+        }
+
+        Bitmap mono = toMono(scaled, 160);
+
+        final int w = mono.getWidth();
+        final int h = mono.getHeight();
+        final int bytesPerRow = (w + 7) / 8;
+        byte[] raster = new byte[bytesPerRow * h];
+
+        int i = 0;
+        for (int y = 0; y < h; y++) {
+            int bit = 0;
+            int cur = 0;
+            for (int x = 0; x < w; x++) {
+                int c = mono.getPixel(x, y);
+                boolean black = (Color.red(c) == 0);
+                cur = (cur << 1) | (black ? 1 : 0);
+                bit++;
+                if (bit == 8) {
+                    raster[i++] = (byte) cur;
+                    bit = 0;
+                    cur = 0;
+                }
+            }
+            if (bit != 0) {
+                cur <<= (8 - bit);
+                raster[i++] = (byte) cur;
+            }
+        }
+
+        Log.i(TAG, "EPL bitmap label " + labelWidthMm + "x" + labelHeightMm
+                + "mm, dots=" + w + "x" + h
+                + ", gapDots=" + gapDots
+                + ", bytesPerRow=" + bytesPerRow
+                + ", rasterBytes=" + raster.length);
+
+        cmd("N");
+        cmd("q" + targetW);
+        cmd("Q" + targetH + "," + gapDots);
+        cmd("D10");
+        cmd("S2");
+        raw(("GW0,0," + bytesPerRow + "," + h + ",").getBytes(StandardCharsets.US_ASCII));
+        raw(raster);
+        raw("\r\n".getBytes(StandardCharsets.US_ASCII));
+        cmd("P1");
+    }
+
+    public void printEplTextTest() throws IOException {
+        if (out == null) throw new IOException("Not connected");
+        Log.i(TAG, "EPL text test");
+        rawAscii("N\n"
+                + "q576\n"
+                + "Q400,24\n"
+                + "D10\n"
+                + "S2\n"
+                + "LO20,20,536,3\n"
+                + "LO20,20,3,320\n"
+                + "LO553,20,3,320\n"
+                + "LO20,337,536,3\n"
+                + "A40,60,0,4,1,1,N,\"GT6 EPL TEST\"\n"
+                + "A40,130,0,3,1,1,N,\"SPP BLUETOOTH OK\"\n"
+                + "P1\n");
+    }
+
+    public void printVehicleInfoEplLabel(String lot, String year, String make, String model,
+                                         String color, String vin, String location) throws IOException {
+        if (out == null) throw new IOException("Not connected");
+        Log.i(TAG, "EPL vehicle info label");
+        rawAscii("N\n"
+                + "q576\n"
+                + "Q400,24\n"
+                + "D10\n"
+                + "S2\n");
+        eplText(20, 20, 4, 2, 2, "LOT      : " + fitEpl(lot, 18));
+        eplText(20, 95, 3, 1, 1, "YEAR     : " + fitEpl(year, 28));
+        eplText(20, 140, 3, 1, 1, "MAKE     : " + fitEpl(make, 28));
+        eplText(20, 185, 3, 1, 1, "MODEL    : " + fitEpl(model, 28));
+        eplText(20, 230, 3, 1, 1, "COLOR    : " + fitEpl(color, 28));
+        eplText(20, 275, 3, 1, 1, "VIN      : " + fitEpl(vin, 30));
+        eplText(20, 320, 3, 1, 1, "LOCATION : " + fitEpl(location, 28));
+        rawAscii("P1\n");
+    }
+
+    public void printCarTagEplLabel(String lot, String tent, String colRow,
+                                    String day, String qrData) throws IOException {
+        if (out == null) throw new IOException("Not connected");
+        Log.i(TAG, "EPL car tag label");
+        rawAscii("N\n"
+                + "q576\n"
+                + "Q560,24\n"
+                + "D10\n"
+                + "S2\n");
+        eplText(25, 35, 5, 2, 2, fitEpl(lot, 10));
+        eplText(350, 45, 4, 2, 2, fitEpl(tent, 11));
+        eplText(25, 145, 3, 1, 1, fitEpl(day, 24));
+        eplText(350, 135, 4, 2, 2, fitEpl(colRow, 10));
+        if (qrData != null && !qrData.trim().isEmpty()) {
+            eplQrCode(320, 175, qrData, 270);
+        }
+        rawAscii("P1\n");
+    }
+
+    public void printCpclTextTest() throws IOException {
+        if (out == null) throw new IOException("Not connected");
+        Log.i(TAG, "CPCL text test");
+        rawAscii("\r\n"
+                + "! 0 200 200 400 1\r\n"
+                + "PAGE-WIDTH 576\r\n"
+                + "BOX 20 20 556 360 3\r\n"
+                + "TEXT 4 0 40 70 GT6 CPCL TEST\r\n"
+                + "TEXT 4 0 40 135 SPP BLUETOOTH OK\r\n"
+                + "FORM\r\n"
+                + "PRINT\r\n");
+    }
+
+    public void printVehicleInfoCpclLabel(String lot, String year, String make, String model,
+                                          String color, String vin, String location) throws IOException {
+        if (out == null) throw new IOException("Not connected");
+        Log.i(TAG, "CPCL vehicle info label");
+
+        rawAscii("\r\n"
+                + "! 0 200 200 400 1\r\n"
+                + "PAGE-WIDTH 576\r\n");
+        cpclText(4, 0, 20, 30, "LOT      : " + fitCpcl(lot, 18));
+        cpclText(4, 0, 20, 90, "YEAR     : " + fitCpcl(year, 28));
+        cpclText(4, 0, 20, 135, "MAKE     : " + fitCpcl(make, 28));
+        cpclText(4, 0, 20, 180, "MODEL    : " + fitCpcl(model, 28));
+        cpclText(4, 0, 20, 225, "COLOR    : " + fitCpcl(color, 28));
+        cpclText(4, 0, 20, 270, "VIN      : " + fitCpcl(vin, 30));
+        cpclText(4, 0, 20, 315, "LOCATION : " + fitCpcl(location, 28));
+        rawAscii("FORM\r\nPRINT\r\n");
+    }
+
+    public void printCarTagCpclLabel(String lot, String tent, String colRow,
+                                     String day, String qrData) throws IOException {
+        if (out == null) throw new IOException("Not connected");
+        Log.i(TAG, "CPCL car tag label");
+
+        rawAscii("\r\n"
+                + "! 0 200 200 560 1\r\n"
+                + "PAGE-WIDTH 576\r\n");
+        cpclText(7, 0, 25, 35, fitCpcl(lot, 10));
+        cpclText(5, 0, 340, 45, fitCpcl(tent, 11));
+        cpclText(4, 0, 25, 145, fitCpcl(day, 24));
+        cpclText(5, 0, 340, 135, fitCpcl(colRow, 10));
+        if (qrData != null && !qrData.trim().isEmpty()) {
+            rawAscii("B QR 170 220 M 2 U 8\r\n"
+                    + "MA," + cpclSafe(qrData) + "\r\n"
+                    + "ENDQR\r\n");
+        }
+        rawAscii("FORM\r\nPRINT\r\n");
+    }
+
+    private void tsplText(int x, int y, String font, int xMul, int yMul, String text) throws IOException {
+        rawAscii("TEXT " + x + "," + y + ",\"" + font + "\",0,"
+                + xMul + "," + yMul + ",\"" + tsplSafe(text) + "\"\r\n");
+    }
+
+    private void cpclText(int font, int size, int x, int y, String text) throws IOException {
+        rawAscii("TEXT " + font + " " + size + " " + x + " " + y + " " + cpclSafe(text) + "\r\n");
+    }
+
+    private void eplText(int x, int y, int font, int xMul, int yMul, String text) throws IOException {
+        rawAscii("A" + x + "," + y + ",0," + font + "," + xMul + "," + yMul
+                + ",N,\"" + eplSafe(text) + "\"\n");
+    }
+
+    private void eplQrCode(int x, int y, String qrData, int targetDots) throws IOException {
+        String data = qrData == null ? "" : qrData.trim();
+        if (data.isEmpty()) return;
+
+        try {
+            Map<EncodeHintType, Object> hints = new HashMap<>();
+            hints.put(EncodeHintType.ERROR_CORRECTION, ErrorCorrectionLevel.M);
+            hints.put(EncodeHintType.MARGIN, 1);
+
+            BitMatrix matrix = new QRCodeWriter().encode(data, BarcodeFormat.QR_CODE, 1, 1, hints);
+            int scale = Math.max(2, targetDots / Math.max(matrix.getWidth(), matrix.getHeight()));
+            int renderedWidth = matrix.getWidth() * scale;
+            int renderedHeight = matrix.getHeight() * scale;
+            Log.i(TAG, "EPL QR blocks at " + x + "," + y
+                    + ", matrix=" + matrix.getWidth() + "x" + matrix.getHeight()
+                    + ", scale=" + scale
+                    + ", rendered=" + renderedWidth + "x" + renderedHeight
+                    + ", chars=" + data.length());
+
+            for (int row = 0; row < matrix.getHeight(); row++) {
+                int col = 0;
+                while (col < matrix.getWidth()) {
+                    while (col < matrix.getWidth() && !matrix.get(col, row)) {
+                        col++;
+                    }
+                    int start = col;
+                    while (col < matrix.getWidth() && matrix.get(col, row)) {
+                        col++;
+                    }
+                    if (col > start) {
+                        rawAscii("LO" + (x + start * scale)
+                                + "," + (y + row * scale)
+                                + "," + ((col - start) * scale)
+                                + "," + scale + "\n");
+                    }
+                }
+            }
+        } catch (Exception e) {
+            throw new IOException("EPL QR render failed", e);
+        }
+    }
+
+    private static String fitTspl(String text, int maxLen) {
+        String safe = tsplSafe(text);
+        if (safe.length() <= maxLen) return safe;
+        return safe.substring(0, Math.max(0, maxLen));
+    }
+
+    private static String tsplSafe(String text) {
+        if (text == null) return "";
+        StringBuilder out = new StringBuilder(text.length());
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (c == '"') {
+                out.append('\'');
+            } else if (c >= 32 && c <= 126) {
+                out.append(c);
+            } else {
+                out.append(' ');
+            }
+        }
+        return out.toString().trim();
+    }
+
+    private static String fitCpcl(String text, int maxLen) {
+        String safe = cpclSafe(text);
+        if (safe.length() <= maxLen) return safe;
+        return safe.substring(0, Math.max(0, maxLen));
+    }
+
+    private static String cpclSafe(String text) {
+        if (text == null) return "";
+        StringBuilder out = new StringBuilder(text.length());
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (c >= 32 && c <= 126) {
+                out.append(c);
+            } else {
+                out.append(' ');
+            }
+        }
+        return out.toString().trim();
+    }
+
+    private static String fitEpl(String text, int maxLen) {
+        String safe = eplSafe(text);
+        if (safe.length() <= maxLen) return safe;
+        return safe.substring(0, Math.max(0, maxLen));
+    }
+
+    private static String eplSafe(String text) {
+        if (text == null) return "";
+        StringBuilder out = new StringBuilder(text.length());
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (c == '"') {
+                out.append('\'');
+            } else if (c >= 32 && c <= 126) {
+                out.append(c);
+            } else {
+                out.append(' ');
+            }
+        }
+        return out.toString().trim();
     }
 
     /* =========================
@@ -472,6 +910,11 @@ public class BixolonTsplPrinter {
             }
         }
         return out;
+    }
+
+    private static void appendHexByte(StringBuilder out, int value) {
+        out.append(HEX_DIGITS[(value >> 4) & 0x0F]);
+        out.append(HEX_DIGITS[value & 0x0F]);
     }
 }
 

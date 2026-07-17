@@ -75,6 +75,7 @@ public class VehicleDetail implements Parcelable {
         lane = in.readString();
         targetTimeText = in.readString();
         thumbUrl = in.readString();
+        opportunityId = in.readString();
     }
 
     @Override public void writeToParcel(Parcel dest, int flags) {
@@ -109,6 +110,7 @@ public class VehicleDetail implements Parcelable {
         dest.writeString(lane);
         dest.writeString(targetTimeText);
         dest.writeString(thumbUrl);
+        dest.writeString(opportunityId);
     }
 
     @Override public int describeContents() { return 0; }

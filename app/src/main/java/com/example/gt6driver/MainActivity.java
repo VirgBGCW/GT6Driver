@@ -1,8 +1,13 @@
 package com.example.gt6driver;
 
 import android.Manifest;
+import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.SharedPreferences;
+import android.content.res.ColorStateList;
 import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.GradientDrawable;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.os.Build;
@@ -14,7 +19,11 @@ import android.util.Log;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.ProgressBar;
+import android.widget.RadioButton;
+import android.widget.RadioGroup;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -25,12 +34,14 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.constraintlayout.widget.ConstraintLayout;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
+import androidx.preference.PreferenceManager;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.work.Configuration;
@@ -51,6 +62,7 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import retrofit2.Call;
@@ -60,6 +72,31 @@ import retrofit2.Response;
 public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "GT6-Worker";
+    private static final String PREF_PRINTER_LANGUAGE = "printer_language";
+    private static final String PRINTER_LANGUAGE_ESC_POS = "escpos";
+    private static final String PRINTER_LANGUAGE_EPL = "epl";
+    private static final String PRINTER_NAME_PREFIX = "SPP-";
+    private static final String[] PRINTER_LANGUAGE_VALUES = {
+            PRINTER_LANGUAGE_ESC_POS,
+            PRINTER_LANGUAGE_EPL
+    };
+    private static final String[] PRINTER_LANGUAGE_LABELS = {
+            "OLD (ESC/POS)",
+            "NEW (BPL-E / EPL)"
+    };
+    private static final String[] API_ENVIRONMENT_VALUES = {
+            ApiClient.ENV_PRODUCTION,
+            ApiClient.ENV_UAT
+    };
+    private static final String[] API_ENVIRONMENT_LABELS = {
+            "PRODUCTION",
+            "UAT"
+    };
+    private static final int OPTIONS_DIALOG_BG = Color.WHITE;
+    private static final int OPTIONS_DIALOG_TEXT = Color.rgb(17, 24, 39);
+    private static final int OPTIONS_DIALOG_MUTED_TEXT = Color.rgb(55, 65, 81);
+    private static final int OPTIONS_DIALOG_STROKE = Color.rgb(209, 213, 219);
+    private static final int OPTIONS_DIALOG_ACCENT = Color.rgb(220, 53, 69);
 
     // Event grid
     private RecyclerView rvEvents;
@@ -97,12 +134,15 @@ public class MainActivity extends AppCompatActivity {
     private int pendingRestoreUserTypePos = 0;
 
     private ActivityResultLauncher<String[]> permissionLauncher;
+    private ActivityResultLauncher<String[]> printerPermissionLauncher;
+    private String pendingPrinterTestLanguage = null;
 
     private static volatile boolean sWMInited = false;
     private static volatile boolean sSyncStarted = false;
 
     private boolean uploadStatusObserversAttached = false;
     private boolean isLoading = false;
+    private final ExecutorService printerTestExec = Executors.newSingleThreadExecutor();
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -110,13 +150,12 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         initWorkManagerVerboseOnce();
-
-        com.example.gt6driver.sync.GT6MediaSync.setContainerUrl(
-                this, "https://stgt6driverappprod.blob.core.windows.net/driver");
+        ApiClient.configure(this);
+        StorageConfig.configureMediaSync(this);
 
         com.example.gt6driver.sync.GT6MediaSync.setSas(
                 this, "si=driver&spr=https&sv=2024-11-04&sr=c&sig=bkDZ74H2Fwmznej2B86lmh3eJXfQ9nI0csLwS8ixyN8%3D");
-        Log.i(TAG, "Main: configured container=/driver and SAS (redacted).");
+        Log.i(TAG, "Main: configured storage=" + StorageConfig.driverContainerUrl() + " and SAS (redacted).");
 
         rvEvents = findViewById(R.id.rvEvents);
         spinnerUserType = findViewById(R.id.spinnerUserType);
@@ -128,6 +167,14 @@ public class MainActivity extends AppCompatActivity {
         tvLocalVideos = findViewById(R.id.tvLocalVideos);
         tvUploadStatus = findViewById(R.id.tvUploadStatus);
         tvVersion = findViewById(R.id.tvVersion);
+
+        ImageView logo = findViewById(R.id.logo);
+        if (logo != null) {
+            logo.setOnLongClickListener(v -> {
+                showOptionsDialog();
+                return true;
+            });
+        }
 
         refreshHeaderLabels();
 
@@ -244,6 +291,22 @@ public class MainActivity extends AppCompatActivity {
                 new ActivityResultContracts.RequestMultiplePermissions(),
                 result -> ensurePermissionsAndStartSync()
         );
+        printerPermissionLauncher = registerForActivityResult(
+                new ActivityResultContracts.RequestMultiplePermissions(),
+                result -> {
+                    boolean granted = true;
+                    for (Boolean ok : result.values()) {
+                        granted &= ok != null && ok;
+                    }
+                    String pendingLanguage = pendingPrinterTestLanguage;
+                    pendingPrinterTestLanguage = null;
+                    if (granted && pendingLanguage != null) {
+                        startPrinterTest(pendingLanguage);
+                    } else {
+                        Toast.makeText(this, "Bluetooth permission required to print test.", Toast.LENGTH_LONG).show();
+                    }
+                }
+        );
         ensurePermissionsAndStartSync();
 
         loadEventsFromApi();
@@ -252,21 +315,319 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        String previousEnvironment = ApiClient.getEnvironment();
+        ApiClient.configure(this);
+        boolean environmentChanged = !previousEnvironment.equals(ApiClient.getEnvironment());
+        StorageConfig.configureMediaSync(this);
         refreshHeaderLabels();
         refreshUploadStatus();
+        if (environmentChanged) {
+            com.example.gt6driver.sync.GT6MediaSync.applyConfigAndReenqueue(this);
+        }
+        if (environmentChanged && eventButtonAdapter != null) {
+            reloadApiBackedSelections();
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        printerTestExec.shutdownNow();
     }
 
     private void refreshHeaderLabels() {
         if (tvDeviceName != null) {
             String deviceName = DeviceInfo.getDeviceName(this);
-            tvDeviceName.setText(deviceName);
-            Log.i(TAG, "Main: refreshed deviceName=" + deviceName);
+            String environmentLabel = ApiClient.ENV_UAT.equals(ApiClient.getEnvironment()) ? "UAT" : "PROD";
+            tvDeviceName.setText(deviceName + " - " + environmentLabel);
+            Log.i(TAG, "Main: refreshed deviceName=" + deviceName + ", environment=" + environmentLabel);
         }
         if (tvVersion != null) {
             tvVersion.setText(getVersionDisplayText());
         }
         refreshLocalVideoCountAsync();
         refreshUploadStatus();
+    }
+
+    private void showOptionsDialog() {
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
+        String currentPrinterLanguage = prefs.getString(PREF_PRINTER_LANGUAGE, PRINTER_LANGUAGE_ESC_POS);
+        String currentApiEnvironment = ApiClient.getSavedEnvironment(this);
+        final int[] checkedPrinter = {0};
+        final int[] checkedEnvironment = {0};
+
+        for (int i = 0; i < PRINTER_LANGUAGE_VALUES.length; i++) {
+            if (PRINTER_LANGUAGE_VALUES[i].equals(currentPrinterLanguage)) {
+                checkedPrinter[0] = i;
+                break;
+            }
+        }
+        for (int i = 0; i < API_ENVIRONMENT_VALUES.length; i++) {
+            if (API_ENVIRONMENT_VALUES[i].equals(currentApiEnvironment)) {
+                checkedEnvironment[0] = i;
+                break;
+            }
+        }
+
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dp(24), dp(18), dp(24), dp(8));
+        content.setBackground(optionsDialogBackground());
+
+        TextView dialogTitle = new TextView(this);
+        dialogTitle.setText("Options");
+        dialogTitle.setTextColor(OPTIONS_DIALOG_TEXT);
+        dialogTitle.setTextSize(22);
+        dialogTitle.setTypeface(dialogTitle.getTypeface(), android.graphics.Typeface.BOLD);
+        content.addView(dialogTitle);
+
+        TextView dialogSubtitle = new TextView(this);
+        dialogSubtitle.setText("Choose which member API host the app should use.");
+        dialogSubtitle.setTextColor(OPTIONS_DIALOG_MUTED_TEXT);
+        dialogSubtitle.setTextSize(14);
+        LinearLayout.LayoutParams subtitleLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        subtitleLp.setMargins(0, dp(4), 0, dp(8));
+        dialogSubtitle.setLayoutParams(subtitleLp);
+        content.addView(dialogSubtitle);
+
+        TextView environmentTitle = dialogSectionTitle("API Environment");
+        RadioGroup environmentGroup = new RadioGroup(this);
+        environmentGroup.setOrientation(RadioGroup.VERTICAL);
+        addRadioOptions(environmentGroup, API_ENVIRONMENT_LABELS, checkedEnvironment[0]);
+        environmentGroup.setOnCheckedChangeListener((group, checkedId) -> {
+            int index = radioIndexForCheckedId(group, checkedId);
+            if (index >= 0) checkedEnvironment[0] = index;
+        });
+
+        TextView printerTitle = dialogSectionTitle("Label Printer Language");
+        RadioGroup printerGroup = new RadioGroup(this);
+        printerGroup.setOrientation(RadioGroup.VERTICAL);
+        addRadioOptions(printerGroup, PRINTER_LANGUAGE_LABELS, checkedPrinter[0]);
+        printerGroup.setOnCheckedChangeListener((group, checkedId) -> {
+            int index = radioIndexForCheckedId(group, checkedId);
+            if (index >= 0) checkedPrinter[0] = index;
+        });
+
+        content.addView(environmentTitle);
+        content.addView(environmentGroup);
+        content.addView(printerTitle);
+        content.addView(printerGroup);
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setView(content)
+                .setPositiveButton("Save", (clickedDialog, which) -> {
+                    boolean apiChanged = saveApiEnvironment(checkedEnvironment[0]);
+                    savePrinterLanguage(prefs, checkedPrinter[0]);
+                    Toast.makeText(
+                            MainActivity.this,
+                            "API: " + API_ENVIRONMENT_LABELS[checkedEnvironment[0]]
+                                    + " | Printer: " + PRINTER_LANGUAGE_LABELS[checkedPrinter[0]],
+                            Toast.LENGTH_SHORT
+                    ).show();
+                    refreshHeaderLabels();
+                    if (apiChanged) {
+                        reloadApiBackedSelections();
+                    }
+                })
+                .setNeutralButton("Print Test", (clickedDialog, which) -> {
+                    boolean apiChanged = saveApiEnvironment(checkedEnvironment[0]);
+                    savePrinterLanguage(prefs, checkedPrinter[0]);
+                    if (apiChanged) {
+                        reloadApiBackedSelections();
+                    }
+                    refreshHeaderLabels();
+                    startPrinterTest(PRINTER_LANGUAGE_VALUES[checkedPrinter[0]]);
+                })
+                .setNegativeButton("Cancel", null)
+                .create();
+
+        dialog.setOnShowListener(d -> {
+            if (dialog.getWindow() != null) {
+                dialog.getWindow().setBackgroundDrawable(new ColorDrawable(OPTIONS_DIALOG_BG));
+            }
+            styleDialogButton(dialog, DialogInterface.BUTTON_POSITIVE, OPTIONS_DIALOG_ACCENT);
+            styleDialogButton(dialog, DialogInterface.BUTTON_NEUTRAL, OPTIONS_DIALOG_TEXT);
+            styleDialogButton(dialog, DialogInterface.BUTTON_NEGATIVE, OPTIONS_DIALOG_MUTED_TEXT);
+        });
+        dialog.show();
+    }
+
+    private TextView dialogSectionTitle(String text) {
+        TextView title = new TextView(this);
+        title.setText(text);
+        title.setTextColor(OPTIONS_DIALOG_TEXT);
+        title.setTextSize(15);
+        title.setTypeface(title.getTypeface(), android.graphics.Typeface.BOLD);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        lp.setMargins(0, dp(14), 0, dp(4));
+        title.setLayoutParams(lp);
+        return title;
+    }
+
+    private GradientDrawable optionsDialogBackground() {
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(OPTIONS_DIALOG_BG);
+        background.setCornerRadius(dp(8));
+        background.setStroke(dp(1), OPTIONS_DIALOG_STROKE);
+        return background;
+    }
+
+    private void addRadioOptions(RadioGroup group, String[] labels, int checkedIndex) {
+        ColorStateList radioTint = new ColorStateList(
+                new int[][]{
+                        new int[]{android.R.attr.state_checked},
+                        new int[]{}
+                },
+                new int[]{
+                        OPTIONS_DIALOG_ACCENT,
+                        OPTIONS_DIALOG_MUTED_TEXT
+                }
+        );
+        for (int i = 0; i < labels.length; i++) {
+            RadioButton button = new RadioButton(this);
+            button.setId(View.generateViewId());
+            button.setText(labels[i]);
+            button.setTag(i);
+            button.setTextColor(OPTIONS_DIALOG_TEXT);
+            button.setTextSize(16);
+            button.setButtonTintList(radioTint);
+            button.setPadding(0, dp(4), 0, dp(4));
+            group.addView(button);
+            if (i == checkedIndex) {
+                group.check(button.getId());
+            }
+        }
+    }
+
+    private void styleDialogButton(AlertDialog dialog, int whichButton, int color) {
+        android.widget.Button button = dialog.getButton(whichButton);
+        if (button == null) return;
+        button.setTextColor(color);
+        button.setTextSize(14);
+        button.setTypeface(button.getTypeface(), android.graphics.Typeface.BOLD);
+    }
+
+    private int radioIndexForCheckedId(RadioGroup group, int checkedId) {
+        View checked = group.findViewById(checkedId);
+        if (checked == null || !(checked.getTag() instanceof Integer)) return -1;
+        return (Integer) checked.getTag();
+    }
+
+    private void savePrinterLanguage(SharedPreferences prefs, int index) {
+        int safeIndex = Math.max(0, Math.min(PRINTER_LANGUAGE_VALUES.length - 1, index));
+        prefs.edit()
+                .putString(PREF_PRINTER_LANGUAGE, PRINTER_LANGUAGE_VALUES[safeIndex])
+                .apply();
+    }
+
+    private boolean saveApiEnvironment(int index) {
+        int safeIndex = Math.max(0, Math.min(API_ENVIRONMENT_VALUES.length - 1, index));
+        String next = API_ENVIRONMENT_VALUES[safeIndex];
+        String current = ApiClient.getSavedEnvironment(this);
+        ApiClient.saveEnvironment(this, next);
+        boolean changed = !next.equals(current);
+        StorageConfig.configureMediaSync(this);
+        if (changed) {
+            com.example.gt6driver.sync.GT6MediaSync.applyConfigAndReenqueue(this);
+        }
+        return changed;
+    }
+
+    private void reloadApiBackedSelections() {
+        pendingRestoreEventId = -1;
+        selectedEvent = null;
+        events.clear();
+        if (eventButtonAdapter != null) {
+            eventButtonAdapter.setEvents(new ArrayList<>());
+            eventButtonAdapter.clearSelection();
+        }
+        setDriverPlaceholder("Select Event First");
+        clearDriverDirectoryCache();
+        loadEventsFromApi();
+    }
+
+    private void startPrinterTest(String language) {
+        if (!ensurePrinterTestPermissions(language)) {
+            return;
+        }
+
+        printerTestExec.execute(() -> {
+            String label = printerLanguageLabel(language);
+            try {
+                Log.i(TAG, "Starting in-app printer test. language=" + language);
+                if (PRINTER_LANGUAGE_ESC_POS.equals(language)) {
+                    BluetoothEscPosPrinter esc = new BluetoothEscPosPrinter();
+                    try {
+                        esc.connectByNamePrefix(PRINTER_NAME_PREFIX);
+                        esc.printText("GT6 PRINTER TEST\nMODE: ESC/POS\nBLUETOOTH: SPP-\n\n");
+                    } finally {
+                        esc.close();
+                    }
+                } else {
+                    BixolonTsplPrinter printer = new BixolonTsplPrinter();
+                    try {
+                        printer.connectByNameSmart(PRINTER_NAME_PREFIX);
+                        printer.printEplTextTest();
+                    } finally {
+                        printer.close();
+                    }
+                }
+
+                runOnUiThread(() -> Toast.makeText(
+                        MainActivity.this,
+                        "Printer test sent: " + label,
+                        Toast.LENGTH_SHORT
+                ).show());
+            } catch (Exception e) {
+                Log.e(TAG, "Printer test failed. language=" + language, e);
+                runOnUiThread(() -> Toast.makeText(
+                        MainActivity.this,
+                        "Printer test failed: " + e.getMessage(),
+                        Toast.LENGTH_LONG
+                ).show());
+            }
+        });
+    }
+
+    private boolean ensurePrinterTestPermissions(String language) {
+        List<String> needed = new ArrayList<>();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT)
+                    != PackageManager.PERMISSION_GRANTED) {
+                needed.add(Manifest.permission.BLUETOOTH_CONNECT);
+            }
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN)
+                    != PackageManager.PERMISSION_GRANTED) {
+                needed.add(Manifest.permission.BLUETOOTH_SCAN);
+            }
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+                    != PackageManager.PERMISSION_GRANTED) {
+                needed.add(Manifest.permission.ACCESS_FINE_LOCATION);
+            }
+        }
+
+        if (!needed.isEmpty()) {
+            pendingPrinterTestLanguage = language;
+            printerPermissionLauncher.launch(needed.toArray(new String[0]));
+            return false;
+        }
+        return true;
+    }
+
+    private String printerLanguageLabel(String language) {
+        for (int i = 0; i < PRINTER_LANGUAGE_VALUES.length; i++) {
+            if (PRINTER_LANGUAGE_VALUES[i].equals(language)) {
+                return PRINTER_LANGUAGE_LABELS[i];
+            }
+        }
+        return "OLD (ESC/POS)";
     }
 
     // ===================== LOCAL VIDEO COUNT =====================
@@ -516,12 +877,14 @@ public class MainActivity extends AppCompatActivity {
     // ===================== EVENTS =====================
 
     private void loadEventsFromApi() {
+        final String requestBaseUrl = ApiClient.getCurrentBaseUrl();
         setLoading(true);
         LookupService svc = ApiClient.getMemberApi().create(LookupService.class);
 
         svc.getAuctionEvents("Auction", true).enqueue(new Callback<JsonElement>() {
             @Override
             public void onResponse(Call<JsonElement> call, Response<JsonElement> response) {
+                if (!requestBaseUrl.equals(ApiClient.getCurrentBaseUrl())) return;
                 setLoading(false);
 
                 if (!response.isSuccessful() || response.body() == null) {
@@ -604,6 +967,7 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void onFailure(Call<JsonElement> call, Throwable t) {
+                if (!requestBaseUrl.equals(ApiClient.getCurrentBaseUrl())) return;
                 setLoading(false);
                 Toast.makeText(MainActivity.this, "Network error loading events.", Toast.LENGTH_SHORT).show();
             }
@@ -771,12 +1135,14 @@ public class MainActivity extends AppCompatActivity {
 
         setDriverPlaceholder("Loading users…");
 
+        final String requestBaseUrl = ApiClient.getCurrentBaseUrl();
         LookupService svc = ApiClient.getMemberApi().create(LookupService.class);
 
         svc.getMechanicDrivers(userType, eventId).enqueue(new Callback<List<MechanicDriverDto>>() {
             @Override
             public void onResponse(Call<List<MechanicDriverDto>> call,
                                    Response<List<MechanicDriverDto>> response) {
+                if (!requestBaseUrl.equals(ApiClient.getCurrentBaseUrl())) return;
 
                 if (response.code() == 404) {
                     setDriverPlaceholder("No Users Found");
@@ -857,6 +1223,7 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void onFailure(Call<List<MechanicDriverDto>> call, Throwable t) {
+                if (!requestBaseUrl.equals(ApiClient.getCurrentBaseUrl())) return;
                 setDriverPlaceholder("Select User…");
                 clearDriverDirectoryCache();
                 Toast.makeText(MainActivity.this,
@@ -1121,28 +1488,5 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 

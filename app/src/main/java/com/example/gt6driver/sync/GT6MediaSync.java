@@ -15,6 +15,8 @@ import androidx.work.OutOfQuotaPolicy;
 import androidx.work.PeriodicWorkRequest;
 import androidx.work.WorkManager;
 
+import com.example.gt6driver.StorageConfig;
+
 import java.util.concurrent.TimeUnit;
 
 public class GT6MediaSync {
@@ -35,9 +37,6 @@ public class GT6MediaSync {
     // Defaults (keep for fallback; prefer setting via setSas/setContainerUrl at runtime)
     private static final String DEFAULT_SAS =
             "si=driver&spr=https&sv=2024-11-04&sr=c&sig=bkDZ74H2Fwmznej2B86lmh3eJXfQ9nI0csLwS8ixyN8%3D";
-    private static final String DEFAULT_CONTAINER_URL =
-            "https://stgt6driverappprod.blob.core.windows.net/driver";
-
     /** Returns saved SAS or default. */
     public static String getSas(Context ctx) {
         String s = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(PREF_SAS, "");
@@ -49,7 +48,7 @@ public class GT6MediaSync {
     /** Returns saved container URL or default. */
     public static String getContainerUrl(Context ctx) {
         String u = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(PREF_CONTAINER_URL, "");
-        u = (u == null || u.isEmpty()) ? DEFAULT_CONTAINER_URL : u.trim();
+        u = (u == null || u.isEmpty()) ? StorageConfig.driverContainerUrl() : u.trim();
         Log.i(TAG, "getContainerUrl() -> " + u);
         return u;
     }

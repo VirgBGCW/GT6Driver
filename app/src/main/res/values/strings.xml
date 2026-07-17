@@ -54,4 +54,24 @@
     <string name="minimum_recording_countdown">Minimum: %1$s</string>
     <string name="minimum_recording_paused">Paused: %1$s left</string>
     <string name="minimum_recording_met">Minimum met: %1$s</string>
+
+    <string-array name="printer_language_entries">
+        <item>OLD (ESC/POS)</item>
+        <item>NEW (BPL-E / EPL)</item>
+    </string-array>
+
+    <string-array name="printer_language_values">
+        <item>escpos</item>
+        <item>epl</item>
+    </string-array>
+
+    <string-array name="api_environment_entries">
+        <item>PRODUCTION</item>
+        <item>UAT</item>
+    </string-array>
+
+    <string-array name="api_environment_values">
+        <item>production</item>
+        <item>uat</item>
+    </string-array>
 </resources>

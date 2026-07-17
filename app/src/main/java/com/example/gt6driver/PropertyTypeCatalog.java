@@ -60,7 +60,7 @@ public final class PropertyTypeCatalog {
         if (item == null) return false;
         return "noproperty".equals(normalize(item.propertyType))
                 || "noproperty".equals(normalize(item.propertyDescription))
-                || Integer.valueOf(17).equals(asInt(item.propertyItemTypeId));
+                || Integer.valueOf(16).equals(asInt(item.propertyItemTypeId));
     }
 
     private static String formRowForName(String value) {
@@ -122,6 +122,7 @@ public final class PropertyTypeCatalog {
             case "toolkit":
                 return "Tool Kit";
             case "top":
+            case "topttops":
             case "toptops":
             case "ttops":
                 return "Top";
@@ -153,31 +154,29 @@ public final class PropertyTypeCatalog {
                 return "Cleaning Supplies";
             case 8:
                 return "Dealer Invoices";
-            case 11:
+            case 10:
                 return "License Plate";
-            case 13:
+            case 12:
                 return "Manuals (shop/parts)";
-            case 14:
+            case 13:
                 return "Marti Report";
-            case 15:
+            case 14:
                 return "Misc Documents";
-            case 16:
-                return "Title";
-            case 19:
+            case 18:
                 return "Owner's Manual";
-            case 22:
+            case 21:
                 return "Protect-O-Plate";
-            case 23:
+            case 22:
                 return "Remote";
-            case 24:
+            case 23:
                 return "Service Records";
-            case 25:
+            case 24:
                 return "Spare / Misc Parts";
-            case 27:
+            case 26:
                 return "Stereo / Radio Manual";
-            case 28:
+            case 27:
                 return "Story Board";
-            case 29:
+            case 28:
                 return "Tank Sticker";
             case 31:
                 return "Tool Kit";
@@ -189,6 +188,12 @@ public final class PropertyTypeCatalog {
                 return "Wheel Lock";
             case 35:
                 return "Window Sticker";
+            case 53:
+                return "Title";
+            case 68:
+                return "Title";
+            case 71:
+                return "Registration";
             default:
                 return null;
         }
@@ -205,29 +210,27 @@ public final class PropertyTypeCatalog {
         list.add(new Option(7, "Cleaning Supplies"));
         list.add(new Option(8, "Dealer Invoices"));
         list.add(new Option(9, "EV/Charging Cables"));
-        list.add(new Option(10, "Spare Keys/Fobs"));
-        list.add(new Option(11, "License Plate"));
-        list.add(new Option(12, "Magazine"));
-        list.add(new Option(13, "Manuals (shop/parts)"));
-        list.add(new Option(14, "Marti Report"));
-        list.add(new Option(15, "Misc Documents"));
-        list.add(new Option(16, "NCRS Documents"));
-        list.add(new Option(16, "Title"));
-        list.add(new Option(17, "No Property"));
-        list.add(new Option(18, "Other"));
-        list.add(new Option(19, "Owner's Manual"));
-        list.add(new Option(20, "Photos"));
-        list.add(new Option(21, "PHS Docs"));
-        list.add(new Option(22, "Protect-O-Plate"));
-        list.add(new Option(23, "Remote"));
-        list.add(new Option(24, "Service Records"));
-        list.add(new Option(25, "Spare/Misc Parts"));
-        list.add(new Option(26, "Spare Tire"));
-        list.add(new Option(27, "Stereo/Radio Manual"));
-        list.add(new Option(28, "Story Board"));
-        list.add(new Option(29, "Tank Sticker"));
-        list.add(new Option(30, "Tires"));
-        list.add(new Option(31, "Manual(s)"));
+        list.add(new Option(10, "License Plate"));
+        list.add(new Option(11, "Magazine"));
+        list.add(new Option(12, "Manuals (shop/parts)"));
+        list.add(new Option(13, "Marti Report"));
+        list.add(new Option(14, "Misc Documents"));
+        list.add(new Option(15, "NCRS Documents"));
+        list.add(new Option(16, "No Property"));
+        list.add(new Option(17, "Other"));
+        list.add(new Option(18, "Owner's Manual"));
+        list.add(new Option(19, "Photos"));
+        list.add(new Option(20, "PHS Docs"));
+        list.add(new Option(21, "Protect-O-Plate"));
+        list.add(new Option(22, "Remote"));
+        list.add(new Option(23, "Service Records"));
+        list.add(new Option(24, "Spare Misc Parts"));
+        list.add(new Option(25, "Spare Tire"));
+        list.add(new Option(26, "Stereo/Radio Manual"));
+        list.add(new Option(27, "Story Board"));
+        list.add(new Option(28, "Tank Sticker"));
+        list.add(new Option(29, "Tires"));
+        list.add(new Option(30, "Manual(s)"));
         list.add(new Option(31, "Tool Kit"));
         list.add(new Option(32, "Top/T-Tops"));
         list.add(new Option(33, "Warranty Book"));
@@ -235,25 +238,42 @@ public final class PropertyTypeCatalog {
         list.add(new Option(35, "Window Sticker"));
         list.add(new Option(36, "Jack"));
         list.add(new Option(37, "Engine Tuner"));
-        list.add(new Option(38, "Trickle Charger"));
+        list.add(new Option(38, "Trickle Charger / Battery Tender"));
         list.add(new Option(39, "Battery Charger"));
-        list.add(new Option(40, "Battery Tender"));
-        list.add(new Option(41, "Receipts"));
-        list.add(new Option(42, "Key/Key Fobs"));
-        list.add(new Option(42, "Umbrella (s)"));
-        list.add(new Option(43, "Literature"));
-        list.add(new Option(44, "Books"));
-        list.add(new Option(45, "Bill of Sale"));
-        list.add(new Option(46, "Floor Mats"));
-        list.add(new Option(47, "Air Pumps"));
-        list.add(new Option(48, "Brochure"));
-        list.add(new Option(49, "Luggage"));
-        list.add(new Option(50, "Posters"));
-        list.add(new Option(51, "manufacturer's literature."));
-        list.add(new Option(52, "Windows"));
-        list.add(new Option(53, "Carfax"));
-        list.add(new Option(54, "Copy of title"));
-        list.add(new Option(55, "First-aid kit"));
+        list.add(new Option(40, "Receipts"));
+        list.add(new Option(41, "Key/Key Fobs"));
+        list.add(new Option(42, "Literature"));
+        list.add(new Option(43, "Books"));
+        list.add(new Option(44, "Bill of Sale"));
+        list.add(new Option(45, "Floor Mats"));
+        list.add(new Option(46, "Air Pumps / tire inflator"));
+        list.add(new Option(47, "Brochure"));
+        list.add(new Option(48, "Luggage"));
+        list.add(new Option(49, "Posters"));
+        list.add(new Option(50, "manufacturer's literature."));
+        list.add(new Option(51, "Windows"));
+        list.add(new Option(52, "Carfax"));
+        list.add(new Option(53, "Copy of title"));
+        list.add(new Option(54, "First-aid kit"));
+        list.add(new Option(55, "Diecast Replica"));
+        list.add(new Option(56, "Winch / Winch control"));
+        list.add(new Option(57, "Fire Extinguisher"));
+        list.add(new Option(58, "Boot Cover"));
+        list.add(new Option(59, "Navigation CD"));
+        list.add(new Option(60, "Touch Up Paint"));
+        list.add(new Option(61, "Umbrella (s)"));
+        list.add(new Option(62, "Hard top stand"));
+        list.add(new Option(63, "Original Radio"));
+        list.add(new Option(64, "Tow Hook"));
+        list.add(new Option(65, "Eleanor certification"));
+        list.add(new Option(66, "Movie Poster"));
+        list.add(new Option(67, "Sales invoice"));
+        list.add(new Option(68, "Title"));
+        list.add(new Option(69, "Signatures"));
+        list.add(new Option(70, "Engine"));
+        list.add(new Option(71, "Registration"));
+        list.add(new Option(72, "Insurance Card"));
+        list.add(new Option(73, "Dyno sheet"));
         return list;
     }
 
@@ -266,20 +286,20 @@ public final class PropertyTypeCatalog {
         rows.add(new FormRow(5, "Car Cover"));
         rows.add(new FormRow(7, "Cleaning Supplies"));
         rows.add(new FormRow(8, "Dealer Invoices"));
-        rows.add(new FormRow(11, "License Plate"));
-        rows.add(new FormRow(13, "Manuals (shop/parts)"));
-        rows.add(new FormRow(14, "Marti Report"));
-        rows.add(new FormRow(15, "Misc Documents"));
-        rows.add(new FormRow(19, "Owner's Manual"));
-        rows.add(new FormRow(22, "Protect-O-Plate"));
-        rows.add(new FormRow(null, "Registration"));
-        rows.add(new FormRow(23, "Remote"));
-        rows.add(new FormRow(24, "Service Records"));
-        rows.add(new FormRow(25, "Spare / Misc Parts"));
-        rows.add(new FormRow(27, "Stereo / Radio Manual"));
-        rows.add(new FormRow(28, "Story Board"));
-        rows.add(new FormRow(29, "Tank Sticker"));
-        rows.add(new FormRow(16, "Title"));
+        rows.add(new FormRow(10, "License Plate"));
+        rows.add(new FormRow(12, "Manuals (shop/parts)"));
+        rows.add(new FormRow(13, "Marti Report"));
+        rows.add(new FormRow(14, "Misc Documents"));
+        rows.add(new FormRow(18, "Owner's Manual"));
+        rows.add(new FormRow(21, "Protect-O-Plate"));
+        rows.add(new FormRow(71, "Registration"));
+        rows.add(new FormRow(22, "Remote"));
+        rows.add(new FormRow(23, "Service Records"));
+        rows.add(new FormRow(24, "Spare / Misc Parts"));
+        rows.add(new FormRow(26, "Stereo / Radio Manual"));
+        rows.add(new FormRow(27, "Story Board"));
+        rows.add(new FormRow(28, "Tank Sticker"));
+        rows.add(new FormRow(68, "Title"));
         rows.add(new FormRow(31, "Tool Kit"));
         rows.add(new FormRow(32, "Top"));
         rows.add(new FormRow(33, "Warranty Book"));
@@ -320,7 +340,7 @@ public final class PropertyTypeCatalog {
         public final int id;
         public final String name;
 
-        private Option(int id, String name) {
+        public Option(int id, String name) {
             this.id = id;
             this.name = name;
         }

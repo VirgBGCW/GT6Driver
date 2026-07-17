@@ -1,5 +1,5 @@
 <!-- app/src/main/res/xml/prefs_config.xml -->
-<preferences xmlns:android="http://schemas.android.com/apk/res/android">
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
 
     <EditTextPreference
         android:key="dir_prefix"
@@ -35,4 +35,18 @@
         android:key="append_timestamp"
         android:title="Append timestamp to filenames"
         android:defaultValue="false" />
-</preferences>
+
+    <ListPreference
+        android:key="printer_language"
+        android:title="Label printer language"
+        android:defaultValue="escpos"
+        android:entries="@array/printer_language_entries"
+        android:entryValues="@array/printer_language_values" />
+
+    <ListPreference
+        android:key="api_environment"
+        android:title="API environment"
+        android:defaultValue="production"
+        android:entries="@array/api_environment_entries"
+        android:entryValues="@array/api_environment_values" />
+</PreferenceScreen>

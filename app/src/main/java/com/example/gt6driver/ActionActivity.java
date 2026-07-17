@@ -2,6 +2,7 @@ package com.example.gt6driver;
 
 import android.Manifest;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
@@ -26,6 +27,7 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
+import androidx.preference.PreferenceManager;
 
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.load.resource.bitmap.CenterCrop;
@@ -77,7 +79,15 @@ public class ActionActivity extends AppCompatActivity {
 
     // Printer/device constants
     private static final String PRINTER_NAME_PREFIX = "SPP-";
+    private static final String PREF_PRINTER_LANGUAGE = "printer_language";
+    private static final String PRINTER_LANGUAGE_ESC_POS = "escpos";
+    private static final String PRINTER_LANGUAGE_EPL = "epl";
     private static final int RECEIPT_WIDTH_DOTS = 576; // 80mm; 384 for 58mm
+    private static final int LABEL_DPI = 203;
+    private static final int LABEL_WIDTH_MM = 72;
+    private static final int KEY_LABEL_HEIGHT_MM = 50;
+    private static final int CAR_LABEL_HEIGHT_MM = 70;
+    private static final int LABEL_GAP_MM = 3;
 
     // ESC/POS control bytes
     private static final byte ESC = 0x1B;   // ESC
@@ -311,7 +321,7 @@ public class ActionActivity extends AppCompatActivity {
             // LOCATION = TENTID + " / " + COL + " - " + ROW
             String location = (tent + " / " + col + " - " + row).trim();
 
-            printVehicleInfoEscPos(
+            printVehicleInfoLabel(
                     defaulted(lot, "—"),
                     defaulted(year, "—"),
                     defaulted(make, "—"),
@@ -330,7 +340,7 @@ public class ActionActivity extends AppCompatActivity {
             String row = (vehicle != null) ? safe(vehicle.row) : "";
             String time = (vehicle != null) ? safe(vehicle.targetTimeText) : "";
 
-            printCarTag(lot, tent, col, row, time);
+            printCarTagLabel(lot, tent, col, row, time);
         });
     }
 
@@ -467,6 +477,247 @@ public class ActionActivity extends AppCompatActivity {
     private String escSeq(byte[] cmd) {
         try { return new String(cmd, StandardCharsets.ISO_8859_1); }
         catch (Exception e) { return new String(cmd); }
+    }
+
+    private String currentPrinterLanguage() {
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
+        String language = prefs.getString(PREF_PRINTER_LANGUAGE, PRINTER_LANGUAGE_ESC_POS);
+        if (PRINTER_LANGUAGE_EPL.equals(language)) {
+            return language;
+        }
+        return PRINTER_LANGUAGE_ESC_POS;
+    }
+
+    private void printVehicleInfoLabel(String lot, String year, String make, String model,
+                                       String color, String vin, String tent, String descIgnored) {
+        String language = currentPrinterLanguage();
+        if (PRINTER_LANGUAGE_ESC_POS.equals(language)) {
+            printVehicleInfoEscPos(lot, year, make, model, color, vin, tent, descIgnored);
+            return;
+        }
+        printVehicleInfoBitmapLabel(lot, year, make, model, color, vin, tent, language);
+    }
+
+    private void printVehicleInfoBitmapLabel(String lot, String year, String make, String model,
+                                             String color, String vin, String tent, String language) {
+        if (!ensureBtPermissions()) {
+            Toast.makeText(this, "Grant Bluetooth permission to print.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        final String printLot = defaulted(formatLotForLabel(lot), "-");
+        final String printYear = defaulted(year, "-");
+        final String printMake = defaulted(make, "-");
+        final String printModel = defaulted(model, "-");
+        final String printColor = defaulted(color, "-");
+        final String printVin = defaulted(vin, "-");
+        final String printLocation = defaulted(tent, "-");
+
+        printExec.execute(() -> {
+            BixolonTsplPrinter printer = new BixolonTsplPrinter();
+            try {
+                printer.connectByNameSmart(PRINTER_NAME_PREFIX);
+                printer.printVehicleInfoEplLabel(
+                        printLot,
+                        printYear,
+                        printMake,
+                        printModel,
+                        printColor,
+                        printVin,
+                        printLocation
+                );
+
+                ApiResult res = postEventVehicleStatusSync(this.eventId, lot);
+                if (res.ok) {
+                    runOnUiThread(() -> showBigResultBanner(true, "Vehicle On-Site"));
+                } else {
+                    final String msg = "Vehicle status update FAILED (code=" + res.code + "): " + (res.message == null ? "" : res.message);
+                    Log.w(HTTP_LOG_TAG, msg);
+                    runOnUiThread(() -> Toast.makeText(this, msg, Toast.LENGTH_LONG).show());
+                }
+
+                runOnUiThread(() ->
+                        Toast.makeText(this, "Vehicle Info printed", Toast.LENGTH_SHORT).show()
+                );
+            } catch (Exception e) {
+                runOnUiThread(() ->
+                        Toast.makeText(this, "Print failed: " + e.getMessage(), Toast.LENGTH_LONG).show()
+                );
+            } finally {
+                printer.close();
+            }
+        });
+    }
+
+    private void printCarTagLabel(String lotNum, String tentId, String col, String row, String targetTimeText) {
+        String language = currentPrinterLanguage();
+        if (PRINTER_LANGUAGE_ESC_POS.equals(language)) {
+            printCarTag(lotNum, tentId, col, row, targetTimeText);
+            return;
+        }
+        printCarTagBitmapLabel(lotNum, tentId, col, row, targetTimeText, language);
+    }
+
+    private void printCarTagBitmapLabel(String lotNum, String tentId, String col, String row,
+                                        String targetTimeText, String language) {
+        if (!ensureBtPermissions()) {
+            Toast.makeText(this, "Grant Bluetooth permission to print.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        final String lot = defaulted(formatLotForLabel(lotNum), "-");
+        final String tent = defaulted(tentId, "-");
+        final String colRow = defaulted(col, "-") + "-" + defaulted(row, "-");
+        final String day = defaulted(formatDayParenUpper(targetTimeText), "");
+        final String qrData = (vehicle != null) ? safe(vehicle.qrurl) : "";
+
+        printExec.execute(() -> {
+            BixolonTsplPrinter printer = new BixolonTsplPrinter();
+            try {
+                printer.connectByNameSmart(PRINTER_NAME_PREFIX);
+                printer.printCarTagEplLabel(lot, tent, colRow, day, qrData);
+
+                runOnUiThread(() ->
+                        Toast.makeText(this, "Car tag printed", Toast.LENGTH_SHORT).show()
+                );
+            } catch (Exception e) {
+                runOnUiThread(() ->
+                        Toast.makeText(this, "Car tag print failed: " + e.getMessage(), Toast.LENGTH_LONG).show()
+                );
+            } finally {
+                printer.close();
+            }
+        });
+    }
+
+    private void printBitmapToSelectedLabelPrinter(BixolonTsplPrinter printer, Bitmap label,
+                                                   int labelHeightMm, String language) throws java.io.IOException {
+        Log.i(LOG_TAG, "Printing label using " + language + " to " + printer.getConnectedName());
+        if (PRINTER_LANGUAGE_EPL.equals(language)) {
+            printer.printBitmapLabelEpl(label, LABEL_WIDTH_MM, labelHeightMm, LABEL_DPI, LABEL_GAP_MM);
+        } else {
+            printer.printBitmapLabel(label, LABEL_WIDTH_MM, labelHeightMm, LABEL_DPI, LABEL_GAP_MM);
+        }
+    }
+
+    private Bitmap renderKeyBagLabelBitmap(String lot, String year, String make, String model,
+                                           String color, String vin, String location) {
+        int width = dotsForMm(LABEL_WIDTH_MM);
+        int height = dotsForMm(KEY_LABEL_HEIGHT_MM);
+        Bitmap bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bmp);
+        canvas.drawColor(Color.WHITE);
+
+        Paint title = labelTextPaint(46f, true);
+        Paint row = labelTextPaint(34f, true);
+
+        float x = 24f;
+        float maxWidth = width - (x * 2f);
+        float y = 58f;
+        drawFitText(canvas, "LOT      : " + lot, title, x, y, maxWidth, 28f);
+
+        y += 50f;
+        drawFitText(canvas, "YEAR     : " + year, row, x, y, maxWidth, 22f);
+        y += 46f;
+        drawFitText(canvas, "MAKE     : " + make, row, x, y, maxWidth, 22f);
+        y += 46f;
+        drawFitText(canvas, "MODEL    : " + model, row, x, y, maxWidth, 22f);
+        y += 46f;
+        drawFitText(canvas, "COLOR    : " + color, row, x, y, maxWidth, 22f);
+        y += 46f;
+        drawFitText(canvas, "VIN      : " + vin, row, x, y, maxWidth, 22f);
+        y += 46f;
+        drawFitText(canvas, "LOCATION : " + location, row, x, y, maxWidth, 22f);
+
+        return bmp;
+    }
+
+    private Bitmap renderCarTagLabelBitmap(String lot, String tent, String colRow, String day, String qrData) {
+        int width = dotsForMm(LABEL_WIDTH_MM);
+        int height = dotsForMm(CAR_LABEL_HEIGHT_MM);
+        Bitmap bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bmp);
+        canvas.drawColor(Color.WHITE);
+
+        float pad = 24f;
+        float halfWidth = (width - (pad * 2f)) / 2f;
+
+        Paint lotPaint = labelTextPaint(78f, true);
+        Paint tentPaint = labelTextPaint(58f, true);
+        tentPaint.setTextAlign(Paint.Align.RIGHT);
+        Paint detailPaint = labelTextPaint(38f, true);
+        Paint colRowPaint = labelTextPaint(46f, true);
+        colRowPaint.setTextAlign(Paint.Align.RIGHT);
+
+        drawFitText(canvas, lot, lotPaint, pad, 86f, halfWidth, 42f);
+        drawFitText(canvas, tent, tentPaint, width - pad, 86f, halfWidth, 32f);
+
+        drawFitText(canvas, day, detailPaint, pad, 148f, halfWidth, 24f);
+        drawFitText(canvas, colRow, colRowPaint, width - pad, 148f, halfWidth, 26f);
+
+        if (!qrData.isEmpty()) {
+            Bitmap qr = createQrBitmap(qrData, Math.min(330, height - 210));
+            if (qr != null) {
+                float qrX = (width - qr.getWidth()) / 2f;
+                canvas.drawBitmap(qr, qrX, 190f, null);
+            }
+        }
+
+        return bmp;
+    }
+
+    private int dotsForMm(int mm) {
+        return Math.round(mm * LABEL_DPI / 25.4f);
+    }
+
+    private Paint labelTextPaint(float sizePx, boolean bold) {
+        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        paint.setColor(Color.BLACK);
+        paint.setTypeface(Typeface.create(Typeface.SANS_SERIF, bold ? Typeface.BOLD : Typeface.NORMAL));
+        paint.setTextSize(sizePx);
+        paint.setSubpixelText(true);
+        return paint;
+    }
+
+    private void drawFitText(Canvas canvas, String text, Paint sourcePaint,
+                             float x, float baseline, float maxWidth, float minTextSizePx) {
+        if (text == null) text = "";
+        Paint paint = new Paint(sourcePaint);
+        while (paint.getTextSize() > minTextSizePx && paint.measureText(text) > maxWidth) {
+            paint.setTextSize(paint.getTextSize() - 2f);
+        }
+        if (paint.measureText(text) > maxWidth) {
+            text = ellipsizeForPaint(text, paint, maxWidth);
+        }
+        canvas.drawText(text, x, baseline, paint);
+    }
+
+    private String ellipsizeForPaint(String text, Paint paint, float maxWidth) {
+        String suffix = "...";
+        String fitted = text == null ? "" : text.trim();
+        while (fitted.length() > 1 && paint.measureText(fitted + suffix) > maxWidth) {
+            fitted = fitted.substring(0, fitted.length() - 1).trim();
+        }
+        return fitted.length() > 1 ? fitted + suffix : fitted;
+    }
+
+    private Bitmap createQrBitmap(String data, int sizePx) {
+        try {
+            Map<EncodeHintType, Object> hints = new HashMap<>();
+            hints.put(EncodeHintType.ERROR_CORRECTION, ErrorCorrectionLevel.H);
+            hints.put(EncodeHintType.MARGIN, 1);
+            BitMatrix matrix = new QRCodeWriter().encode(data, BarcodeFormat.QR_CODE, sizePx, sizePx, hints);
+            Bitmap bitmap = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888);
+            for (int y = 0; y < sizePx; y++) {
+                for (int x = 0; x < sizePx; x++) {
+                    bitmap.setPixel(x, y, matrix.get(x, y) ? Color.BLACK : Color.WHITE);
+                }
+            }
+            return bitmap;
+        } catch (Exception e) {
+            Log.w(LOG_TAG, "QR render failed", e);
+            return null;
+        }
     }
 
     // ===== Print: Vehicle Info (ESC/POS text) =====

@@ -5,6 +5,7 @@ import android.os.Bundle;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.preference.EditTextPreference;
+import androidx.preference.ListPreference;
 import androidx.preference.PreferenceFragmentCompat;
 import androidx.preference.PreferenceManager;
 import androidx.preference.SwitchPreferenceCompat;
@@ -28,6 +29,7 @@ public class ConfigActivity extends AppCompatActivity {
             EditTextPreference pVinName   = findPreference("vin_name");              // e.g. "vin"
             EditTextPreference pKeyName   = findPreference("keycheck_name");         // e.g. "keycheck_intake"
             EditTextPreference pMilesName = findPreference("mileage_name");          // e.g. "mileage_intake"
+            ListPreference pPrinterLanguage = findPreference("printer_language");
             SwitchPreferenceCompat pTime  = findPreference("append_timestamp");
 
             if (pDirPrefix != null)  pDirPrefix.setSummaryProvider(EditTextPreference.SimpleSummaryProvider.getInstance());
@@ -35,6 +37,7 @@ public class ConfigActivity extends AppCompatActivity {
             if (pVinName != null)    pVinName.setSummaryProvider(EditTextPreference.SimpleSummaryProvider.getInstance());
             if (pKeyName != null)    pKeyName.setSummaryProvider(EditTextPreference.SimpleSummaryProvider.getInstance());
             if (pMilesName != null)  pMilesName.setSummaryProvider(EditTextPreference.SimpleSummaryProvider.getInstance());
+            if (pPrinterLanguage != null) pPrinterLanguage.setSummaryProvider(ListPreference.SimpleSummaryProvider.getInstance());
         }
     }
 }

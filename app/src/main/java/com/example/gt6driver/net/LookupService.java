@@ -20,6 +20,13 @@ public interface LookupService {
             @Query("current") boolean current
     );
 
+    // ===================== GENERIC LOOKUP CODES =====================
+    // /api/v1/Lookup/LookupCodes?lookupTable=PropertyType
+    @GET("api/v1/Lookup/LookupCodes")
+    Call<JsonElement> getLookupCodes(
+            @Query("lookupTable") String lookupTable
+    );
+
     // ===================== DRIVER / PROPERTY / KEY / MECHANIC =====================
     // /api/v1/Lookup/Driver/Property/Key/Mechanic/{userType}?eventId=ID
     @GET("api/v1/Lookup/Driver/Property/Key/Mechanic/{userType}")

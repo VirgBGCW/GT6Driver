@@ -57,9 +57,6 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
 
     private static final String TAG = "GT6Release";
 
-    private static final String BLOB_BASE = "https://stgt6driverappprod.blob.core.windows.net/";
-    private static final String COMPRESSED_VIDEO_BASE =
-            "https://stgt6driverappprod.blob.core.windows.net/compressed-files/";
     private static final String DEFAULT_OWNER_OTHER_PARTY = "STORAGE LOT";
 
     private static final String EXTRA_VEHICLE        = "vehicle";
@@ -939,11 +936,11 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
     }
 
     private String mediaUrl(String fileName) {
-        return BLOB_BASE + consignmentIdStr() + "/" + fileName;
+        return StorageConfig.blobEndpoint() + "/" + consignmentIdStr() + "/" + fileName;
     }
 
     private String compressedMp4Url(String baseNameNoExt) {
-        return COMPRESSED_VIDEO_BASE + consignmentIdStr() + "/" + baseNameNoExt + "_c.mp4";
+        return StorageConfig.compressedFilesBaseUrl() + consignmentIdStr() + "/" + baseNameNoExt + "_c.mp4";
     }
 
     private void ensureCameraForPhoto(String label) {

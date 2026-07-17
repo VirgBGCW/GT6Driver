@@ -3,39 +3,79 @@ package com.example.gt6driver.net;
 import com.google.gson.annotations.SerializedName;
 
 public class LotSearchResponse {
-    @SerializedName("auctionid")            public Integer auctionid;
-    @SerializedName("checkinmileage")       public Integer checkinmileage;
-    @SerializedName("col")                  public String col;
-    @SerializedName("consignmentid")        public Integer consignmentid;
+    @SerializedName(value = "auctionid", alternate = {"auctionId"})
+    public Integer auctionid;
 
-    @SerializedName("crmopportunityid")
+    @SerializedName(value = "checkinmileage", alternate = {"checkInMileage"})
+    public Integer checkinmileage;
+
+    @SerializedName("col")
+    public String col;
+
+    @SerializedName(value = "consignmentid", alternate = {"consignmentId"})
+    public Integer consignmentid;
+
+    @SerializedName(value = "crmopportunityid", alternate = {"opportunityId"})
     public String opportunityId;
 
+    @SerializedName(value = "exteriorcolor", alternate = {"exteriorColor"})
+    public String exteriorcolor;
 
-    @SerializedName("exteriorcolor")        public String exteriorcolor;
-    @SerializedName("intakevideo")          public String intakevideo;
-    @SerializedName("itemid")               public Integer itemid;
+    @SerializedName(value = "intakevideo", alternate = {"intakeVideo"})
+    public String intakevideo;
 
-    // IMPORTANT: lotnumber can be 1308.1 → use String
-    @SerializedName("lotnumber")            public String lotnumber;
+    @SerializedName(value = "itemid", alternate = {"itemId"})
+    public Integer itemid;
 
-    @SerializedName("make")                 public String make;
-    @SerializedName("marketingdescription") public String marketingdescription;
-    @SerializedName("model")                public String model;
-    @SerializedName("notes")                public String notes;
+    // Lot numbers can be fractional, so keep this as String.
+    @SerializedName(value = "lotnumber", alternate = {"lotNumber"})
+    public String lotnumber;
 
-    @SerializedName("owneruncpath")         public String owneruncpath;
-    @SerializedName("qrurl")                public String qrurl;
-    @SerializedName("releasevideo")         public String releasevideo;
-    @SerializedName("row")                  public String row;
-    @SerializedName("stage")                public Integer stage;
-    @SerializedName("status")               public String status;
-    @SerializedName("targettime")           public Long targettime;
+    @SerializedName("make")
+    public String make;
 
-    @SerializedName("tbuncpath")            public String tbuncpath;   // thumbnail URL
-    @SerializedName("tentid")               public String tentid;
+    @SerializedName(value = "marketingdescription", alternate = {"marketingDescription"})
+    public String marketingdescription;
 
-    @SerializedName("vin")                  public String vin;
-    @SerializedName("year")                 public Integer year;
+    @SerializedName("model")
+    public String model;
+
+    @SerializedName("notes")
+    public String notes;
+
+    @SerializedName(value = "owneruncpath", alternate = {"ownerUncPath"})
+    public String owneruncpath;
+
+    @SerializedName(value = "qrurl", alternate = {"qrUrl"})
+    public String qrurl;
+
+    @SerializedName(value = "releasevideo", alternate = {"releaseVideo"})
+    public String releasevideo;
+
+    @SerializedName("row")
+    public String row;
+
+    @SerializedName("stage")
+    public Integer stage;
+
+    @SerializedName("status")
+    public String status;
+
+    @SerializedName(value = "targettime", alternate = {"targetTime"})
+    public Long targettime;
+
+    @SerializedName("expectedStartTime")
+    public String expectedStartTime;
+
+    @SerializedName(value = "tbuncpath", alternate = {"tbUncPath"})
+    public String tbuncpath;
+
+    @SerializedName(value = "tentid", alternate = {"tentId"})
+    public String tentid;
+
+    @SerializedName("vin")
+    public String vin;
+
+    @SerializedName("year")
+    public Integer year;
 }
-

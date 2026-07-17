@@ -25,6 +25,7 @@ import com.bumptech.glide.load.resource.bitmap.RoundedCorners;
 import com.example.gt6driver.model.PropertyItem;
 import com.example.gt6driver.model.VehicleDetail;
 import com.example.gt6driver.net.ApiClient;
+import com.example.gt6driver.net.LookupService;
 import com.example.gt6driver.net.OpportunityApi;
 import com.example.gt6driver.net.PropertyCreateRequest;
 import com.example.gt6driver.ui.PropertyAdapter;
@@ -34,6 +35,8 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.textfield.MaterialAutoCompleteTextView;
 import com.google.android.material.textfield.TextInputEditText;
 import com.google.android.material.textfield.TextInputLayout;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import com.example.gt6driver.net.PropertyCheckinTypeUpdateRequest;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -53,12 +56,6 @@ public class PropertyActivity extends AppCompatActivity {
     private static final String PROPERTY_STATUS_AWAITING_ARRIVAL = "AwaitingArrival";
     private static final String PROPERTY_STATUS_ARRIVED = "360450009";
     private static final String PROPERTY_STATUS_LEFT_IN_CAR = "LeftInCar";
-
-    /**
-     * Property types from CSV (sorted by Name).
-     * UI shows Name, but API must send Property ID as the "type" value.
-     */
-    private static final List<PropertyTypeCatalog.Option> PROPERTY_TYPES = PropertyTypeCatalog.optionsSorted();
 
     // Vehicle panel views
     private ImageView panelImage;
@@ -86,6 +83,9 @@ public class PropertyActivity extends AppCompatActivity {
     private String driver = "";
 
     private String opportunityId = "";
+    private final List<PropertyTypeCatalog.Option> propertyTypes = new ArrayList<>();
+    private Call<JsonElement> propertyTypesCall;
+    private boolean propertyTypesLoaded = false;
 
     // Legacy fallbacks
     private String lotLegacy = "", descLegacy = "", vinLegacy = "", thumbLegacy = "";
@@ -99,6 +99,7 @@ public class PropertyActivity extends AppCompatActivity {
         } catch (Throwable ignored) {}
 
         setContentView(R.layout.activity_property);
+        ApiClient.configure(this);
 
         bindViews();
         readExtras(getIntent());
@@ -115,12 +116,15 @@ public class PropertyActivity extends AppCompatActivity {
         populateVehiclePanel();
         setupRecycler();
         loadProperty(opportunityId.trim());
+        loadPropertyTypesFromApi();
 
         if (btnCloseProperty != null) {
             btnCloseProperty.setOnClickListener(v -> finish());
         }
 
         if (btnAddProperty != null) {
+            btnAddProperty.setEnabled(false);
+            btnAddProperty.setAlpha(0.6f);
             btnAddProperty.setOnClickListener(v -> showAddPropertyDialog());
         }
 
@@ -157,6 +161,14 @@ public class PropertyActivity extends AppCompatActivity {
         return null;
     }
 
+    @Override
+    protected void onDestroy() {
+        if (propertyTypesCall != null && !propertyTypesCall.isCanceled()) {
+            propertyTypesCall.cancel();
+        }
+        super.onDestroy();
+    }
+
     private void readExtras(@NonNull Intent intent) {
         vehicle = intent.getParcelableExtra(Nav.EXTRA_VEHICLE);
 
@@ -176,6 +188,120 @@ public class PropertyActivity extends AppCompatActivity {
         rvProperty.setAdapter(adapter);
         rvProperty.setItemAnimator(null);
     }
+
+    private void loadPropertyTypesFromApi() {
+        propertyTypesLoaded = false;
+        updateAddPropertyEnabled(false);
+
+        LookupService svc = ApiClient.getMemberApi().create(LookupService.class);
+        propertyTypesCall = svc.getLookupCodes("PropertyType");
+
+        try {
+            Log.i(HTTP_LOG_TAG, propertyTypesCall.request().method() + " " + propertyTypesCall.request().url());
+        } catch (Throwable ignored) {}
+
+        propertyTypesCall.enqueue(new Callback<JsonElement>() {
+            @Override
+            public void onResponse(Call<JsonElement> call, Response<JsonElement> response) {
+                if (!response.isSuccessful() || response.body() == null) {
+                    propertyTypesLoaded = false;
+                    updateAddPropertyEnabled(false);
+                    Toast.makeText(
+                            PropertyActivity.this,
+                            "Failed to load property types (" + response.code() + ")",
+                            Toast.LENGTH_LONG
+                    ).show();
+                    return;
+                }
+
+                List<PropertyTypeCatalog.Option> fetched = parsePropertyTypes(response.body());
+                if (fetched.isEmpty()) {
+                    propertyTypesLoaded = false;
+                    updateAddPropertyEnabled(false);
+                    Toast.makeText(PropertyActivity.this, "No property types found.", Toast.LENGTH_LONG).show();
+                    return;
+                }
+
+                propertyTypes.clear();
+                propertyTypes.addAll(fetched);
+                propertyTypesLoaded = true;
+                updateAddPropertyEnabled(true);
+            }
+
+            @Override
+            public void onFailure(Call<JsonElement> call, Throwable t) {
+                if (call.isCanceled()) return;
+                propertyTypesLoaded = false;
+                updateAddPropertyEnabled(false);
+                Log.e(HTTP_LOG_TAG, "Property type lookup network error", t);
+                Toast.makeText(PropertyActivity.this, "Network error loading property types", Toast.LENGTH_LONG).show();
+            }
+        });
+    }
+
+    private void updateAddPropertyEnabled(boolean enabled) {
+        if (btnAddProperty == null) return;
+        btnAddProperty.setEnabled(enabled);
+        btnAddProperty.setAlpha(enabled ? 1f : 0.6f);
+    }
+
+    private List<PropertyTypeCatalog.Option> parsePropertyTypes(JsonElement body) {
+        List<PropertyTypeCatalog.Option> fetched = new ArrayList<>();
+        if (body == null || !body.isJsonArray()) return fetched;
+
+        for (JsonElement topEl : body.getAsJsonArray()) {
+            if (topEl == null || !topEl.isJsonObject()) continue;
+            JsonObject topObj = topEl.getAsJsonObject();
+            JsonElement lookupsEl = topObj.get("lookups");
+            if (lookupsEl == null || !lookupsEl.isJsonArray()) continue;
+
+            for (JsonElement lookupEl : lookupsEl.getAsJsonArray()) {
+                if (lookupEl == null || !lookupEl.isJsonObject()) continue;
+                JsonObject lookup = lookupEl.getAsJsonObject();
+
+                Integer id = getIntOrNull(lookup, "id");
+                String name = getStringOrNull(lookup, "name");
+
+                if (id != null && id > 0 && name != null && !name.trim().isEmpty()) {
+                    fetched.add(new PropertyTypeCatalog.Option(id, name.trim()));
+                }
+            }
+        }
+
+        Collections.sort(fetched, (a, b) -> a.name.compareToIgnoreCase(b.name));
+        return fetched;
+    }
+
+    @Nullable
+    private Integer getIntOrNull(JsonObject object, String key) {
+        try {
+            if (object == null || !object.has(key) || object.get(key).isJsonNull()) return null;
+            return object.get(key).getAsInt();
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    @Nullable
+    private String getStringOrNull(JsonObject object, String key) {
+        try {
+            if (object == null || !object.has(key) || object.get(key).isJsonNull()) return null;
+            return object.get(key).getAsString();
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private int resolveLoadedPropertyTypeIdByName(String name) {
+        String target = safe(name);
+        for (PropertyTypeCatalog.Option option : propertyTypes) {
+            if (option.name.equalsIgnoreCase(target)) {
+                return option.id;
+            }
+        }
+        return -1;
+    }
+
     private void updatePropertyCheckInType(@NonNull PropertyItem item, int position, @NonNull String newCheckInType) {
         String propertyId = item.getPropertyIdForApi();
         if (propertyId.isEmpty()) {
@@ -462,6 +588,11 @@ public class PropertyActivity extends AppCompatActivity {
     }
 
     private void showAddPropertyDialog() {
+        if (!propertyTypesLoaded || propertyTypes.isEmpty()) {
+            Toast.makeText(this, "Property types are still loading.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
         View view = LayoutInflater.from(this).inflate(R.layout.dialog_add_property, null, false);
 
         TextInputLayout tilType = view.findViewById(R.id.tilPropertyType);
@@ -499,7 +630,7 @@ public class PropertyActivity extends AppCompatActivity {
         }
 
         List<String> typeNames = new ArrayList<>();
-        for (PropertyTypeCatalog.Option opt : PROPERTY_TYPES) {
+        for (PropertyTypeCatalog.Option opt : propertyTypes) {
             typeNames.add(opt.name);
         }
 
@@ -551,7 +682,7 @@ public class PropertyActivity extends AppCompatActivity {
                     tilNotes.setError(null);
                 }
 
-                int propertyTypeId = PropertyTypeCatalog.resolveIdByName(typeName);
+                int propertyTypeId = resolveLoadedPropertyTypeIdByName(typeName);
                 if (propertyTypeId <= 0) {
                     tilType.setError("Invalid type");
                     ok = false;

@@ -25,9 +25,6 @@ import java.util.concurrent.Executors;
 
 public class VideoReviewActivity extends AppCompatActivity {
 
-    private static final String COMPRESSED_VIDEO_BASE =
-            "https://stgt6driverappprod.blob.core.windows.net/compressed-files/";
-
     private TextView panelLot, panelDesc;
     private TextView panelVinValue;
     private TextView panelLocationName;
@@ -283,7 +280,7 @@ public class VideoReviewActivity extends AppCompatActivity {
         if (consignmentId.isEmpty() || "unknown".equalsIgnoreCase(consignmentId)) {
             return "";
         }
-        return COMPRESSED_VIDEO_BASE + consignmentId + "/" + baseNameNoExt + "_c.mp4";
+        return StorageConfig.compressedFilesBaseUrl() + consignmentId + "/" + baseNameNoExt + "_c.mp4";
     }
 
     private String consignmentIdStr() {
