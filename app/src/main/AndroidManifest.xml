@@ -176,8 +176,10 @@
 
         <!-- Launcher -->
         <activity
-            android:name=".MainActivity"
+            android:name=".SplashActivity"
             android:exported="true"
+            android:noHistory="true"
+            android:theme="@style/Theme.GT6Driver.Launcher"
             android:screenOrientation="portrait">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -185,9 +187,13 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:screenOrientation="portrait" />
+
     </application>
 </manifest>
-
 
 
 

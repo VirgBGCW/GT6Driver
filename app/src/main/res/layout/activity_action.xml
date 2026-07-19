@@ -14,7 +14,7 @@
         android:id="@+id/logo"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:src="@drawable/logo"
+        android:src="@drawable/gt6driver_new_header"
         android:adjustViewBounds="true"
         android:scaleType="fitCenter"
         android:maxHeight="72dp"
@@ -280,6 +280,7 @@
         app:layout_constraintEnd_toEndOf="parent" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>
+
 
 
 

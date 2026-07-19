@@ -221,7 +221,7 @@
                                 android:layout_width="0dp"
                                 android:layout_height="wrap_content"
                                 android:layout_weight="1"
-                                android:hint="ENTER VIN"
+                                android:hint="ENTER VIN or 0"
                                 app:boxBackgroundMode="outline">
 
                                 <com.google.android.material.textfield.TextInputEditText
@@ -231,7 +231,7 @@
                                     android:inputType="textCapCharacters"
                                     android:maxLength="17"
                                     android:textColor="@android:color/black"
-                                    android:hint="ENTER VIN" />
+                                    android:hint="ENTER VIN or 0" />
                             </com.google.android.material.textfield.TextInputLayout>
 
                             <ImageButton

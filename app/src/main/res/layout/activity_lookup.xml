@@ -49,7 +49,7 @@
         android:id="@+id/logo"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:src="@drawable/logo"
+        android:src="@drawable/gt6driver_new_header"
         android:contentDescription="@string/logo_desc"
         android:adjustViewBounds="true"
         android:layout_marginTop="32dp"

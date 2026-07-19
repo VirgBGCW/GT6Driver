@@ -249,6 +249,37 @@ public class LookupActivity extends AppCompatActivity {
             android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_LONG).show();
         }
     }
+
+    private void showNoResults(String searchType, String searchValue) {
+        String value = searchValue == null ? "" : searchValue.trim();
+        String msg = value.isEmpty()
+                ? "No matching vehicles found.\nTry another search."
+                : "No matching vehicle found for " + searchType + " \"" + value + "\".\nTry another search.";
+
+        if (errorText != null) {
+            errorText.setBackgroundColor(0x99000000);
+            errorText.setPadding(dp(20), dp(16), dp(20), dp(16));
+            errorText.setGravity(Gravity.CENTER);
+            errorText.setTextSize(20f);
+            errorText.setTextColor(0xFFFFFFFF);
+            errorText.setText(msg);
+            errorText.setVisibility(View.VISIBLE);
+        } else {
+            android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private boolean showNoResultsIfNotFound(Response<List<LotSearchResponse>> resp,
+                                            String searchType,
+                                            String searchValue) {
+        if (resp != null && resp.code() == 404) {
+            showNoResults(searchType, searchValue);
+            adapter.setItems(new ArrayList<>());
+            return true;
+        }
+        return false;
+    }
+
     // Clear Previous input and results
     private void resetLookupUi() {
         // cancel any in-flight network calls
@@ -389,13 +420,14 @@ public class LookupActivity extends AppCompatActivity {
             @Override
             public void onResponse(Call<List<LotSearchResponse>> call, Response<List<LotSearchResponse>> resp) {
                 setLoading(false);
+                if (showNoResultsIfNotFound(resp, "lot number", lotStr)) return;
                 if (!resp.isSuccessful() || resp.body() == null) {
                     showError("Search failed: HTTP " + resp.code());
                     adapter.setItems(new ArrayList<>());
                     return;
                 }
                 adapter.setItems(mapToDetails(resp.body()));
-                if (adapter.getItemCount() == 0) showError("No results.");
+                if (adapter.getItemCount() == 0) showNoResults("lot number", lotStr);
             }
 
             @Override
@@ -418,21 +450,23 @@ public class LookupActivity extends AppCompatActivity {
             return;
         }
         vinStr = vinStr.replace(" ", "").toUpperCase();
+        final String searchVin = vinStr;
         cancelAll();
         setLoading(true);
 
-        vinCall = vehicleApi.searchByVin(eventId, vinStr);
+        vinCall = vehicleApi.searchByVin(eventId, searchVin);
         vinCall.enqueue(new Callback<List<LotSearchResponse>>() {
             @Override
             public void onResponse(Call<List<LotSearchResponse>> call, Response<List<LotSearchResponse>> resp) {
                 setLoading(false);
+                if (showNoResultsIfNotFound(resp, "VIN ending in", searchVin)) return;
                 if (!resp.isSuccessful() || resp.body() == null) {
                     showError("Search failed: HTTP " + resp.code());
                     adapter.setItems(new ArrayList<>());
                     return;
                 }
                 adapter.setItems(mapToDetails(resp.body()));
-                if (adapter.getItemCount() == 0) showError("No results.");
+                if (adapter.getItemCount() == 0) showNoResults("VIN ending in", searchVin);
             }
 
             @Override
@@ -467,13 +501,14 @@ public class LookupActivity extends AppCompatActivity {
             @Override
             public void onResponse(Call<List<LotSearchResponse>> call, Response<List<LotSearchResponse>> resp) {
                 setLoading(false);
+                if (showNoResultsIfNotFound(resp, "description", terms)) return;
                 if (!resp.isSuccessful() || resp.body() == null) {
                     showError("Search failed: HTTP " + resp.code());
                     adapter.setItems(new ArrayList<>());
                     return;
                 }
                 adapter.setItems(mapToDetails(resp.body()));
-                if (adapter.getItemCount() == 0) showError("No results.");
+                if (adapter.getItemCount() == 0) showNoResults("description", terms);
             }
 
             @Override
@@ -770,8 +805,6 @@ public class LookupActivity extends AppCompatActivity {
         @Override public void afterTextChanged(Editable s) {}
     }
 }
-
-
 
 
 
