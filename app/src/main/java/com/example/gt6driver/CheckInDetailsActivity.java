@@ -1280,6 +1280,11 @@ public class CheckInDetailsActivity extends AppCompatActivity {
     ) {
         final String sidecarName = baseNameNoExt + ".meta.json";
 
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            Log.w(TAG, "Sidecar(Download): skipped on Android version below scoped Downloads support");
+            return false;
+        }
+
         try {
             final String relPath = Environment.DIRECTORY_DOWNLOADS + "/GT6/" + consignmentId + "/";
 
@@ -1307,6 +1312,7 @@ public class CheckInDetailsActivity extends AppCompatActivity {
             String json =
                     "{"
                             + "\"createdAt\":\"" + createdAtUtc + "\","
+                            + "\"recordedAt\":\"" + createdAtUtc + "\","
                             + "\"consignmentId\":\"" + consignmentId + "\","
                             + "\"tablet\":\"" + tablet + "\","
                             + "\"driver\":\"" + driver + "\","

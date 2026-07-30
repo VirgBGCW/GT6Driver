@@ -25,6 +25,7 @@ import android.widget.ProgressBar;
 import android.widget.RadioButton;
 import android.widget.RadioGroup;
 import android.widget.Spinner;
+import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -73,9 +74,12 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "GT6-Worker";
     private static final String PREF_PRINTER_LANGUAGE = "printer_language";
+    private static final String PREF_AUCTION_EXTENDED_PERIOD_DAYS = "auction_extended_period_days";
     private static final String PRINTER_LANGUAGE_ESC_POS = "escpos";
     private static final String PRINTER_LANGUAGE_EPL = "epl";
     private static final String PRINTER_NAME_PREFIX = "SPP-";
+    private static final int AUCTION_EXTENDED_PERIOD_30_DAYS = 30;
+    private static final int AUCTION_EXTENDED_PERIOD_60_DAYS = 60;
     private static final String[] PRINTER_LANGUAGE_VALUES = {
             PRINTER_LANGUAGE_ESC_POS,
             PRINTER_LANGUAGE_EPL
@@ -353,8 +357,10 @@ public class MainActivity extends AppCompatActivity {
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
         String currentPrinterLanguage = prefs.getString(PREF_PRINTER_LANGUAGE, PRINTER_LANGUAGE_ESC_POS);
         String currentApiEnvironment = ApiClient.getSavedEnvironment(this);
+        int currentAuctionExtendedPeriodDays = getAuctionExtendedPeriodDays(prefs);
         final int[] checkedPrinter = {0};
         final int[] checkedEnvironment = {0};
+        final int[] selectedAuctionExtendedPeriodDays = {currentAuctionExtendedPeriodDays};
 
         for (int i = 0; i < PRINTER_LANGUAGE_VALUES.length; i++) {
             if (PRINTER_LANGUAGE_VALUES[i].equals(currentPrinterLanguage)) {
@@ -411,8 +417,42 @@ public class MainActivity extends AppCompatActivity {
             if (index >= 0) checkedPrinter[0] = index;
         });
 
+        TextView auctionTitle = dialogSectionTitle("Include Auctions");
+        LinearLayout auctionWindowRow = new LinearLayout(this);
+        auctionWindowRow.setOrientation(LinearLayout.HORIZONTAL);
+        auctionWindowRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        auctionWindowRow.setPadding(0, dp(4), 0, dp(4));
+
+        TextView auctionWindowLabel = new TextView(this);
+        auctionWindowLabel.setText("Include Auctions (30, 60)");
+        auctionWindowLabel.setTextColor(OPTIONS_DIALOG_TEXT);
+        auctionWindowLabel.setTextSize(16);
+        LinearLayout.LayoutParams auctionLabelLp = new LinearLayout.LayoutParams(
+                0,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                1f
+        );
+        auctionWindowLabel.setLayoutParams(auctionLabelLp);
+
+        Switch auctionWindowSwitch = new Switch(this);
+        auctionWindowSwitch.setText(currentAuctionExtendedPeriodDays == AUCTION_EXTENDED_PERIOD_60_DAYS ? "60 days" : "30 days");
+        auctionWindowSwitch.setTextColor(OPTIONS_DIALOG_TEXT);
+        auctionWindowSwitch.setTextSize(16);
+        auctionWindowSwitch.setChecked(currentAuctionExtendedPeriodDays == AUCTION_EXTENDED_PERIOD_60_DAYS);
+        auctionWindowSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            selectedAuctionExtendedPeriodDays[0] = isChecked
+                    ? AUCTION_EXTENDED_PERIOD_60_DAYS
+                    : AUCTION_EXTENDED_PERIOD_30_DAYS;
+            buttonView.setText(isChecked ? "60 days" : "30 days");
+        });
+
+        auctionWindowRow.addView(auctionWindowLabel);
+        auctionWindowRow.addView(auctionWindowSwitch);
+
         content.addView(environmentTitle);
         content.addView(environmentGroup);
+        content.addView(auctionTitle);
+        content.addView(auctionWindowRow);
         content.addView(printerTitle);
         content.addView(printerGroup);
 
@@ -420,22 +460,31 @@ public class MainActivity extends AppCompatActivity {
                 .setView(content)
                 .setPositiveButton("Save", (clickedDialog, which) -> {
                     boolean apiChanged = saveApiEnvironment(checkedEnvironment[0]);
+                    boolean auctionWindowChanged = saveAuctionExtendedPeriodDays(
+                            prefs,
+                            selectedAuctionExtendedPeriodDays[0]
+                    );
                     savePrinterLanguage(prefs, checkedPrinter[0]);
                     Toast.makeText(
                             MainActivity.this,
                             "API: " + API_ENVIRONMENT_LABELS[checkedEnvironment[0]]
+                                    + " | Auctions: " + selectedAuctionExtendedPeriodDays[0] + " days"
                                     + " | Printer: " + PRINTER_LANGUAGE_LABELS[checkedPrinter[0]],
                             Toast.LENGTH_SHORT
                     ).show();
                     refreshHeaderLabels();
-                    if (apiChanged) {
+                    if (apiChanged || auctionWindowChanged) {
                         reloadApiBackedSelections();
                     }
                 })
                 .setNeutralButton("Print Test", (clickedDialog, which) -> {
                     boolean apiChanged = saveApiEnvironment(checkedEnvironment[0]);
+                    boolean auctionWindowChanged = saveAuctionExtendedPeriodDays(
+                            prefs,
+                            selectedAuctionExtendedPeriodDays[0]
+                    );
                     savePrinterLanguage(prefs, checkedPrinter[0]);
-                    if (apiChanged) {
+                    if (apiChanged || auctionWindowChanged) {
                         reloadApiBackedSelections();
                     }
                     refreshHeaderLabels();
@@ -524,6 +573,27 @@ public class MainActivity extends AppCompatActivity {
         prefs.edit()
                 .putString(PREF_PRINTER_LANGUAGE, PRINTER_LANGUAGE_VALUES[safeIndex])
                 .apply();
+    }
+
+    private int getAuctionExtendedPeriodDays(SharedPreferences prefs) {
+        int days = prefs.getInt(
+                PREF_AUCTION_EXTENDED_PERIOD_DAYS,
+                AUCTION_EXTENDED_PERIOD_30_DAYS
+        );
+        return days == AUCTION_EXTENDED_PERIOD_60_DAYS
+                ? AUCTION_EXTENDED_PERIOD_60_DAYS
+                : AUCTION_EXTENDED_PERIOD_30_DAYS;
+    }
+
+    private boolean saveAuctionExtendedPeriodDays(SharedPreferences prefs, int days) {
+        int normalized = days == AUCTION_EXTENDED_PERIOD_60_DAYS
+                ? AUCTION_EXTENDED_PERIOD_60_DAYS
+                : AUCTION_EXTENDED_PERIOD_30_DAYS;
+        int current = getAuctionExtendedPeriodDays(prefs);
+        prefs.edit()
+                .putInt(PREF_AUCTION_EXTENDED_PERIOD_DAYS, normalized)
+                .apply();
+        return normalized != current;
     }
 
     private boolean saveApiEnvironment(int index) {
@@ -881,7 +951,12 @@ public class MainActivity extends AppCompatActivity {
         setLoading(true);
         LookupService svc = ApiClient.getMemberApi().create(LookupService.class);
 
-        svc.getAuctionEvents("Auction", true).enqueue(new Callback<JsonElement>() {
+        int auctionExtendedPeriodDays = getAuctionExtendedPeriodDays(
+                PreferenceManager.getDefaultSharedPreferences(this)
+        );
+        Log.i(TAG, "Loading auction events with extendedPeriodInDays=" + auctionExtendedPeriodDays);
+
+        svc.getAuctionEvents("Auction", true, auctionExtendedPeriodDays).enqueue(new Callback<JsonElement>() {
             @Override
             public void onResponse(Call<JsonElement> call, Response<JsonElement> response) {
                 if (!requestBaseUrl.equals(ApiClient.getCurrentBaseUrl())) return;
@@ -1488,5 +1563,3 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 }
-
-

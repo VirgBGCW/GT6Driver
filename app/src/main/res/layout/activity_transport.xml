@@ -128,7 +128,7 @@
                         android:layout_width="24dp"
                         android:layout_height="24dp"
                         android:src="@drawable/ic_close_24"
-                        android:tint="#D32F2F"
+                        app:tint="#D32F2F"
                         app:layout_constraintStart_toStartOf="parent"
                         app:layout_constraintTop_toTopOf="parent" />
 
@@ -243,7 +243,7 @@
                                 android:contentDescription="Open camera"
                                 android:scaleType="centerInside"
                                 android:padding="8dp"
-                                android:tint="@android:color/black"
+                                app:tint="@android:color/black"
                                 android:src="@android:drawable/ic_menu_camera" />
                         </LinearLayout>
 
@@ -303,7 +303,7 @@
                         android:layout_width="24dp"
                         android:layout_height="24dp"
                         android:src="@drawable/ic_close_24"
-                        android:tint="#D32F2F"
+                        app:tint="#D32F2F"
                         app:layout_constraintStart_toStartOf="parent"
                         app:layout_constraintTop_toTopOf="parent" />
 
@@ -367,7 +367,7 @@
                                 android:contentDescription="Open camera"
                                 android:scaleType="centerInside"
                                 android:padding="8dp"
-                                android:tint="@android:color/black"
+                                app:tint="@android:color/black"
                                 android:src="@android:drawable/ic_menu_camera"
                                 app:layout_constraintEnd_toEndOf="parent"
                                 app:layout_constraintTop_toTopOf="@id/cbFobs"

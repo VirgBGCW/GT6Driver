@@ -1,6 +1,7 @@
 package com.example.gt6driver;
 
 import android.Manifest;
+import android.annotation.SuppressLint;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
@@ -34,6 +35,7 @@ import com.bumptech.glide.load.resource.bitmap.CenterCrop;
 import com.bumptech.glide.load.resource.bitmap.RoundedCorners;
 import com.example.gt6driver.data.DriverDirectory;
 import com.example.gt6driver.model.ConsignmentKeyPayload;
+import com.example.gt6driver.model.EventVehicleStatus;
 import com.example.gt6driver.model.EventVehicleStatusPayload;
 import com.example.gt6driver.model.VehicleDetail;
 import com.example.gt6driver.net.ApiClient;
@@ -321,6 +323,13 @@ public class ActionActivity extends AppCompatActivity {
             // LOCATION = TENTID + " / " + COL + " - " + ROW
             String location = (tent + " / " + col + " - " + row).trim();
 
+            Log.i(HTTP_LOG_TAG, "KEY BAG TAG tapped. eventId="
+                    + eventId
+                    + ", lot="
+                    + lot
+                    + ", printerLanguage="
+                    + currentPrinterLanguage());
+
             printVehicleInfoLabel(
                     defaulted(lot, "—"),
                     defaulted(year, "—"),
@@ -442,6 +451,7 @@ public class ActionActivity extends AppCompatActivity {
         }
     }
 
+    @SuppressLint("MissingPermission")
     private boolean ensureBluetoothEnabled() {
         android.bluetooth.BluetoothManager bm =
                 (android.bluetooth.BluetoothManager) getSystemService(BLUETOOTH_SERVICE);
@@ -491,6 +501,12 @@ public class ActionActivity extends AppCompatActivity {
     private void printVehicleInfoLabel(String lot, String year, String make, String model,
                                        String color, String vin, String tent, String descIgnored) {
         String language = currentPrinterLanguage();
+        Log.i(HTTP_LOG_TAG, "KEY BAG TAG print path selected. language="
+                + language
+                + ", eventId="
+                + eventId
+                + ", lot="
+                + lot);
         if (PRINTER_LANGUAGE_ESC_POS.equals(language)) {
             printVehicleInfoEscPos(lot, year, make, model, color, vin, tent, descIgnored);
             return;
@@ -527,7 +543,17 @@ public class ActionActivity extends AppCompatActivity {
                         printLocation
                 );
 
+                Log.i(HTTP_LOG_TAG, "KEY BAG TAG EPL print returned; calling EventVehicleStatus. eventId="
+                        + this.eventId
+                        + ", lot="
+                        + lot);
                 ApiResult res = postEventVehicleStatusSync(this.eventId, lot);
+                Log.i(HTTP_LOG_TAG, "KEY BAG TAG EventVehicleStatus result ok="
+                        + res.ok
+                        + ", code="
+                        + res.code
+                        + ", message="
+                        + res.message);
                 if (res.ok) {
                     runOnUiThread(() -> showBigResultBanner(true, "Vehicle On-Site"));
                 } else {
@@ -540,6 +566,7 @@ public class ActionActivity extends AppCompatActivity {
                         Toast.makeText(this, "Vehicle Info printed", Toast.LENGTH_SHORT).show()
                 );
             } catch (Exception e) {
+                Log.e(HTTP_LOG_TAG, "KEY BAG TAG EPL print failed before EventVehicleStatus could be called", e);
                 runOnUiThread(() ->
                         Toast.makeText(this, "Print failed: " + e.getMessage(), Toast.LENGTH_LONG).show()
                 );
@@ -745,8 +772,18 @@ public class ActionActivity extends AppCompatActivity {
                 esc.printText(escSeq(cmdCharSize(0, 0)));
                 esc.printText("\n\n");
 
-                // After successful print, POST EventVehicleStatus (eventVehicleStatus = 2)
+                // After successful print, POST EventVehicleStatus (On Site).
+                Log.i(HTTP_LOG_TAG, "KEY BAG TAG ESC/POS print returned; calling EventVehicleStatus. eventId="
+                        + this.eventId
+                        + ", lot="
+                        + lot);
                 ApiResult res = postEventVehicleStatusSync(this.eventId, lot);
+                Log.i(HTTP_LOG_TAG, "KEY BAG TAG EventVehicleStatus result ok="
+                        + res.ok
+                        + ", code="
+                        + res.code
+                        + ", message="
+                        + res.message);
                 if (res.ok) {
                     runOnUiThread(() -> showBigResultBanner(true, "Vehicle On-Site"));
                 } else {
@@ -759,6 +796,7 @@ public class ActionActivity extends AppCompatActivity {
                         Toast.makeText(this, "Vehicle Info printed", Toast.LENGTH_SHORT).show()
                 );
             } catch (Exception e) {
+                Log.e(HTTP_LOG_TAG, "KEY BAG TAG ESC/POS print failed before EventVehicleStatus could be called", e);
                 runOnUiThread(() ->
                         Toast.makeText(this, "Print failed: " + e.getMessage(), Toast.LENGTH_LONG).show()
                 );
@@ -1039,12 +1077,18 @@ public class ActionActivity extends AppCompatActivity {
     private ApiResult postEventVehicleStatusSync(int eventId, String lotNumber) {
         if (eventId <= 0) {
             String msg = "invalid eventId=" + eventId;
-            Log.w(HTTP_LOG_TAG, "EventVehicleStatus NOT posted: " + msg);
+            Log.w(HTTP_LOG_TAG, "EventVehicleStatus SKIPPED before API call: "
+                    + msg
+                    + ", lotNumber="
+                    + lotNumber);
             return new ApiResult(false, 0, msg);
         }
         if (lotNumber == null || lotNumber.trim().isEmpty() || "—".equals(lotNumber.trim())) {
             String msg = "missing/invalid lotNumber=" + lotNumber;
-            Log.w(HTTP_LOG_TAG, "EventVehicleStatus NOT posted: " + msg);
+            Log.w(HTTP_LOG_TAG, "EventVehicleStatus SKIPPED before API call: "
+                    + msg
+                    + ", eventId="
+                    + eventId);
             return new ApiResult(false, 0, msg);
         }
 
@@ -1052,29 +1096,40 @@ public class ActionActivity extends AppCompatActivity {
             DriverTaskApi api = ApiClient.getMemberApi().create(DriverTaskApi.class);
 
             EventVehicleStatusPayload payload =
-                    new EventVehicleStatusPayload(eventId, lotNumber.trim(), 2);
+                    new EventVehicleStatusPayload(eventId, lotNumber.trim(), EventVehicleStatus.ON_SITE);
 
             Call<Void> call = api.updateEventVehicleStatus(payload);
 
-            try {
-                Log.i(HTTP_LOG_TAG, "POST " + call.request().url());
-                Log.i(HTTP_LOG_TAG, "Body: " + new com.google.gson.Gson().toJson(payload));
-            } catch (Throwable t) {
-                Log.w(HTTP_LOG_TAG, "Logging failed", t);
-            }
+            String payloadJson = new com.google.gson.Gson().toJson(payload);
+            Log.i(HTTP_LOG_TAG, "EventVehicleStatus request method="
+                    + call.request().method()
+                    + ", url="
+                    + call.request().url());
+            Log.i(HTTP_LOG_TAG, "EventVehicleStatus payload=" + payloadJson);
 
             Response<Void> resp = call.execute();
             int code = resp.code();
-            Log.i(HTTP_LOG_TAG, "EventVehicleStatus response code=" + code);
+            String responseMessage = resp.message() == null ? "" : resp.message();
 
             if (!resp.isSuccessful()) {
                 String errBody = null;
                 try {
                     errBody = resp.errorBody() != null ? resp.errorBody().string() : null;
                 } catch (Exception ignored) {}
-                Log.w(HTTP_LOG_TAG, "EventVehicleStatus failed. code=" + code + ", body=" + errBody);
+                Log.w(HTTP_LOG_TAG, "EventVehicleStatus response code="
+                        + code
+                        + ", message="
+                        + responseMessage
+                        + ", errorBody="
+                        + (errBody == null ? "" : errBody));
                 return new ApiResult(false, code, (errBody != null && !errBody.isEmpty()) ? errBody : "HTTP " + code);
             }
+
+            Log.i(HTTP_LOG_TAG, "EventVehicleStatus response code="
+                    + code
+                    + ", message="
+                    + responseMessage
+                    + ", body=<empty>");
 
             return new ApiResult(true, code, "OK");
         } catch (Exception e) {

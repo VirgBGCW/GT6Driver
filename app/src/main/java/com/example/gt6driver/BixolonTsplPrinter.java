@@ -1,5 +1,6 @@
 package com.example.gt6driver;
 
+import android.annotation.SuppressLint;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothSocket;
@@ -27,6 +28,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.*;
 
+@SuppressLint("MissingPermission")
 public class BixolonTsplPrinter {
 
     private static final String TAG = "BIX";

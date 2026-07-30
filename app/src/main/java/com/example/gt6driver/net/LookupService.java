@@ -17,7 +17,8 @@ public interface LookupService {
     @GET("api/v1/Lookup/LookupCodes")
     Call<JsonElement> getAuctionEvents(
             @Query("lookupTable") String lookupTable,
-            @Query("current") boolean current
+            @Query("current") boolean current,
+            @Query("extendedPeriodInDays") int extendedPeriodInDays
     );
 
     // ===================== GENERIC LOOKUP CODES =====================

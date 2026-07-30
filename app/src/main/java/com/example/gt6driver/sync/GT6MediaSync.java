@@ -95,7 +95,8 @@ public class GT6MediaSync {
                 .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
                 .setBackoffCriteria(
                         BackoffPolicy.EXPONENTIAL,
-                        java.time.Duration.ofSeconds(30)
+                        30,
+                        TimeUnit.SECONDS
                 )
                 .setInputData(buildInput(ctx, false, ""))
                 .build();

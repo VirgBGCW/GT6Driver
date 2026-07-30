@@ -10,7 +10,7 @@ android {
         applicationId = "com.example.gt6driver"
         minSdk = 24
         targetSdk = 35
-        versionCode = 43
+        versionCode = 45
         versionName = "VEGAS2026"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -29,12 +29,15 @@ android {
     }
 
     compileOptions {
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
 }
 
 dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
+
     // Version-catalog deps
     implementation(libs.appcompat)
     implementation(libs.material)

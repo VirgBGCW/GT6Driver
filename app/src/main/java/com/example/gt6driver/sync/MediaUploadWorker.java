@@ -6,6 +6,7 @@ import android.content.Context;
 import android.database.Cursor;
 import android.media.MediaMetadataRetriever;
 import android.net.Uri;
+import android.os.Build;
 import android.provider.MediaStore;
 import android.text.TextUtils;
 import android.util.Log;
@@ -342,7 +343,9 @@ public class MediaUploadWorker extends Worker {
 
     private HashMap<String, String> buildDefaultMeta(String consignmentId, String filename, String relPath) {
         HashMap<String, String> meta = new HashMap<>();
-        meta.put("createdat", java.time.Instant.now().toString());
+        String nowUtc = java.time.Instant.now().toString();
+        meta.put("createdat", nowUtc);
+        meta.put("recordedat", nowUtc);
         meta.put("driver", "Upload Agent");
         meta.put("device", DeviceInfo.getDeviceName(getApplicationContext()));
         meta.put("consignmentid", consignmentId);
@@ -352,6 +355,8 @@ public class MediaUploadWorker extends Worker {
     }
 
     private Uri findSidecarInDownloads(ContentResolver cr, String sidecarName, String consignmentId) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null;
+
         Uri table = MediaStore.Downloads.EXTERNAL_CONTENT_URI;
 
         String[] proj = new String[] {
@@ -391,6 +396,8 @@ public class MediaUploadWorker extends Worker {
 
             putIfPresent(meta, "createdat", o.optString("createdAt", null));
             putIfPresent(meta, "createdat", o.optString("createdat", null));
+            putIfPresent(meta, "recordedat", o.optString("recordedAt", null));
+            putIfPresent(meta, "recordedat", o.optString("recordedat", null));
             putIfPresent(meta, "consignmentid", o.optString("consignmentId", null));
             putIfPresent(meta, "consignmentid", o.optString("consignmentid", null));
             putIfPresent(meta, "device", o.optString("device", null));

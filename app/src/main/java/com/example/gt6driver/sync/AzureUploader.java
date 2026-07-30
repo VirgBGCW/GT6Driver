@@ -299,9 +299,17 @@ public class AzureUploader {
         Map<String, String> meta = new HashMap<>();
         if (in != null) meta.putAll(in);
 
+        if (isBlank(meta.get("createdat")) && !isBlank(meta.get("recordedat"))) {
+            meta.put("createdat", meta.get("recordedat"));
+        }
+
         // createdat default
         if (isBlank(meta.get("createdat"))) {
             meta.put("createdat", utcNowIso());
+        }
+
+        if (isBlank(meta.get("recordedat"))) {
+            meta.put("recordedat", meta.get("createdat"));
         }
 
         // driver default

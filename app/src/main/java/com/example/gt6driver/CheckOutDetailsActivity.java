@@ -704,6 +704,7 @@ public class CheckOutDetailsActivity extends AppCompatActivity {
             String json =
                     "{"
                             + "\"createdAt\":\"" + createdAtUtc + "\","
+                            + "\"recordedAt\":\"" + createdAtUtc + "\","
                             + "\"consignmentId\":\"" + consignmentId + "\","
                             + "\"tablet\":\"" + tablet + "\","
                             + "\"driver\":\"" + driver + "\","
