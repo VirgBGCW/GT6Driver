@@ -343,8 +343,11 @@ public class MainActivity extends AppCompatActivity {
         if (tvDeviceName != null) {
             String deviceName = DeviceInfo.getDeviceName(this);
             String environmentLabel = ApiClient.ENV_UAT.equals(ApiClient.getEnvironment()) ? "UAT" : "PROD";
-            tvDeviceName.setText(deviceName + " - " + environmentLabel);
-            Log.i(TAG, "Main: refreshed deviceName=" + deviceName + ", environment=" + environmentLabel);
+            String printerTypeLabel = currentPrinterTypeLabel();
+            tvDeviceName.setText(deviceName + " - " + environmentLabel + " / " + printerTypeLabel);
+            Log.i(TAG, "Main: refreshed deviceName=" + deviceName
+                    + ", environment=" + environmentLabel
+                    + ", printerType=" + printerTypeLabel);
         }
         if (tvVersion != null) {
             tvVersion.setText(getVersionDisplayText());
@@ -698,6 +701,12 @@ public class MainActivity extends AppCompatActivity {
             }
         }
         return "OLD (ESC/POS)";
+    }
+
+    private String currentPrinterTypeLabel() {
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
+        String language = prefs.getString(PREF_PRINTER_LANGUAGE, PRINTER_LANGUAGE_ESC_POS);
+        return PRINTER_LANGUAGE_EPL.equals(language) ? "NEW" : "OLD";
     }
 
     // ===================== LOCAL VIDEO COUNT =====================

@@ -4,5 +4,6 @@
     <color name="white">#FFFFFFFF</color>
     <color name="redButton">#DC3545</color> <!-- BJ red -->
     <color name="bj_primary">#0B3D91</color> <!-- adjust to your brand -->
+    <color name="key_check_input_text">#202124</color>
+    <color name="key_check_input_stroke">#202124</color>
 </resources>
-

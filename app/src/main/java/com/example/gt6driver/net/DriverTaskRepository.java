@@ -3,8 +3,11 @@ package com.example.gt6driver.net;
 
 import android.util.Log;
 
+import com.example.gt6driver.model.EventVehicleStatus;
+import com.example.gt6driver.model.EventVehicleStatusPayload;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonObject;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -50,24 +53,137 @@ public class DriverTaskRepository {
 
     /** PUT to /api/v1/Driver/{opportunityId}/Intake */
     public void saveIntake(String opportunityId, VehicleTaskIntake body, SaveCallback cb) {
-        Call<Void> call = api.putIntake(opportunityId, body);
+        if (body == null) body = new VehicleTaskIntake();
+        normalizeIntakeForPut(body);
+
+        JsonObject putBody = intakePutJson(body);
+        Call<Void> call = api.putIntake(opportunityId, putBody);
 
         // Debug URL + JSON
         try {
             Log.d(TAG, "PUT Intake URL: " + call.request().url());
-            Log.d(TAG, "Intake Body:\n" + gson.toJson(body));
+            Log.d(TAG, "Intake Body:\n" + gson.toJson(putBody));
         } catch (Throwable ignored) {}
 
         call.enqueue(new Callback<Void>() {
             @Override public void onResponse(Call<Void> call, Response<Void> resp) {
                 if (!resp.isSuccessful()) {
-                    cb.onHttpError(resp.code(), readErrBody(resp));
+                    String errorBody = readErrBody(resp);
+                    Log.w(TAG, "PUT Intake failed code=" + resp.code() + ", body=" + errorBody);
+                    cb.onHttpError(resp.code(), errorBody);
                 } else {
                     cb.onSaved();
                 }
             }
 
             @Override public void onFailure(Call<Void> call, Throwable t) {
+                cb.onError(t);
+            }
+        });
+    }
+
+    private JsonObject intakePutJson(VehicleTaskIntake body) {
+        JsonObject obj = gson.toJsonTree(body).getAsJsonObject();
+        obj.remove("opportunityId");
+        obj.remove("acivityId");
+        return obj;
+    }
+
+    private static void normalizeIntakeForPut(VehicleTaskIntake body) {
+        body.checkInBy = safe(body.checkInBy);
+
+        if (body.vinVerify == null) body.vinVerify = new VehicleTaskIntake.VinVerify();
+        body.vinVerify.isMatched = boolOrFalse(body.vinVerify.isMatched);
+        String newVin = safe(body.vinVerify.newVin).trim();
+        body.vinVerify.newVin = newVin;
+        body.vinVerify.photoUrl = safe(body.vinVerify.photoUrl);
+        body.vinVerify.isNotified = boolOrFalse(body.vinVerify.isNotified);
+
+        if (body.mileage == null) body.mileage = new VehicleTaskIntake.Mileage();
+        if (body.mileage.odometer == null) body.mileage.odometer = 0;
+        body.mileage.photoUrl = safe(body.mileage.photoUrl);
+
+        if (body.keyCheck == null) body.keyCheck = new VehicleTaskIntake.KeyCheck();
+        if (body.fobCheck == null) body.fobCheck = new VehicleTaskIntake.FobCheck();
+        if (body.remoteControlCheck == null) {
+            body.remoteControlCheck = new VehicleTaskIntake.RemoteControlCheck();
+        }
+
+        int keyCount = countOrZero(body.keyCheck.numberOfKeys);
+        int fobCount = countOrZero(body.fobCheck.numberOfFOBs);
+
+        boolean noKeys = Boolean.TRUE.equals(body.noKeysArePresent);
+        if (Boolean.TRUE.equals(body.keyCheck.hasKey)) {
+            noKeys = false;
+        } else if (Boolean.FALSE.equals(body.keyCheck.hasKey)) {
+            noKeys = true;
+        }
+
+        body.noKeysArePresent = noKeys;
+        body.keyCheck.hasKey = !noKeys;
+        body.keyCheck.numberOfKeys = noKeys ? 0 : keyCount;
+        body.keyCheck.photoUrl = safe(body.keyCheck.photoUrl);
+        body.fobCheck.numberOfFOBs = fobCount;
+        body.remoteControlCheck.numberOfRemoteControls =
+                countOrZero(body.remoteControlCheck.numberOfRemoteControls);
+
+        if (body.video == null) body.video = new VehicleTaskIntake.VideoInfo();
+        body.video.videoUrl = safe(body.video.videoUrl);
+
+        if (body.description == null) body.description = new VehicleTaskIntake.Description();
+        body.description.isCorrect = boolOrFalse(body.description.isCorrect);
+        body.description.isIncorrectMileage = boolOrFalse(body.description.isIncorrectMileage);
+        body.description.isInCorrectVin = boolOrFalse(body.description.isInCorrectVin);
+        body.description.isIncorrectSpelling = boolOrFalse(body.description.isIncorrectSpelling);
+        body.description.isIncorrectDetails = boolOrFalse(body.description.isIncorrectDetails);
+
+        if (body.quality == null) body.quality = new VehicleTaskIntake.Quality();
+        body.quality.isConcerns = boolOrFalse(body.quality.isConcerns);
+        body.quality.isExteriorDamage = boolOrFalse(body.quality.isExteriorDamage);
+        body.quality.isTiresWheels = boolOrFalse(body.quality.isTiresWheels);
+        body.quality.isServiceLights = boolOrFalse(body.quality.isServiceLights);
+        body.quality.isInteriorDamage = boolOrFalse(body.quality.isInteriorDamage);
+        body.quality.isMechanical = boolOrFalse(body.quality.isMechanical);
+    }
+
+    private static Boolean boolOrFalse(Boolean value) {
+        return Boolean.TRUE.equals(value);
+    }
+
+    private static int countOrZero(Integer value) {
+        return value == null ? 0 : Math.max(0, value);
+    }
+
+    private static String safe(String value) {
+        return value == null ? "" : value;
+    }
+
+    /** PUT to /api/v1/Opportunity/Consignment/EventVehicleStatus */
+    public void updateEventVehicleStatus(int eventId, String lotNumber, EventVehicleStatus status, SaveCallback cb) {
+        EventVehicleStatusPayload body = new EventVehicleStatusPayload(eventId, lotNumber, status);
+        Call<Void> call = api.updateEventVehicleStatus(body);
+
+        try {
+            Log.i(TAG, "PUT EventVehicleStatus URL: " + call.request().url());
+            Log.i(TAG, "EventVehicleStatus Body:\n" + gson.toJson(body));
+        } catch (Throwable ignored) {}
+
+        call.enqueue(new Callback<Void>() {
+            @Override public void onResponse(Call<Void> call, Response<Void> resp) {
+                if (!resp.isSuccessful()) {
+                    String errorBody = readErrBody(resp);
+                    Log.w(TAG, "PUT EventVehicleStatus failed code=" + resp.code() + ", body=" + errorBody);
+                    cb.onHttpError(resp.code(), errorBody);
+                    return;
+                }
+
+                Log.i(TAG, "PUT EventVehicleStatus success code=" + resp.code()
+                        + ", message=" + resp.message());
+                cb.onSaved();
+            }
+
+            @Override public void onFailure(Call<Void> call, Throwable t) {
+                Log.e(TAG, "PUT EventVehicleStatus exception", t);
                 cb.onError(t);
             }
         });

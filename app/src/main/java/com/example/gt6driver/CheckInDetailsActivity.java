@@ -896,12 +896,16 @@ public class CheckInDetailsActivity extends AppCompatActivity {
         VehicleTaskIntake body = intakeModel;
         if (body == null) body = new VehicleTaskIntake();
 
+        // Path carries opportunityId on PUT; repository strips it from the request body.
         body.opportunityId = opportunityId;
 
-        // Preserve non-UI fields required by the API
+        // Preserve fields collected on the Transport screen.
         if (intakeModel != null) {
             body.activityId = intakeModel.activityId;
             body.keyCheck = intakeModel.keyCheck;
+            body.fobCheck = intakeModel.fobCheck;
+            body.remoteControlCheck = intakeModel.remoteControlCheck;
+            body.noKeysArePresent = intakeModel.noKeysArePresent;
             body.vinVerify = intakeModel.vinVerify;
         }
 
@@ -1445,10 +1449,9 @@ public class CheckInDetailsActivity extends AppCompatActivity {
         }
     }
     private boolean shouldBlockIntakeForVinVerify(VehicleTaskIntake it) {
-        if (it == null || it.vinVerify == null) return true; // block if missing entirely
-
-        String newVin = safeStr(it.vinVerify.newVin);
-        return TextUtils.isEmpty(newVin); // 🔥 BLOCK when EMPTY
+        if (it == null || it.vinVerify == null) return true;
+        String newVin = safeStr(it.vinVerify.newVin).trim();
+        return !("0".equals(newVin) || (newVin.length() >= 4 && newVin.length() <= 17));
     }
 
     private void showTransportRequiredModalAndExit() {

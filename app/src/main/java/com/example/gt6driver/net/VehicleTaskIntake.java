@@ -10,7 +10,6 @@ public class VehicleTaskIntake {
     @SerializedName("opportunityId")
     public String opportunityId;
 
-    // NOTE: backend typo is "acivityId" — keep it so Gson maps correctly
     @SerializedName("acivityId")
     public String activityId;
 
@@ -19,6 +18,9 @@ public class VehicleTaskIntake {
 
     @SerializedName("keyCheck")
     public KeyCheck keyCheck;
+
+    @SerializedName("fobCheck")
+    public FobCheck fobCheck;
 
     @SerializedName("mileage")
     public Mileage mileage;
@@ -31,6 +33,12 @@ public class VehicleTaskIntake {
 
     @SerializedName("vinVerify")
     public VinVerify vinVerify;
+
+    @SerializedName("remoteControlCheck")
+    public RemoteControlCheck remoteControlCheck;
+
+    @SerializedName("noKeysArePresent")
+    public Boolean noKeysArePresent;
 
     // ---------- Nested models ----------
 
@@ -60,6 +68,16 @@ public class VehicleTaskIntake {
 
         @SerializedName("photoUrl")
         public String photoUrl;
+    }
+
+    public static class FobCheck {
+        @SerializedName("numberOfFOBs")
+        public Integer numberOfFOBs;
+    }
+
+    public static class RemoteControlCheck {
+        @SerializedName("numberOfRemoteControls")
+        public Integer numberOfRemoteControls;
     }
 
     public static class Mileage {

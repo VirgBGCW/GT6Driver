@@ -10,7 +10,7 @@ android {
         applicationId = "com.example.gt6driver"
         minSdk = 24
         targetSdk = 35
-        versionCode = 45
+        versionCode = 46
         versionName = "VEGAS2026"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

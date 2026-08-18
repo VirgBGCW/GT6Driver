@@ -11,6 +11,7 @@ import retrofit2.http.Path;
 
 import com.example.gt6driver.model.ConsignmentKeyPayload;
 import com.example.gt6driver.model.EventVehicleStatusPayload;
+import com.google.gson.JsonObject;
 
 public interface DriverTaskApi {
 
@@ -21,7 +22,7 @@ public interface DriverTaskApi {
     @PUT("api/v1/Driver/{opportunityId}/Intake")
     Call<Void> putIntake(
             @Path("opportunityId") String opportunityId,
-            @Body VehicleTaskIntake body
+            @Body JsonObject body
     );
 
     // ==== RELEASE ====

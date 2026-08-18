@@ -337,63 +337,113 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content">
 
-                            <com.google.android.material.checkbox.MaterialCheckBox
-                                android:id="@+id/cbFobs"
-                                android:layout_width="wrap_content"
+                            <com.google.android.material.textfield.TextInputLayout
+                                android:id="@+id/enterKeyCountLayout"
+                                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                                android:layout_width="0dp"
                                 android:layout_height="wrap_content"
-                                android:text="FOB(s)"
-                                android:textColor="@android:color/black"
+                                android:layout_marginEnd="12dp"
+                                android:hint="NUMBER OF KEYS"
+                                android:textColorHint="@color/key_check_input_text"
+                                app:boxBackgroundMode="outline"
+                                app:boxStrokeColor="@color/key_check_input_stroke"
+                                app:boxStrokeWidth="1dp"
+                                app:boxStrokeWidthFocused="2dp"
+                                app:hintTextColor="@color/key_check_input_text"
+                                app:layout_constraintEnd_toStartOf="@id/cbNoKey"
                                 app:layout_constraintStart_toStartOf="parent"
-                                app:layout_constraintTop_toTopOf="parent" />
+                                app:layout_constraintTop_toTopOf="parent">
+
+                                <com.google.android.material.textfield.TextInputEditText
+                                    android:id="@+id/enterKeyCountInput"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:hint="NUMBER OF KEYS"
+                                    android:inputType="number"
+                                    android:selectAllOnFocus="true"
+                                    android:singleLine="true"
+                                    android:text="0"
+                                    android:textColor="@color/key_check_input_text"
+                                    android:textColorHint="@color/key_check_input_text" />
+                            </com.google.android.material.textfield.TextInputLayout>
 
                             <com.google.android.material.checkbox.MaterialCheckBox
                                 android:id="@+id/cbNoKey"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="NO KEY"
+                                android:text="NO KEYS"
                                 android:textColor="@android:color/black"
-                                android:layout_marginStart="16dp"
-                                app:layout_constraintStart_toEndOf="@id/cbFobs"
-                                app:layout_constraintTop_toTopOf="@id/cbFobs"
-                                app:layout_constraintBottom_toBottomOf="@id/cbFobs"
-                                app:layout_constraintEnd_toStartOf="@id/btnKeyCamera" />
-
-                            <ImageButton
-                                android:id="@+id/btnKeyCamera"
-                                android:layout_width="48dp"
-                                android:layout_height="48dp"
-                                android:layout_marginStart="12dp"
-                                android:background="?attr/selectableItemBackgroundBorderless"
-                                android:contentDescription="Open camera"
-                                android:scaleType="centerInside"
-                                android:padding="8dp"
-                                app:tint="@android:color/black"
-                                android:src="@android:drawable/ic_menu_camera"
+                                app:layout_constraintBottom_toBottomOf="@id/enterKeyCountLayout"
                                 app:layout_constraintEnd_toEndOf="parent"
-                                app:layout_constraintTop_toTopOf="@id/cbFobs"
-                                app:layout_constraintBottom_toBottomOf="@id/cbFobs" />
+                                app:layout_constraintTop_toTopOf="@id/enterKeyCountLayout" />
                         </androidx.constraintlayout.widget.ConstraintLayout>
 
-                        <com.google.android.material.textfield.TextInputLayout
-                            android:id="@+id/enterKeyCountLayout"
-                            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                        <androidx.constraintlayout.widget.ConstraintLayout
+                            android:id="@+id/keyAccessoryRow"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="8dp"
-                            android:enabled="false"
-                            android:alpha="0.6"
-                            android:hint="NUMBER OF KEYS"
-                            app:boxBackgroundMode="outline">
+                            android:layout_marginTop="8dp">
 
-                            <com.google.android.material.textfield.TextInputEditText
-                                android:id="@+id/enterKeyCountInput"
-                                android:layout_width="match_parent"
+                            <com.google.android.material.textfield.TextInputLayout
+                                android:id="@+id/enterFobCountLayout"
+                                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                                android:layout_width="0dp"
                                 android:layout_height="wrap_content"
-                                android:inputType="number"
-                                android:enabled="false"
-                                android:hint="NUMBER OF KEYS"
-                                android:textColor="@android:color/black" />
-                        </com.google.android.material.textfield.TextInputLayout>
+                                android:layout_marginEnd="6dp"
+                                android:hint="NUMBER OF FOB(s)"
+                                android:textColorHint="@color/key_check_input_text"
+                                app:boxBackgroundMode="outline"
+                                app:boxStrokeColor="@color/key_check_input_stroke"
+                                app:boxStrokeWidth="1dp"
+                                app:boxStrokeWidthFocused="2dp"
+                                app:hintTextColor="@color/key_check_input_text"
+                                app:layout_constraintEnd_toStartOf="@id/enterRemoteCountLayout"
+                                app:layout_constraintStart_toStartOf="parent"
+                                app:layout_constraintTop_toTopOf="parent">
+
+                                <com.google.android.material.textfield.TextInputEditText
+                                    android:id="@+id/enterFobCountInput"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:hint="NUMBER OF FOB(s)"
+                                    android:inputType="number"
+                                    android:selectAllOnFocus="true"
+                                    android:singleLine="true"
+                                    android:text="0"
+                                    android:textColor="@color/key_check_input_text"
+                                    android:textColorHint="@color/key_check_input_text" />
+                            </com.google.android.material.textfield.TextInputLayout>
+
+                            <com.google.android.material.textfield.TextInputLayout
+                                android:id="@+id/enterRemoteCountLayout"
+                                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="6dp"
+                                android:hint="NUMBER OF REMOTE(S)"
+                                android:textColorHint="@color/key_check_input_text"
+                                app:boxBackgroundMode="outline"
+                                app:boxStrokeColor="@color/key_check_input_stroke"
+                                app:boxStrokeWidth="1dp"
+                                app:boxStrokeWidthFocused="2dp"
+                                app:hintTextColor="@color/key_check_input_text"
+                                app:layout_constraintEnd_toEndOf="parent"
+                                app:layout_constraintStart_toEndOf="@id/enterFobCountLayout"
+                                app:layout_constraintTop_toTopOf="parent">
+
+                                <com.google.android.material.textfield.TextInputEditText
+                                    android:id="@+id/enterRemoteCountInput"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:hint="NUMBER OF REMOTE(S)"
+                                    android:inputType="number"
+                                    android:selectAllOnFocus="true"
+                                    android:singleLine="true"
+                                    android:text="0"
+                                    android:textColor="@color/key_check_input_text"
+                                    android:textColorHint="@color/key_check_input_text" />
+                            </com.google.android.material.textfield.TextInputLayout>
+                        </androidx.constraintlayout.widget.ConstraintLayout>
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/btnKeyUpdate"

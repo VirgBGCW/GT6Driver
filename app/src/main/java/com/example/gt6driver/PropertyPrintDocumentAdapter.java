@@ -17,6 +17,7 @@ import android.print.PrintDocumentInfo;
 import android.print.pdf.PrintedPdfDocument;
 
 import com.example.gt6driver.model.PropertyItem;
+import com.example.gt6driver.model.PropertyItemCheckInType;
 
 import java.io.FileOutputStream;
 import java.util.ArrayList;
@@ -298,17 +299,23 @@ public class PropertyPrintDocumentAdapter extends PrintDocumentAdapter {
                 item == null ? "" : safe(item.status)
         ));
 
-        if (value.equals("awaitingarrival") || value.equals("awaiting")) {
+        if (value.equals(PropertyItemCheckInType.AWAITING_ARRIVAL.getApiValue())
+                || value.equalsIgnoreCase(PropertyItemCheckInType.AWAITING_ARRIVAL_LEGACY_API_VALUE)
+                || value.equals("awaitingarrival")
+                || value.equals("awaiting")) {
             return "";
         }
-        if (value.equals("360450009")
+        if (value.equals(PropertyItemCheckInType.ARRIVED.getApiValue())
+                || value.equals(PropertyItemCheckInType.REMOVED.getApiValue())
                 || value.equals("arrived")
                 || value.equals("removed")
                 || value.equals("removedfromvehicle")
                 || value.equals("propertyremovedfromvehicle")) {
             return "removed";
         }
-        if (value.equals("leftincar")
+        if (value.equals(PropertyItemCheckInType.LEFT_IN_CAR.getApiValue())
+                || value.equals(PropertyItemCheckInType.LEFT_IN_CAR_ALTERNATE.getApiValue())
+                || value.equals("leftincar")
                 || value.equals("incar")
                 || value.equals("leftinvehicle")
                 || value.equals("leftinveh")

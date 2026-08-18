@@ -40,6 +40,8 @@ import com.example.gt6driver.model.EventVehicleStatusPayload;
 import com.example.gt6driver.model.VehicleDetail;
 import com.example.gt6driver.net.ApiClient;
 import com.example.gt6driver.net.DriverTaskApi;
+import com.example.gt6driver.net.DriverTaskRepository;
+import com.example.gt6driver.net.VehicleTaskIntake;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.textfield.TextInputEditText;
@@ -119,6 +121,8 @@ public class ActionActivity extends AppCompatActivity {
     private MaterialButton btnTransport;
     private MaterialButton btnCheckIn, btnCheckOut;
     private MaterialButton btnKeyBagTags, btnCarTag, btnAssignDriver, btnDriverCheckIn;
+    private boolean keyBagTagPrintInProgress = false;
+    private boolean carTagPrintInProgress = false;
 
     // Context/state
     private int eventId = -1;
@@ -309,6 +313,8 @@ public class ActionActivity extends AppCompatActivity {
         btnAssignDriver.setOnClickListener(v -> showAssignDriverDialog());
 
         btnKeyBagTags.setOnClickListener(v -> {
+            if (!beginKeyBagTagPrint()) return;
+
             String lot = currentLot();
             String year = (vehicle != null && vehicle.year != null) ? String.valueOf(vehicle.year) : "";
             String make = (vehicle != null) ? safe(vehicle.make) : "";
@@ -330,19 +336,20 @@ public class ActionActivity extends AppCompatActivity {
                     + ", printerLanguage="
                     + currentPrinterLanguage());
 
-            printVehicleInfoLabel(
+            fetchKeySummaryAndPrint(
                     defaulted(lot, "—"),
                     defaulted(year, "—"),
                     defaulted(make, "—"),
                     defaulted(model, "—"),
                     defaulted(color, "—"),
                     defaulted(vin, "—"),
-                    defaulted(location, "—"),
-                    "" /* ignored */
+                    defaulted(location, "—")
             );
         });
 
         btnCarTag.setOnClickListener(v -> {
+            if (!beginCarTagPrint()) return;
+
             String lot = currentLot();
             String tent = (vehicle != null) ? safe(vehicle.tentid) : "";
             String col = (vehicle != null) ? safe(vehicle.col) : "";
@@ -416,6 +423,45 @@ public class ActionActivity extends AppCompatActivity {
         return "";
     }
 
+    private static final class KeySummary {
+        static final KeySummary ZERO = new KeySummary(0, 0, 0);
+
+        final int total;
+        final int fobs;
+        final int remotes;
+
+        KeySummary(int total, int fobs, int remotes) {
+            this.total = Math.max(0, total);
+            this.fobs = Math.max(0, fobs);
+            this.remotes = Math.max(0, remotes);
+        }
+
+        static KeySummary fromIntake(VehicleTaskIntake intake) {
+            if (intake == null) {
+                return ZERO;
+            }
+
+            int fobs = countOrZero(intake.fobCheck != null ? intake.fobCheck.numberOfFOBs : null);
+            int remotes = countOrZero(intake.remoteControlCheck != null
+                    ? intake.remoteControlCheck.numberOfRemoteControls
+                    : null);
+            boolean noPhysicalKeys = Boolean.TRUE.equals(intake.noKeysArePresent)
+                    || (intake.keyCheck != null && Boolean.FALSE.equals(intake.keyCheck.hasKey));
+            int total = noPhysicalKeys
+                    ? 0
+                    : countOrZero(intake.keyCheck != null ? intake.keyCheck.numberOfKeys : null);
+            return new KeySummary(total, fobs, remotes);
+        }
+
+        String toLabelText() {
+            return "KEY      : T = " + total + " / F = " + fobs + " / R = " + remotes;
+        }
+
+        private static int countOrZero(Integer value) {
+            return value == null ? 0 : Math.max(0, value);
+        }
+    }
+
     private String formatLotForLabel(String lot) {
         String s = safe(lot).trim();
         if (s.isEmpty()) return "";
@@ -424,6 +470,11 @@ public class ActionActivity extends AppCompatActivity {
         } catch (NumberFormatException e) {
             return s;
         }
+    }
+
+    private String formatVehicleOnSiteMessage(String lotNumber) {
+        String lot = defaulted(formatLotForLabel(lotNumber), safe(lotNumber).trim());
+        return "LOT # " + lot + " moved to On-Site";
     }
 
     // ===== Bluetooth permission helpers =====
@@ -498,8 +549,103 @@ public class ActionActivity extends AppCompatActivity {
         return PRINTER_LANGUAGE_ESC_POS;
     }
 
+    private boolean beginKeyBagTagPrint() {
+        if (keyBagTagPrintInProgress) return false;
+        keyBagTagPrintInProgress = true;
+        setKeyBagTagBusyText("LOADING...");
+        return true;
+    }
+
+    private boolean beginCarTagPrint() {
+        if (carTagPrintInProgress) return false;
+        carTagPrintInProgress = true;
+        setCarTagBusyText("SENDING...");
+        return true;
+    }
+
+    private void fetchKeySummaryAndPrint(String lot, String year, String make, String model,
+                                         String color, String vin, String location) {
+        String opportunityId = resolveOpportunityId();
+        if (opportunityId.isEmpty()) {
+            Log.w(HTTP_LOG_TAG, "KEY BAG TAG: missing opportunityId; printing zero key summary");
+            printVehicleInfoLabel(lot, year, make, model, color, vin, location, KeySummary.ZERO.toLabelText());
+            return;
+        }
+
+        ApiClient.configure(this);
+        new DriverTaskRepository().fetchIntake(opportunityId, new DriverTaskRepository.IntakeCallback() {
+            @Override public void onSuccess(VehicleTaskIntake intake) {
+                KeySummary keySummary = KeySummary.fromIntake(intake);
+                printVehicleInfoLabel(lot, year, make, model, color, vin, location, keySummary.toLabelText());
+            }
+
+            @Override public void onError(Throwable t) {
+                Log.w(HTTP_LOG_TAG, "KEY BAG TAG: key summary fetch failed; printing zeros", t);
+                Toast.makeText(ActionActivity.this,
+                        "Key summary unavailable; printing zeros.",
+                        Toast.LENGTH_LONG).show();
+                printVehicleInfoLabel(lot, year, make, model, color, vin, location, KeySummary.ZERO.toLabelText());
+            }
+
+            @Override public void onHttpError(int code, String message) {
+                Log.w(HTTP_LOG_TAG, "KEY BAG TAG: key summary fetch HTTP " + code + ": " + message);
+                Toast.makeText(ActionActivity.this,
+                        "Key summary unavailable; printing zeros.",
+                        Toast.LENGTH_LONG).show();
+                printVehicleInfoLabel(lot, year, make, model, color, vin, location, KeySummary.ZERO.toLabelText());
+            }
+        });
+    }
+
+    private void setKeyBagTagBusyText(String text) {
+        runOnUiThreadSafe(() -> {
+            if (btnKeyBagTags != null) {
+                btnKeyBagTags.setEnabled(false);
+                btnKeyBagTags.setText(text);
+            }
+        });
+    }
+
+    private void setCarTagBusyText(String text) {
+        runOnUiThreadSafe(() -> {
+            if (btnCarTag != null) {
+                btnCarTag.setEnabled(false);
+                btnCarTag.setText(text);
+            }
+        });
+    }
+
+    private void restoreKeyBagButton() {
+        runOnUiThreadSafe(() -> {
+            keyBagTagPrintInProgress = false;
+            if (btnKeyBagTags != null) {
+                btnKeyBagTags.setEnabled(true);
+                btnKeyBagTags.setText(getString(R.string.key_bag_tags));
+            }
+        });
+    }
+
+    private void restoreCarTagButton() {
+        runOnUiThreadSafe(() -> {
+            carTagPrintInProgress = false;
+            if (btnCarTag != null) {
+                btnCarTag.setEnabled(true);
+                btnCarTag.setText(getString(R.string.car_tag));
+            }
+        });
+    }
+
+    private void runOnUiThreadSafe(Runnable action) {
+        if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
+            action.run();
+        } else {
+            runOnUiThread(action);
+        }
+    }
+
     private void printVehicleInfoLabel(String lot, String year, String make, String model,
-                                       String color, String vin, String tent, String descIgnored) {
+                                       String color, String vin, String tent, String keySummary) {
+        setKeyBagTagBusyText("SENDING...");
         String language = currentPrinterLanguage();
         Log.i(HTTP_LOG_TAG, "KEY BAG TAG print path selected. language="
                 + language
@@ -508,16 +654,18 @@ public class ActionActivity extends AppCompatActivity {
                 + ", lot="
                 + lot);
         if (PRINTER_LANGUAGE_ESC_POS.equals(language)) {
-            printVehicleInfoEscPos(lot, year, make, model, color, vin, tent, descIgnored);
+            printVehicleInfoEscPos(lot, year, make, model, color, vin, tent, keySummary);
             return;
         }
-        printVehicleInfoBitmapLabel(lot, year, make, model, color, vin, tent, language);
+        printVehicleInfoBitmapLabel(lot, year, make, model, color, vin, tent, keySummary, language);
     }
 
     private void printVehicleInfoBitmapLabel(String lot, String year, String make, String model,
-                                             String color, String vin, String tent, String language) {
+                                             String color, String vin, String tent,
+                                             String keySummary, String language) {
         if (!ensureBtPermissions()) {
             Toast.makeText(this, "Grant Bluetooth permission to print.", Toast.LENGTH_SHORT).show();
+            restoreKeyBagButton();
             return;
         }
 
@@ -528,6 +676,7 @@ public class ActionActivity extends AppCompatActivity {
         final String printColor = defaulted(color, "-");
         final String printVin = defaulted(vin, "-");
         final String printLocation = defaulted(tent, "-");
+        final String printKeySummary = defaulted(keySummary, KeySummary.ZERO.toLabelText());
 
         printExec.execute(() -> {
             BixolonTsplPrinter printer = new BixolonTsplPrinter();
@@ -540,7 +689,8 @@ public class ActionActivity extends AppCompatActivity {
                         printModel,
                         printColor,
                         printVin,
-                        printLocation
+                        printLocation,
+                        printKeySummary
                 );
 
                 Log.i(HTTP_LOG_TAG, "KEY BAG TAG EPL print returned; calling EventVehicleStatus. eventId="
@@ -555,7 +705,7 @@ public class ActionActivity extends AppCompatActivity {
                         + ", message="
                         + res.message);
                 if (res.ok) {
-                    runOnUiThread(() -> showBigResultBanner(true, "Vehicle On-Site"));
+                    runOnUiThread(() -> showFullScreenResult(true, formatVehicleOnSiteMessage(lot), false));
                 } else {
                     final String msg = "Vehicle status update FAILED (code=" + res.code + "): " + (res.message == null ? "" : res.message);
                     Log.w(HTTP_LOG_TAG, msg);
@@ -572,11 +722,13 @@ public class ActionActivity extends AppCompatActivity {
                 );
             } finally {
                 printer.close();
+                restoreKeyBagButton();
             }
         });
     }
 
     private void printCarTagLabel(String lotNum, String tentId, String col, String row, String targetTimeText) {
+        setCarTagBusyText("SENDING...");
         String language = currentPrinterLanguage();
         if (PRINTER_LANGUAGE_ESC_POS.equals(language)) {
             printCarTag(lotNum, tentId, col, row, targetTimeText);
@@ -589,6 +741,7 @@ public class ActionActivity extends AppCompatActivity {
                                         String targetTimeText, String language) {
         if (!ensureBtPermissions()) {
             Toast.makeText(this, "Grant Bluetooth permission to print.", Toast.LENGTH_SHORT).show();
+            restoreCarTagButton();
             return;
         }
 
@@ -613,6 +766,7 @@ public class ActionActivity extends AppCompatActivity {
                 );
             } finally {
                 printer.close();
+                restoreCarTagButton();
             }
         });
     }
@@ -628,7 +782,8 @@ public class ActionActivity extends AppCompatActivity {
     }
 
     private Bitmap renderKeyBagLabelBitmap(String lot, String year, String make, String model,
-                                           String color, String vin, String location) {
+                                           String color, String vin, String location,
+                                           String keySummary) {
         int width = dotsForMm(LABEL_WIDTH_MM);
         int height = dotsForMm(KEY_LABEL_HEIGHT_MM);
         Bitmap bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
@@ -655,6 +810,8 @@ public class ActionActivity extends AppCompatActivity {
         drawFitText(canvas, "VIN      : " + vin, row, x, y, maxWidth, 22f);
         y += 46f;
         drawFitText(canvas, "LOCATION : " + location, row, x, y, maxWidth, 22f);
+        y += 44f;
+        drawFitText(canvas, defaulted(keySummary, KeySummary.ZERO.toLabelText()), row, x, y, maxWidth, 22f);
 
         return bmp;
     }
@@ -749,9 +906,10 @@ public class ActionActivity extends AppCompatActivity {
 
     // ===== Print: Vehicle Info (ESC/POS text) =====
     private void printVehicleInfoEscPos(String lot, String year, String make, String model,
-                                        String color, String vin, String tent, String descIgnored) {
+                                        String color, String vin, String tent, String keySummary) {
         if (!ensureBtPermissions()) {
             Toast.makeText(this, "Grant Bluetooth permission to print.", Toast.LENGTH_SHORT).show();
+            restoreKeyBagButton();
             return;
         }
 
@@ -761,16 +919,18 @@ public class ActionActivity extends AppCompatActivity {
                 esc.connectByNamePrefix(PRINTER_NAME_PREFIX);
 
                 String printLot = defaulted(formatLotForLabel(lot), "—");
-                esc.printText(escSeq(cmdFontA()) + escSeq(cmdCharSize(1, 0)) + "LOT      : " + printLot + "\n");
-                esc.printText(escSeq(cmdFontA()) + escSeq(cmdCharSize(1, 0)) + "YEAR     : " + defaulted(year, "—") + "\n");
-                esc.printText(escSeq(cmdFontA()) + escSeq(cmdCharSize(1, 0)) + "MAKE     : " + defaulted(make, "—") + "\n");
-                esc.printText(escSeq(cmdFontA()) + escSeq(cmdCharSize(1, 0)) + "MODEL    : " + defaulted(model, "—") + "\n");
-                esc.printText(escSeq(cmdFontA()) + escSeq(cmdCharSize(1, 0)) + "COLOR    : " + defaulted(color, "—") + "\n");
-                esc.printText(escSeq(cmdFontA()) + escSeq(cmdCharSize(1, 0)) + "VIN      : " + defaulted(vin, "—") + "\n");
-                esc.printText(escSeq(cmdFontA()) + escSeq(cmdCharSize(1, 0)) + "LOCATION : " + defaulted(tent, "—"));
+                esc.printText(escSeq(cmdFontA()) + escSeq(cmdCharSize(1, 0)) + "LOT      : " + printLot + "\n\n");
+                esc.printText(escSeq(cmdFontA()) + escSeq(cmdCharSize(0, 0)) + "YEAR     : " + defaulted(year, "—") + "\n");
+                esc.printText(escSeq(cmdFontA()) + escSeq(cmdCharSize(0, 0)) + "MAKE     : " + defaulted(make, "—") + "\n");
+                esc.printText(escSeq(cmdFontA()) + escSeq(cmdCharSize(0, 0)) + "MODEL    : " + defaulted(model, "—") + "\n");
+                esc.printText(escSeq(cmdFontA()) + escSeq(cmdCharSize(0, 0)) + "COLOR    : " + defaulted(color, "—") + "\n");
+                esc.printText(escSeq(cmdFontA()) + escSeq(cmdCharSize(0, 0)) + "VIN      : " + defaulted(vin, "—") + "\n");
+                esc.printText(escSeq(cmdFontA()) + escSeq(cmdCharSize(0, 0)) + "LOCATION : " + defaulted(tent, "—") + "\n");
+                esc.printText(escSeq(cmdFontA()) + escSeq(cmdCharSize(0, 0)) + defaulted(keySummary, KeySummary.ZERO.toLabelText()));
 
                 esc.printText(escSeq(cmdCharSize(0, 0)));
-                esc.printText("\n\n");
+                esc.printText("\n\n\n");
+                esc.feedDots(24);
 
                 // After successful print, POST EventVehicleStatus (On Site).
                 Log.i(HTTP_LOG_TAG, "KEY BAG TAG ESC/POS print returned; calling EventVehicleStatus. eventId="
@@ -785,7 +945,7 @@ public class ActionActivity extends AppCompatActivity {
                         + ", message="
                         + res.message);
                 if (res.ok) {
-                    runOnUiThread(() -> showBigResultBanner(true, "Vehicle On-Site"));
+                    runOnUiThread(() -> showFullScreenResult(true, formatVehicleOnSiteMessage(lot), false));
                 } else {
                     final String msg = "Vehicle status update FAILED (code=" + res.code + "): " + (res.message == null ? "" : res.message);
                     Log.w(HTTP_LOG_TAG, msg);
@@ -802,6 +962,7 @@ public class ActionActivity extends AppCompatActivity {
                 );
             } finally {
                 esc.close();
+                restoreKeyBagButton();
             }
         });
     }
@@ -810,6 +971,7 @@ public class ActionActivity extends AppCompatActivity {
     private void printCarTag(String lotNum, String tentId, String col, String row, String targetTimeText) {
         if (!ensureBtPermissions()) {
             Toast.makeText(this, "Grant Bluetooth permission to print.", Toast.LENGTH_SHORT).show();
+            restoreCarTagButton();
             return;
         }
 
@@ -877,6 +1039,7 @@ public class ActionActivity extends AppCompatActivity {
                 );
             } finally {
                 esc.close();
+                restoreCarTagButton();
             }
         });
     }
@@ -906,10 +1069,14 @@ public class ActionActivity extends AppCompatActivity {
         }
     }
 
-    private String formatDayParenUpper(String input) {
+    static String formatDayParenUpper(String input) {
         if (input == null) return "";
         String s = input.trim();
         if (s.isEmpty()) return "";
+
+        String parsedDay = dayFromDateTime(s);
+        if (!parsedDay.isEmpty()) return "(" + parsedDay + ")";
+
         java.util.regex.Matcher m1 = java.util.regex.Pattern
                 .compile("^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\\b", java.util.regex.Pattern.CASE_INSENSITIVE)
                 .matcher(s);
@@ -928,6 +1095,92 @@ public class ActionActivity extends AppCompatActivity {
                 .matcher(s);
         if (m2.find()) return "(" + m2.group(1).toUpperCase(Locale.US) + ")";
         return "(" + s.toUpperCase(Locale.US) + ")";
+    }
+
+    private static String dayFromDateTime(String s) {
+        String epochDay = dayFromEpoch(s);
+        if (!epochDay.isEmpty()) return epochDay;
+
+        try {
+            return dayFromInstant(java.time.Instant.parse(s));
+        } catch (Exception ignored) {
+        }
+
+        try {
+            return dayFromInstant(java.time.OffsetDateTime.parse(s).toInstant());
+        } catch (Exception ignored) {
+        }
+
+        try {
+            return dayName(java.time.LocalDateTime.parse(s, java.time.format.DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+                    .getDayOfWeek());
+        } catch (Exception ignored) {
+        }
+
+        try {
+            return dayName(java.time.LocalDate.parse(s, java.time.format.DateTimeFormatter.ISO_LOCAL_DATE)
+                    .getDayOfWeek());
+        } catch (Exception ignored) {
+        }
+
+        String[] dateTimePatterns = {
+                "M/d/uuuu h:mm a",
+                "M/d/uuuu h:mm:ss a",
+                "M/d/uuuu H:mm",
+                "M/d/uuuu H:mm:ss",
+                "uuuu-M-d H:mm",
+                "uuuu-M-d H:mm:ss",
+                "uuuu-M-d H:mm:ss.SSS",
+                "uuuu-M-d'T'H:mm",
+                "uuuu-M-d'T'H:mm:ss",
+                "uuuu-M-d'T'H:mm:ss.SSS"
+        };
+        for (String pattern : dateTimePatterns) {
+            try {
+                return dayName(java.time.LocalDateTime.parse(s, formatter(pattern)).getDayOfWeek());
+            } catch (Exception ignored) {
+            }
+        }
+
+        String[] datePatterns = {
+                "M/d/uuuu",
+                "uuuu-M-d"
+        };
+        for (String pattern : datePatterns) {
+            try {
+                return dayName(java.time.LocalDate.parse(s, formatter(pattern)).getDayOfWeek());
+            } catch (Exception ignored) {
+            }
+        }
+
+        return "";
+    }
+
+    private static String dayFromEpoch(String s) {
+        if (!s.matches("\\d{10,13}")) return "";
+        try {
+            long value = Long.parseLong(s);
+            if (value <= 0) return "";
+            long epochMs = value < 100_000_000_000L ? value * 1000L : value;
+            return dayFromInstant(java.time.Instant.ofEpochMilli(epochMs));
+        } catch (Exception ignored) {
+            return "";
+        }
+    }
+
+    private static String dayFromInstant(java.time.Instant instant) {
+        return dayName(instant.atZone(java.time.ZoneId.systemDefault()).getDayOfWeek());
+    }
+
+    private static String dayName(java.time.DayOfWeek day) {
+        return day.getDisplayName(java.time.format.TextStyle.FULL, Locale.US).toUpperCase(Locale.US);
+    }
+
+    private static java.time.format.DateTimeFormatter formatter(String pattern) {
+        return new java.time.format.DateTimeFormatterBuilder()
+                .parseCaseInsensitive()
+                .appendPattern(pattern)
+                .toFormatter(Locale.US);
     }
 
     private String fitForCols(String s, int cols) {
@@ -1187,6 +1440,10 @@ public class ActionActivity extends AppCompatActivity {
     }
 
     private void showFullScreenResult(boolean success, String text) {
+        showFullScreenResult(success, text, true);
+    }
+
+    private void showFullScreenResult(boolean success, String text, boolean allCaps) {
         runOnUiThread(() -> {
             final ViewGroup decor = (ViewGroup) getWindow().getDecorView();
 
@@ -1205,7 +1462,7 @@ public class ActionActivity extends AppCompatActivity {
             tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 52);
             tv.setGravity(Gravity.CENTER);
             tv.setPadding(dp(24), dp(24), dp(24), dp(24));
-            tv.setAllCaps(true);
+            tv.setAllCaps(allCaps);
 
             FrameLayout.LayoutParams lpMsg = new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,

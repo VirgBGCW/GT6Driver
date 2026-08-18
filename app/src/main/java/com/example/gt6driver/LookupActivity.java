@@ -27,7 +27,13 @@ import com.example.gt6driver.net.VehicleSearchApi;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.textfield.TextInputEditText;
 
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 
 import retrofit2.Call;
@@ -280,6 +286,102 @@ public class LookupActivity extends AppCompatActivity {
         return false;
     }
 
+    private String formatSearchError(Response<?> resp) {
+        int code = resp == null ? 0 : resp.code();
+        String body = readErrorBody(resp);
+        String message = extractApiErrorMessage(body);
+        return message.isEmpty() ? "Search failed: HTTP " + code : message;
+    }
+
+    private String readErrorBody(Response<?> resp) {
+        if (resp == null || resp.errorBody() == null) return "";
+        try {
+            return resp.errorBody().string().trim();
+        } catch (IOException e) {
+            return "";
+        }
+    }
+
+    private String extractApiErrorMessage(String raw) {
+        if (raw == null) return "";
+
+        String text = raw.trim();
+        if (text.isEmpty()) return "";
+
+        try {
+            if (text.startsWith("{")) {
+                return messageFromJsonObject(new JSONObject(text)).trim();
+            }
+            if (text.startsWith("[")) {
+                return messageFromJsonArray(new JSONArray(text)).trim();
+            }
+        } catch (JSONException ignored) {
+            // Use the raw response below when the body is plain text.
+        }
+
+        if (text.length() > 1 && text.startsWith("\"") && text.endsWith("\"")) {
+            return text.substring(1, text.length() - 1).trim();
+        }
+        return text;
+    }
+
+    private String messageFromJsonObject(JSONObject object) throws JSONException {
+        String direct = firstString(object, "message", "Message", "error", "Error", "detail", "Detail");
+        if (!direct.isEmpty()) return direct;
+
+        String errors = messageFromJsonValue(object.opt("errors"));
+        if (!errors.isEmpty()) return errors;
+
+        String title = firstString(object, "title", "Title");
+        if (!title.isEmpty()) return title;
+
+        return "";
+    }
+
+    private String firstString(JSONObject object, String... keys) {
+        for (String key : keys) {
+            String value = object.optString(key, "").trim();
+            if (!value.isEmpty()) return value;
+        }
+        return "";
+    }
+
+    private String messageFromJsonValue(Object value) throws JSONException {
+        if (value == null || value == JSONObject.NULL) return "";
+        if (value instanceof String) return ((String) value).trim();
+        if (value instanceof JSONArray) return messageFromJsonArray((JSONArray) value);
+        if (value instanceof JSONObject) {
+            JSONObject object = (JSONObject) value;
+            ArrayList<String> parts = new ArrayList<>();
+            Iterator<String> keys = object.keys();
+            while (keys.hasNext()) {
+                String key = keys.next();
+                String message = messageFromJsonValue(object.opt(key));
+                if (!message.isEmpty()) parts.add(key + ": " + message);
+            }
+            return joinMessages(parts);
+        }
+        return String.valueOf(value).trim();
+    }
+
+    private String messageFromJsonArray(JSONArray array) throws JSONException {
+        ArrayList<String> parts = new ArrayList<>();
+        for (int i = 0; i < array.length(); i++) {
+            String message = messageFromJsonValue(array.opt(i));
+            if (!message.isEmpty()) parts.add(message);
+        }
+        return joinMessages(parts);
+    }
+
+    private String joinMessages(ArrayList<String> parts) {
+        StringBuilder joined = new StringBuilder();
+        for (String part : parts) {
+            if (joined.length() > 0) joined.append('\n');
+            joined.append(part);
+        }
+        return joined.toString();
+    }
+
     // Clear Previous input and results
     private void resetLookupUi() {
         // cancel any in-flight network calls
@@ -422,7 +524,7 @@ public class LookupActivity extends AppCompatActivity {
                 setLoading(false);
                 if (showNoResultsIfNotFound(resp, "lot number", lotStr)) return;
                 if (!resp.isSuccessful() || resp.body() == null) {
-                    showError("Search failed: HTTP " + resp.code());
+                    showError(formatSearchError(resp));
                     adapter.setItems(new ArrayList<>());
                     return;
                 }
@@ -461,7 +563,7 @@ public class LookupActivity extends AppCompatActivity {
                 setLoading(false);
                 if (showNoResultsIfNotFound(resp, "VIN ending in", searchVin)) return;
                 if (!resp.isSuccessful() || resp.body() == null) {
-                    showError("Search failed: HTTP " + resp.code());
+                    showError(formatSearchError(resp));
                     adapter.setItems(new ArrayList<>());
                     return;
                 }
@@ -503,7 +605,7 @@ public class LookupActivity extends AppCompatActivity {
                 setLoading(false);
                 if (showNoResultsIfNotFound(resp, "description", terms)) return;
                 if (!resp.isSuccessful() || resp.body() == null) {
-                    showError("Search failed: HTTP " + resp.code());
+                    showError(formatSearchError(resp));
                     adapter.setItems(new ArrayList<>());
                     return;
                 }
@@ -560,7 +662,7 @@ public class LookupActivity extends AppCompatActivity {
             // Derived
             d.title = fmtTitle(v.year, v.make, v.model);
             d.lane = fmtLane(v.col, v.row);
-            d.targetTimeText = firstNonEmpty(fmtTargetTime(v.targettime), fmtExpectedStartTime(v.expectedStartTime));
+            d.targetTimeText = firstNonEmpty(rawExpectedStartTime(v.expectedStartTime), fmtTargetTime(v.targettime));
             d.thumbUrl = buildThumbUrl(v.tbuncpath);
 
             mapped.add(d);
@@ -603,18 +705,8 @@ public class LookupActivity extends AppCompatActivity {
         return df.format(new java.util.Date(epochMs));
     }
 
-    private static String fmtExpectedStartTime(String value) {
-        if (value == null || value.trim().isEmpty()) return "";
-        String s = value.trim();
-        try {
-            java.time.Instant instant = java.time.Instant.parse(s);
-            java.text.DateFormat df =
-                    new java.text.SimpleDateFormat("EEE, MMM d h:mm a", java.util.Locale.getDefault());
-            df.setTimeZone(java.util.TimeZone.getDefault());
-            return df.format(java.util.Date.from(instant));
-        } catch (Exception ignored) {
-            return s;
-        }
+    private static String rawExpectedStartTime(String value) {
+        return value == null ? "" : value.trim();
     }
 
     private static String firstNonEmpty(String a, String b) {
@@ -805,9 +897,6 @@ public class LookupActivity extends AppCompatActivity {
         @Override public void afterTextChanged(Editable s) {}
     }
 }
-
-
-
 
 
 

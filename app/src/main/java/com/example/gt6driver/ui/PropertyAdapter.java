@@ -11,6 +11,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.gt6driver.R;
 import com.example.gt6driver.model.PropertyItem;
+import com.example.gt6driver.model.PropertyItemCheckInType;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.button.MaterialButtonToggleGroup;
 
@@ -18,9 +19,16 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class PropertyAdapter extends RecyclerView.Adapter<PropertyAdapter.VH> {
-    private static final String TYPE_AWAITING_ARRIVAL = "AwaitingArrival";
-    private static final String TYPE_ARRIVED = "360450009";
-    private static final String TYPE_LEFT_IN_CAR = "LeftInCar";
+    private static final String TYPE_AWAITING_ARRIVAL =
+            PropertyItemCheckInType.AWAITING_ARRIVAL.getApiValue();
+    private static final String TYPE_AWAITING_ARRIVAL_LEGACY =
+            PropertyItemCheckInType.AWAITING_ARRIVAL_LEGACY_API_VALUE;
+    private static final String TYPE_ARRIVED =
+            PropertyItemCheckInType.ARRIVED.getApiValue();
+    private static final String TYPE_LEFT_IN_CAR =
+            PropertyItemCheckInType.LEFT_IN_CAR_ALTERNATE.getApiValue();
+    private static final String TYPE_REMOVED =
+            PropertyItemCheckInType.REMOVED.getApiValue();
 
     public interface OnCheckInTypeChangedListener {
         void onCheckInTypeChanged(@NonNull PropertyItem item, int position, @NonNull String newCheckInType);
@@ -138,15 +146,10 @@ public class PropertyAdapter extends RecyclerView.Adapter<PropertyAdapter.VH> {
     }
 
     private static int buttonIdForType(String type) {
-        switch (normalizeCheckInType(type)) {
-            case TYPE_ARRIVED:
-                return R.id.btnRemoved;
-            case TYPE_LEFT_IN_CAR:
-                return R.id.btnLeftInCar;
-            case TYPE_AWAITING_ARRIVAL:
-            default:
-                return R.id.btnAwaitingArrival;
-        }
+        String normalized = normalizeCheckInType(type);
+        if (TYPE_ARRIVED.equals(normalized)) return R.id.btnRemoved;
+        if (TYPE_LEFT_IN_CAR.equals(normalized)) return R.id.btnLeftInCar;
+        return R.id.btnAwaitingArrival;
     }
 
     private static String typeForButtonId(int checkedId) {
@@ -163,12 +166,24 @@ public class PropertyAdapter extends RecyclerView.Adapter<PropertyAdapter.VH> {
                 .replace("-", "")
                 .replace("_", "");
 
+        if (normalized.equalsIgnoreCase(TYPE_AWAITING_ARRIVAL)
+                || normalized.equalsIgnoreCase(TYPE_AWAITING_ARRIVAL_LEGACY)
+                || normalized.equalsIgnoreCase("Awaiting")) {
+            return TYPE_AWAITING_ARRIVAL;
+        }
         if (normalized.equalsIgnoreCase(TYPE_ARRIVED)
                 || normalized.equalsIgnoreCase("Arrived")
                 || normalized.equalsIgnoreCase("Removed")) {
             return TYPE_ARRIVED;
         }
-        if (normalized.equalsIgnoreCase("LeftInCar") || normalized.equalsIgnoreCase("LeftInVehicle")) {
+        if (normalized.equalsIgnoreCase(TYPE_REMOVED)) {
+            return TYPE_ARRIVED;
+        }
+        if (normalized.equalsIgnoreCase(TYPE_LEFT_IN_CAR)
+                || normalized.equalsIgnoreCase(PropertyItemCheckInType.LEFT_IN_CAR.getApiValue())
+                || normalized.equalsIgnoreCase(PropertyItemCheckInType.LEFT_IN_CAR_ALTERNATE.getApiValue())
+                || normalized.equalsIgnoreCase("LeftInCar")
+                || normalized.equalsIgnoreCase("LeftInVehicle")) {
             return TYPE_LEFT_IN_CAR;
         }
         return TYPE_AWAITING_ARRIVAL;

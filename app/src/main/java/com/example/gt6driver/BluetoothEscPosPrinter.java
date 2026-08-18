@@ -207,4 +207,12 @@ public class BluetoothEscPosPrinter {
         // Ensure there's a newline if caller didn't add one
         if (!text.endsWith("\n")) write(new byte[]{0x0A});
     }
+
+    public void feedDots(int dots) throws IOException {
+        if (out == null) throw new IOException("Not connected");
+        int clamped = Math.max(0, Math.min(255, dots));
+        if (clamped > 0) {
+            write(new byte[]{0x1B, 0x4A, (byte) clamped});
+        }
+    }
 }

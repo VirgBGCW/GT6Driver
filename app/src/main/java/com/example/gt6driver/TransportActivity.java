@@ -6,7 +6,6 @@ import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.CompoundButton;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.TextView;
@@ -54,10 +53,9 @@ public class TransportActivity extends AppCompatActivity {
     private View keyHeader;
     private View keyGroup;
     private ImageView keyIcon;
-    private MaterialCheckBox cbFobs, cbNoKey;
-    private TextInputLayout enterKeyCountLayout;
-    private TextInputEditText enterKeyCountInput;
-    private ImageButton btnKeyCamera;
+    private MaterialCheckBox cbNoKey;
+    private TextInputLayout enterKeyCountLayout, enterFobCountLayout, enterRemoteCountLayout;
+    private TextInputEditText enterKeyCountInput, enterFobCountInput, enterRemoteCountInput;
     private MaterialButton btnKeyUpdate;
 
     // Confirm
@@ -76,13 +74,13 @@ public class TransportActivity extends AppCompatActivity {
     private boolean vinExpanded = false;
     private boolean vinNoMatchMode = false;
     private boolean keyExpanded = false;
-    private boolean isChangingKeyState = false;
 
     // Fallbacks
     private String lotLegacy = "";
     private String descLegacy = "";
     private String vinLegacy = "";
     private String thumbLegacy = "";
+    private String driver = "";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -113,9 +111,24 @@ public class TransportActivity extends AppCompatActivity {
             }
 
             applyVinUiToModel(intakeModel);
-            applyKeyUiToModel(intakeModel);
+            if (!isValidVinLength(intakeModel.vinVerify.newVin)) {
+                Toast.makeText(
+                        this,
+                        "VIN must be 0 or 4-17 characters. Tap NO MATCH and enter the corrected VIN.",
+                        Toast.LENGTH_LONG
+                ).show();
+                setVinExpanded(true);
+                return;
+            }
 
-            // required for API
+            applyKeyUiToModel(intakeModel);
+            applyDriverToModel(intakeModel);
+            if (TextUtils.isEmpty(intakeModel.checkInBy)) {
+                Toast.makeText(this, "Missing driver name; cannot save transport.", Toast.LENGTH_LONG).show();
+                return;
+            }
+
+            // Path carries opportunityId on PUT; repository strips it from the request body.
             if (TextUtils.isEmpty(intakeModel.opportunityId)) {
                 intakeModel.opportunityId = opportunityId;
             }
@@ -164,11 +177,13 @@ public class TransportActivity extends AppCompatActivity {
         keyHeader = findViewById(R.id.keyHeader);
         keyGroup = findViewById(R.id.keyGroup);
         keyIcon = findViewById(R.id.keyIcon);
-        cbFobs = findViewById(R.id.cbFobs);
         cbNoKey = findViewById(R.id.cbNoKey);
         enterKeyCountLayout = findViewById(R.id.enterKeyCountLayout);
         enterKeyCountInput = findViewById(R.id.enterKeyCountInput);
-        btnKeyCamera = findViewById(R.id.btnKeyCamera);
+        enterFobCountLayout = findViewById(R.id.enterFobCountLayout);
+        enterFobCountInput = findViewById(R.id.enterFobCountInput);
+        enterRemoteCountLayout = findViewById(R.id.enterRemoteCountLayout);
+        enterRemoteCountInput = findViewById(R.id.enterRemoteCountInput);
         btnKeyUpdate = findViewById(R.id.btnKeyUpdate);
 
         btnConfirmOnsite = findViewById(R.id.btnConfirmOnsite);
@@ -187,6 +202,7 @@ public class TransportActivity extends AppCompatActivity {
         descLegacy = safe(intent.getStringExtra(Nav.EXTRA_DESC));
         vinLegacy = safe(intent.getStringExtra(Nav.EXTRA_VIN));
         thumbLegacy = safe(intent.getStringExtra(Nav.EXTRA_THUMB));
+        driver = safe(intent.getStringExtra(Nav.EXTRA_DRIVER));
     }
 
     private void populateVehicleHeader() {
@@ -233,6 +249,7 @@ public class TransportActivity extends AppCompatActivity {
 
                 bindIntakeToTransportUi(intakeModel);
                 setPanelsEnabled(true);
+                updateKeyInputEnabled();
                 refreshConfirmEnabled();
             }
 
@@ -284,25 +301,32 @@ public class TransportActivity extends AppCompatActivity {
         }
 
         // ---- KEY ----
-        if (it.keyCheck != null) {
-            Boolean hasKey = it.keyCheck.hasKey;
-            Integer num = it.keyCheck.numberOfKeys;
+        if (it.keyCheck != null
+                || it.fobCheck != null
+                || it.remoteControlCheck != null
+                || it.noKeysArePresent != null) {
+            Boolean hasKey = (it.keyCheck != null) ? it.keyCheck.hasKey : null;
+            int keyCount = intOrZero((it.keyCheck != null) ? it.keyCheck.numberOfKeys : null);
+            int fobCount = intOrZero((it.fobCheck != null) ? it.fobCheck.numberOfFOBs : null);
+            int remoteCount = intOrZero((it.remoteControlCheck != null)
+                    ? it.remoteControlCheck.numberOfRemoteControls
+                    : null);
+            boolean noKeys = Boolean.TRUE.equals(it.noKeysArePresent)
+                    || Boolean.FALSE.equals(hasKey);
 
-            if (cbFobs != null && cbNoKey != null) {
-                if (Boolean.TRUE.equals(hasKey)) {
-                    cbFobs.setChecked(true);
-                    cbNoKey.setChecked(false);
-                    if (enterKeyCountInput != null && num != null) {
-                        enterKeyCountInput.setText(String.valueOf(num));
-                    }
-                } else if (Boolean.FALSE.equals(hasKey)) {
-                    cbFobs.setChecked(false);
-                    cbNoKey.setChecked(true);
-                    if (enterKeyCountInput != null) enterKeyCountInput.setText(null);
-                }
+            if (noKeys) {
+                keyCount = 0;
             }
 
-            if (hasKey != null) {
+            setCountText(enterKeyCountInput, keyCount);
+            setCountText(enterFobCountInput, fobCount);
+            setCountText(enterRemoteCountInput, remoteCount);
+            if (cbNoKey != null) cbNoKey.setChecked(noKeys);
+
+            if (hasKey != null
+                    || it.noKeysArePresent != null
+                    || it.fobCheck != null
+                    || it.remoteControlCheck != null) {
                 setStatusIcon(keyIcon, true);
                 keyDone = true;
                 setKeyExpanded(false);
@@ -311,10 +335,15 @@ public class TransportActivity extends AppCompatActivity {
                 keyDone = false;
             }
 
-            updateKeyCountEnabled();
+            updateKeyInputEnabled();
         } else {
+            setCountText(enterKeyCountInput, 0);
+            setCountText(enterFobCountInput, 0);
+            setCountText(enterRemoteCountInput, 0);
+            if (cbNoKey != null) cbNoKey.setChecked(false);
             setStatusIcon(keyIcon, false);
             keyDone = false;
+            updateKeyInputEnabled();
         }
     }
 
@@ -323,9 +352,9 @@ public class TransportActivity extends AppCompatActivity {
 
         if (btnVinMatch != null) {
             btnVinMatch.setOnClickListener(v -> {
+                String curVin = currentVinForApi();
                 vinMatched = true;
 
-                String curVin = currentVinForApi();
                 if (verifyVinValue != null) verifyVinValue.setText(curVin);
 
                 vinNoMatchMode = false;
@@ -359,6 +388,13 @@ public class TransportActivity extends AppCompatActivity {
                     }
                     return;
                 }
+                if (!isValidVinLength(entered)) {
+                    if (enterVinInput != null) {
+                        enterVinInput.setError("VIN must be 0 or 4-17 characters");
+                        enterVinInput.requestFocus();
+                    }
+                    return;
+                }
 
                 if (verifyVinValue != null) verifyVinValue.setText(entered);
 
@@ -387,40 +423,28 @@ public class TransportActivity extends AppCompatActivity {
     private void wireKeyUi() {
         if (keyHeader != null) keyHeader.setOnClickListener(v -> setKeyExpanded(!keyExpanded));
 
+        setDefaultCountTextIfEmpty(enterKeyCountInput);
+        setDefaultCountTextIfEmpty(enterFobCountInput);
+        setDefaultCountTextIfEmpty(enterRemoteCountInput);
+        updateKeyInputEnabled();
+
         if (btnKeyUpdate != null) {
             btnKeyUpdate.setOnClickListener(v -> {
-                boolean hasFobs = cbFobs != null && cbFobs.isChecked();
                 boolean noKey = cbNoKey != null && cbNoKey.isChecked();
 
-                if (!hasFobs && !noKey) {
-                    Toast.makeText(this, "Select FOB(s) or NO KEY.", Toast.LENGTH_SHORT).show();
+                if (noKey) {
+                    resetPhysicalKeyCountToZero();
+                } else if (!validateCountInput(enterKeyCountInput, "Number of keys")) {
                     return;
                 }
 
-                if (hasFobs) {
-                    String count = safe(enterKeyCountInput);
-                    if (TextUtils.isEmpty(count)) {
-                        if (enterKeyCountInput != null) {
-                            enterKeyCountInput.setError("Enter number of keys");
-                            enterKeyCountInput.requestFocus();
-                        }
-                        return;
-                    }
-                    try {
-                        int c = Integer.parseInt(count);
-                        if (c <= 0) {
-                            enterKeyCountInput.setError("Must be at least 1");
-                            enterKeyCountInput.requestFocus();
-                            return;
-                        }
-                    } catch (NumberFormatException e) {
-                        if (enterKeyCountInput != null) {
-                            enterKeyCountInput.setError("Invalid number");
-                            enterKeyCountInput.requestFocus();
-                        }
-                        return;
-                    }
+                if (!validateCountInput(enterFobCountInput, "Number of FOB(s)")
+                        || !validateCountInput(enterRemoteCountInput, "Number of remote(s)")) {
+                    return;
                 }
+
+                if (intakeModel == null) intakeModel = new VehicleTaskIntake();
+                applyKeyUiToModel(intakeModel);
 
                 setStatusIcon(keyIcon, true);
                 keyDone = true;
@@ -430,26 +454,10 @@ public class TransportActivity extends AppCompatActivity {
             });
         }
 
-        if (cbFobs != null && cbNoKey != null) {
-            CompoundButton.OnCheckedChangeListener keyMutualListener = (buttonView, isChecked) -> {
-                if (isChangingKeyState) return;
-                isChangingKeyState = true;
-
-                if (buttonView == cbFobs && isChecked) cbNoKey.setChecked(false);
-                else if (buttonView == cbNoKey && isChecked) cbFobs.setChecked(false);
-
-                updateKeyCountEnabled();
-
-                isChangingKeyState = false;
-            };
-            cbFobs.setOnCheckedChangeListener(keyMutualListener);
-            cbNoKey.setOnCheckedChangeListener(keyMutualListener);
-            updateKeyCountEnabled();
-        }
-
-        if (btnKeyCamera != null) {
-            btnKeyCamera.setOnClickListener(v -> {
-                Toast.makeText(this, "Key photo capture not wired on Transport screen yet.", Toast.LENGTH_SHORT).show();
+        if (cbNoKey != null) {
+            cbNoKey.setOnCheckedChangeListener((buttonView, isChecked) -> {
+                if (isChecked) resetPhysicalKeyCountToZero();
+                updateKeyInputEnabled();
             });
         }
     }
@@ -470,24 +478,33 @@ public class TransportActivity extends AppCompatActivity {
 
     private void applyKeyUiToModel(VehicleTaskIntake model) {
         if (model.keyCheck == null) model.keyCheck = new VehicleTaskIntake.KeyCheck();
-
-        boolean hasFobs = cbFobs != null && cbFobs.isChecked();
-        boolean noKey = cbNoKey != null && cbNoKey.isChecked();
-
-        if (hasFobs) {
-            model.keyCheck.hasKey = true;
-            String keyCount = safe(enterKeyCountInput);
-            try {
-                model.keyCheck.numberOfKeys = TextUtils.isEmpty(keyCount) ? null : Integer.valueOf(keyCount);
-            } catch (NumberFormatException ignore) {
-                model.keyCheck.numberOfKeys = null;
-            }
-        } else if (noKey) {
-            model.keyCheck.hasKey = false;
-            model.keyCheck.numberOfKeys = null;
+        if (model.fobCheck == null) model.fobCheck = new VehicleTaskIntake.FobCheck();
+        if (model.remoteControlCheck == null) {
+            model.remoteControlCheck = new VehicleTaskIntake.RemoteControlCheck();
         }
 
+        boolean noKey = cbNoKey != null && cbNoKey.isChecked();
+
+        int keyCount = noKey ? 0 : readCountOrZero(enterKeyCountInput);
+        int fobCount = readCountOrZero(enterFobCountInput);
+        int remoteCount = readCountOrZero(enterRemoteCountInput);
+
+        model.keyCheck.hasKey = !noKey;
+        model.keyCheck.numberOfKeys = keyCount;
+        model.fobCheck.numberOfFOBs = fobCount;
+        model.remoteControlCheck.numberOfRemoteControls = remoteCount;
+        model.noKeysArePresent = noKey;
+
         if (model.keyCheck.photoUrl == null) model.keyCheck.photoUrl = "";
+    }
+
+    private void applyDriverToModel(VehicleTaskIntake model) {
+        String driverName = resolveDriverName();
+        if (!TextUtils.isEmpty(driverName)) {
+            model.checkInBy = driverName;
+        } else if (model.checkInBy == null) {
+            model.checkInBy = "";
+        }
     }
 
     private void refreshConfirmEnabled() {
@@ -508,16 +525,93 @@ public class TransportActivity extends AppCompatActivity {
         if (keyGroup != null) keyGroup.setVisibility(expanded ? View.VISIBLE : View.GONE);
     }
 
-    private void updateKeyCountEnabled() {
-        boolean enable = cbFobs != null && cbFobs.isChecked();
-        if (enterKeyCountLayout != null) {
-            enterKeyCountLayout.setEnabled(enable);
-            enterKeyCountLayout.setAlpha(enable ? 1f : 0.6f);
+    private void updateKeyInputEnabled() {
+        boolean enablePhysicalKeys = cbNoKey == null || !cbNoKey.isChecked();
+        setCountInputEnabled(enterKeyCountLayout, enterKeyCountInput, enablePhysicalKeys);
+        setCountInputEnabled(enterFobCountLayout, enterFobCountInput, true);
+        setCountInputEnabled(enterRemoteCountLayout, enterRemoteCountInput, true);
+    }
+
+    private void setCountInputEnabled(TextInputLayout layout, TextInputEditText input, boolean enabled) {
+        if (layout != null) {
+            layout.setEnabled(enabled);
+            layout.setAlpha(enabled ? 1f : 0.85f);
         }
-        if (enterKeyCountInput != null) {
-            enterKeyCountInput.setEnabled(enable);
-            if (!enable) enterKeyCountInput.setText(null);
+        if (input != null) {
+            input.setEnabled(enabled);
         }
+    }
+
+    private void resetPhysicalKeyCountToZero() {
+        setCountText(enterKeyCountInput, 0);
+    }
+
+    private boolean validateCountInput(TextInputEditText input, String label) {
+        if (input == null) return true;
+
+        String raw = safe(input);
+        if (TextUtils.isEmpty(raw)) {
+            input.setText("0");
+            input.setError(null);
+            return true;
+        }
+
+        try {
+            int value = Integer.parseInt(raw);
+            if (value < 0) {
+                input.setError(label + " must be 0 or greater");
+                input.requestFocus();
+                return false;
+            }
+            input.setError(null);
+            return true;
+        } catch (NumberFormatException e) {
+            input.setError("Invalid " + label.toLowerCase());
+            input.requestFocus();
+            return false;
+        }
+    }
+
+    private int readCountOrZero(TextInputEditText input) {
+        String raw = safe(input);
+        if (TextUtils.isEmpty(raw)) return 0;
+        try {
+            return Math.max(0, Integer.parseInt(raw));
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
+    private void setDefaultCountTextIfEmpty(TextInputEditText input) {
+        if (input != null && TextUtils.isEmpty(safe(input))) {
+            input.setText("0");
+        }
+    }
+
+    private void setCountText(TextInputEditText input, int count) {
+        if (input != null) {
+            input.setText(String.valueOf(Math.max(0, count)));
+        }
+    }
+
+    private int intOrZero(Integer value) {
+        return value == null ? 0 : Math.max(0, value);
+    }
+
+    private boolean isValidVinLength(String vin) {
+        String value = safe(vin);
+        return "0".equals(value) || (value.length() >= 4 && value.length() <= 17);
+    }
+
+    private String resolveDriverName() {
+        if (!TextUtils.isEmpty(driver)) return driver.trim();
+
+        try {
+            String fromSession = com.example.gt6driver.session.CurrentSelection.get().getDriverName();
+            if (!TextUtils.isEmpty(fromSession)) return fromSession.trim();
+        } catch (Throwable ignored) {}
+
+        return "";
     }
 
     private void setStatusIcon(ImageView icon, boolean ok) {

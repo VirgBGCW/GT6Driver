@@ -379,7 +379,8 @@ public class BixolonTsplPrinter {
     }
 
     public void printVehicleInfoTsplLabel(String lot, String year, String make, String model,
-                                          String color, String vin, String location) throws IOException {
+                                          String color, String vin, String location,
+                                          String keySummary) throws IOException {
         if (out == null) throw new IOException("Not connected");
         Log.i(TAG, "TSPL vehicle info label");
 
@@ -399,6 +400,7 @@ public class BixolonTsplPrinter {
         tsplText(20, 230, "2", 1, 1, "COLOR    : " + fitTspl(color, 28));
         tsplText(20, 275, "2", 1, 1, "VIN      : " + fitTspl(vin, 30));
         tsplText(20, 320, "2", 1, 1, "LOCATION : " + fitTspl(location, 28));
+        tsplText(20, 365, "2", 1, 1, fitTspl(keySummary, 39));
 
         cmd("PRINT 1,1");
     }
@@ -621,7 +623,8 @@ public class BixolonTsplPrinter {
     }
 
     public void printVehicleInfoEplLabel(String lot, String year, String make, String model,
-                                         String color, String vin, String location) throws IOException {
+                                         String color, String vin, String location,
+                                         String keySummary) throws IOException {
         if (out == null) throw new IOException("Not connected");
         Log.i(TAG, "EPL vehicle info label");
         rawAscii("N\n"
@@ -636,6 +639,7 @@ public class BixolonTsplPrinter {
         eplText(20, 230, 3, 1, 1, "COLOR    : " + fitEpl(color, 28));
         eplText(20, 275, 3, 1, 1, "VIN      : " + fitEpl(vin, 30));
         eplText(20, 320, 3, 1, 1, "LOCATION : " + fitEpl(location, 28));
+        eplText(20, 365, 3, 1, 1, fitEpl(keySummary, 39));
         rawAscii("P1\n");
     }
 
@@ -672,7 +676,8 @@ public class BixolonTsplPrinter {
     }
 
     public void printVehicleInfoCpclLabel(String lot, String year, String make, String model,
-                                          String color, String vin, String location) throws IOException {
+                                          String color, String vin, String location,
+                                          String keySummary) throws IOException {
         if (out == null) throw new IOException("Not connected");
         Log.i(TAG, "CPCL vehicle info label");
 
@@ -686,6 +691,7 @@ public class BixolonTsplPrinter {
         cpclText(4, 0, 20, 225, "COLOR    : " + fitCpcl(color, 28));
         cpclText(4, 0, 20, 270, "VIN      : " + fitCpcl(vin, 30));
         cpclText(4, 0, 20, 315, "LOCATION : " + fitCpcl(location, 28));
+        cpclText(4, 0, 20, 360, fitCpcl(keySummary, 39));
         rawAscii("FORM\r\nPRINT\r\n");
     }
 

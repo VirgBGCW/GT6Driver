@@ -22,6 +22,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.load.resource.bitmap.CenterCrop;
 import com.bumptech.glide.load.resource.bitmap.RoundedCorners;
+import com.example.gt6driver.model.PropertyItemCheckInType;
 import com.example.gt6driver.model.PropertyItem;
 import com.example.gt6driver.model.VehicleDetail;
 import com.example.gt6driver.net.ApiClient;
@@ -42,8 +43,10 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 import retrofit2.Call;
 import retrofit2.Callback;
@@ -53,9 +56,16 @@ public class PropertyActivity extends AppCompatActivity {
 
     private static final String LOG_TAG = "PropertyActivity";
     private static final String HTTP_LOG_TAG = "GT6DriverHTTP";
-    private static final String PROPERTY_STATUS_AWAITING_ARRIVAL = "AwaitingArrival";
-    private static final String PROPERTY_STATUS_ARRIVED = "360450009";
-    private static final String PROPERTY_STATUS_LEFT_IN_CAR = "LeftInCar";
+    private static final String PROPERTY_STATUS_AWAITING_ARRIVAL =
+            PropertyItemCheckInType.AWAITING_ARRIVAL.getApiValue();
+    private static final String PROPERTY_STATUS_AWAITING_ARRIVAL_LEGACY =
+            PropertyItemCheckInType.AWAITING_ARRIVAL_LEGACY_API_VALUE;
+    private static final String PROPERTY_STATUS_ARRIVED =
+            PropertyItemCheckInType.ARRIVED.getApiValue();
+    private static final String PROPERTY_STATUS_LEFT_IN_CAR =
+            PropertyItemCheckInType.LEFT_IN_CAR_ALTERNATE.getApiValue();
+    private static final String PROPERTY_STATUS_REMOVED =
+            PropertyItemCheckInType.REMOVED.getApiValue();
 
     // Vehicle panel views
     private ImageView panelImage;
@@ -86,6 +96,10 @@ public class PropertyActivity extends AppCompatActivity {
     private final List<PropertyTypeCatalog.Option> propertyTypes = new ArrayList<>();
     private Call<JsonElement> propertyTypesCall;
     private boolean propertyTypesLoaded = false;
+
+    private interface PropertyLoadCallback {
+        void onLoaded(@NonNull List<PropertyItem> items);
+    }
 
     // Legacy fallbacks
     private String lotLegacy = "", descLegacy = "", vinLegacy = "", thumbLegacy = "";
@@ -429,6 +443,10 @@ public class PropertyActivity extends AppCompatActivity {
     }
 
     private void loadProperty(String oppId) {
+        loadProperty(oppId, null);
+    }
+
+    private void loadProperty(String oppId, @Nullable PropertyLoadCallback callback) {
         Log.d(HTTP_LOG_TAG, "GET /Opportunity/" + oppId + "/Property");
 
         OpportunityApi api = ApiClient.getMemberApi().create(OpportunityApi.class);
@@ -454,10 +472,18 @@ public class PropertyActivity extends AppCompatActivity {
                         if (propertyEmptyState != null) propertyEmptyState.setVisibility(View.GONE);
                     }
 
+                    if (callback != null) {
+                        callback.onLoaded(list == null ? Collections.emptyList() : list);
+                    }
+
                 } else if (response.code() == 404) {
                     adapter.setItems(Collections.emptyList());
                     rvProperty.setVisibility(View.GONE);
                     if (propertyEmptyState != null) propertyEmptyState.setVisibility(View.VISIBLE);
+
+                    if (callback != null) {
+                        callback.onLoaded(Collections.emptyList());
+                    }
 
                 } else {
                     String errorText = readErrorBody(response);
@@ -468,6 +494,10 @@ public class PropertyActivity extends AppCompatActivity {
                             "Failed to load property (" + response.code() + ")",
                             Toast.LENGTH_LONG
                     ).show();
+
+                    if (callback != null) {
+                        callback.onLoaded(Collections.emptyList());
+                    }
                 }
             }
 
@@ -479,6 +509,10 @@ public class PropertyActivity extends AppCompatActivity {
                         "Network error loading property",
                         Toast.LENGTH_LONG
                 ).show();
+
+                if (callback != null) {
+                    callback.onLoaded(Collections.emptyList());
+                }
             }
         });
     }
@@ -569,12 +603,24 @@ public class PropertyActivity extends AppCompatActivity {
                 .replace("-", "")
                 .replace("_", "");
 
+        if (normalized.equalsIgnoreCase(PROPERTY_STATUS_AWAITING_ARRIVAL)
+                || normalized.equalsIgnoreCase(PROPERTY_STATUS_AWAITING_ARRIVAL_LEGACY)
+                || normalized.equalsIgnoreCase("Awaiting")) {
+            return PROPERTY_STATUS_AWAITING_ARRIVAL;
+        }
         if (normalized.equalsIgnoreCase(PROPERTY_STATUS_ARRIVED)
                 || normalized.equalsIgnoreCase("Arrived")
                 || normalized.equalsIgnoreCase("Removed")) {
             return PROPERTY_STATUS_ARRIVED;
         }
-        if (normalized.equalsIgnoreCase("LeftInCar") || normalized.equalsIgnoreCase("LeftInVehicle")) {
+        if (normalized.equalsIgnoreCase(PROPERTY_STATUS_REMOVED)) {
+            return PROPERTY_STATUS_ARRIVED;
+        }
+        if (normalized.equalsIgnoreCase(PROPERTY_STATUS_LEFT_IN_CAR)
+                || normalized.equalsIgnoreCase(PropertyItemCheckInType.LEFT_IN_CAR.getApiValue())
+                || normalized.equalsIgnoreCase(PropertyItemCheckInType.LEFT_IN_CAR_ALTERNATE.getApiValue())
+                || normalized.equalsIgnoreCase("LeftInCar")
+                || normalized.equalsIgnoreCase("LeftInVehicle")) {
             return PROPERTY_STATUS_LEFT_IN_CAR;
         }
         return PROPERTY_STATUS_AWAITING_ARRIVAL;
@@ -728,6 +774,7 @@ public class PropertyActivity extends AppCompatActivity {
                                 Runnable onFailureReenable) {
 
         OpportunityApi api = ApiClient.getMemberApi().create(OpportunityApi.class);
+        Set<String> existingPropertyIds = currentPropertyIds();
 
         PropertyCreateRequest body = new PropertyCreateRequest(
                 propertyItemTypeId,
@@ -758,14 +805,40 @@ public class PropertyActivity extends AppCompatActivity {
             @Override
             public void onResponse(Call<Void> call, Response<Void> response) {
                 if (response.isSuccessful()) {
-                    Toast.makeText(PropertyActivity.this, "Property added", Toast.LENGTH_SHORT).show();
-
                     if (propertyEmptyState != null) propertyEmptyState.setVisibility(View.GONE);
                     rvProperty.setVisibility(View.VISIBLE);
 
-                    loadProperty(opportunityId.trim());
-
-                    if (onSuccessDismiss != null) onSuccessDismiss.run();
+                    if (isLeftInCar) {
+                        loadProperty(opportunityId.trim(), items -> {
+                            int addedPosition = findAddedPropertyPosition(
+                                    items,
+                                    existingPropertyIds,
+                                    propertyItemTypeId,
+                                    propertyDescription,
+                                    notes,
+                                    quantity
+                            );
+                            if (addedPosition >= 0 && addedPosition < items.size()) {
+                                updateAddedPropertyLeftInCarStatus(
+                                        items.get(addedPosition),
+                                        addedPosition,
+                                        onSuccessDismiss
+                                );
+                            } else {
+                                Log.e(HTTP_LOG_TAG, "Unable to find added property for Left In Car status update");
+                                Toast.makeText(
+                                        PropertyActivity.this,
+                                        "Property added; unable to set In Car status",
+                                        Toast.LENGTH_LONG
+                                ).show();
+                                if (onSuccessDismiss != null) onSuccessDismiss.run();
+                            }
+                        });
+                    } else {
+                        Toast.makeText(PropertyActivity.this, "Property added", Toast.LENGTH_SHORT).show();
+                        loadProperty(opportunityId.trim());
+                        if (onSuccessDismiss != null) onSuccessDismiss.run();
+                    }
                 } else {
                     String errorText = readErrorBody(response);
                     Log.e(HTTP_LOG_TAG, "Add failed (" + response.code() + "): " + errorText);
@@ -792,6 +865,147 @@ public class PropertyActivity extends AppCompatActivity {
                 if (onFailureReenable != null) onFailureReenable.run();
             }
         });
+    }
+
+    private void updateAddedPropertyLeftInCarStatus(@NonNull PropertyItem item,
+                                                    int position,
+                                                    @Nullable Runnable onComplete) {
+        String propertyId = item.getPropertyIdForApi();
+        if (propertyId.isEmpty()) {
+            Log.e(HTTP_LOG_TAG, "Added property missing propertyId for Left In Car status update");
+            Toast.makeText(
+                    PropertyActivity.this,
+                    "Property added; unable to set In Car status",
+                    Toast.LENGTH_LONG
+            ).show();
+            if (onComplete != null) onComplete.run();
+            return;
+        }
+
+        item.checkInType = PROPERTY_STATUS_ARRIVED;
+        item.isLeftInCar = true;
+        item.isUpdatingCheckInType = true;
+        adapter.notifyItemChanged(position);
+
+        OpportunityApi api = ApiClient.getMemberApi().create(OpportunityApi.class);
+        PropertyCheckinTypeUpdateRequest body =
+                new PropertyCheckinTypeUpdateRequest(PROPERTY_STATUS_ARRIVED, true);
+        Call<Void> call = api.updateConsignmentPropertyCheckinType(propertyId, body);
+
+        try {
+            String payloadJson = new com.google.gson.Gson().toJson(body);
+            Log.i(HTTP_LOG_TAG, call.request().method() + " " + call.request().url());
+            Log.i(HTTP_LOG_TAG, "Added property Left In Car PUT context: propertyId=" + propertyId
+                    + ", apiCheckInType=" + PROPERTY_STATUS_ARRIVED
+                    + ", isLeftInCar=true");
+            Log.i(HTTP_LOG_TAG, "Added property Left In Car PUT payload JSON: " + payloadJson);
+        } catch (Throwable ignored) {}
+
+        call.enqueue(new Callback<Void>() {
+            @Override
+            public void onResponse(Call<Void> call, Response<Void> response) {
+                item.isUpdatingCheckInType = false;
+
+                if (response.isSuccessful()) {
+                    item.checkInType = PROPERTY_STATUS_ARRIVED;
+                    item.isLeftInCar = true;
+                    adapter.notifyItemChanged(position);
+                    Toast.makeText(PropertyActivity.this, "Property added", Toast.LENGTH_SHORT).show();
+                } else {
+                    String errorText = readErrorBody(response);
+                    Log.e(HTTP_LOG_TAG, "Added property Left In Car PUT failed ("
+                            + response.code() + "): " + errorText);
+                    Toast.makeText(
+                            PropertyActivity.this,
+                            "Property added; In Car status update failed (" + response.code() + ")",
+                            Toast.LENGTH_LONG
+                    ).show();
+                    loadProperty(opportunityId.trim());
+                }
+
+                if (onComplete != null) onComplete.run();
+            }
+
+            @Override
+            public void onFailure(Call<Void> call, Throwable t) {
+                item.isUpdatingCheckInType = false;
+                Log.e(HTTP_LOG_TAG, "Added property Left In Car PUT network error", t);
+                Toast.makeText(
+                        PropertyActivity.this,
+                        "Property added; network error setting In Car status",
+                        Toast.LENGTH_LONG
+                ).show();
+                loadProperty(opportunityId.trim());
+                if (onComplete != null) onComplete.run();
+            }
+        });
+    }
+
+    private Set<String> currentPropertyIds() {
+        Set<String> ids = new HashSet<>();
+        if (adapter == null) return ids;
+
+        for (PropertyItem item : adapter.getItemsSnapshot()) {
+            String id = item == null ? "" : item.getPropertyIdForApi();
+            if (!id.isEmpty()) ids.add(id);
+        }
+        return ids;
+    }
+
+    private int findAddedPropertyPosition(@NonNull List<PropertyItem> items,
+                                          @NonNull Set<String> existingPropertyIds,
+                                          int propertyItemTypeId,
+                                          String propertyDescription,
+                                          String notes,
+                                          int quantity) {
+        int newestUnknownProperty = -1;
+        int matchingProperty = -1;
+
+        for (int i = items.size() - 1; i >= 0; i--) {
+            PropertyItem item = items.get(i);
+            String id = item == null ? "" : item.getPropertyIdForApi();
+            boolean newId = !id.isEmpty() && !existingPropertyIds.contains(id);
+            boolean matches = matchesAddedProperty(
+                    item,
+                    propertyItemTypeId,
+                    propertyDescription,
+                    notes,
+                    quantity
+            );
+
+            if (newId && matches) return i;
+            if (newId && newestUnknownProperty < 0) newestUnknownProperty = i;
+            if (matches && matchingProperty < 0) matchingProperty = i;
+        }
+
+        return newestUnknownProperty >= 0 ? newestUnknownProperty : matchingProperty;
+    }
+
+    private boolean matchesAddedProperty(@Nullable PropertyItem item,
+                                         int propertyItemTypeId,
+                                         String propertyDescription,
+                                         String notes,
+                                         int quantity) {
+        if (item == null) return false;
+
+        boolean typeMatches = asInt(item.propertyItemTypeId) == propertyItemTypeId;
+        boolean descriptionMatches = safe(item.propertyDescription).trim()
+                .equals(propertyDescription == null ? "" : propertyDescription.trim());
+        boolean notesMatches = safe(item.notes).trim().equals(notes == null ? "" : notes.trim());
+        boolean quantityMatches = item.quantity == null || item.quantity == quantity;
+
+        return typeMatches && descriptionMatches && notesMatches && quantityMatches;
+    }
+
+    private int asInt(Object value) {
+        if (value == null) return -1;
+        if (value instanceof Number) return ((Number) value).intValue();
+
+        try {
+            return Integer.parseInt(String.valueOf(value).trim());
+        } catch (NumberFormatException ignored) {
+            return -1;
+        }
     }
 
     private String readErrorBody(Response<?> response) {
